@@ -51,6 +51,20 @@ spec:
               consensus:
                 description: Consensus contains shared configuration for all ConsensusCapsules
                 properties:
+                  featureGates:
+                    description: |-
+                      FeatureGates holds transitional, rollout-only consensus feature gates. See
+                      ConsensusFeatureGates.
+                    properties:
+                      nodeNameZeroBased:
+                        default: false
+                        description: |-
+                          NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
+                          Default false. Remove once 0-based naming is the only convention the CN supports.
+                          Set to true only with a CN version that loads 0-based names — solo-provisioner
+                          sets it to match the deployed CN; the operator only honors it.
+                        type: boolean
+                    type: object
                   genesis:
                     description: Genesis contains genesis-specific configuration
                     properties:
@@ -163,15 +177,6 @@ spec:
                     required:
                     - addressBook
                     type: object
-                  provisionerDaemonEnabled:
-                    default: false
-                    description: |-
-                      ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-                      (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-                      When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
-                      to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
-                      and fulfils the provisioner role itself.
-                    type: boolean
                   provisioningModel:
                     description: ProvisioningModel specifies how consensus nodes are
                       deployed
@@ -200,6 +205,15 @@ spec:
                 description: Lifetime specifies the duration for this Orbit (e.g.,
                   "P2DT15H" or "2 days 15 hours")
                 type: string
+              provisionerDaemonEnabled:
+                default: false
+                description: |-
+                  ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+                  (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+                  When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
+                  phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+                  This is a host-level, cross-component infra fact, so it is network-wide config.
+                type: boolean
               requireDigestOnDeploy:
                 description: |-
                   RequireDigestOnDeploy, when true, requires every ConsensusCapsule in this Orbit to run

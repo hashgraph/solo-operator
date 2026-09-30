@@ -102,3 +102,23 @@ func TestParseAccountIDParts(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatNodeName(t *testing.T) {
+	cases := []struct {
+		nodeId    int64
+		zeroBased bool
+		want      string
+	}{
+		{0, false, "node1"},
+		{1, false, "node2"},
+		{7, false, "node8"},
+		{0, true, "node0"},
+		{1, true, "node1"},
+		{7, true, "node7"},
+	}
+	for _, c := range cases {
+		if got := FormatNodeName(c.nodeId, c.zeroBased); got != c.want {
+			t.Errorf("FormatNodeName(%d, %v) = %q, want %q", c.nodeId, c.zeroBased, got, c.want)
+		}
+	}
+}

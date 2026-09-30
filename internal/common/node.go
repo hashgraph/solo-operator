@@ -15,6 +15,16 @@ func NodeAlias(nodeId int64) string {
 	return fmt.Sprintf("node%d", nodeId)
 }
 
+// FormatNodeName is the single encoder of the CN gossip key-file node-name convention
+// (ref hiero-consensus-node #15824 / PR #17487): 1-based by default (nodeId=0 → "node1"),
+// or 0-based (nodeId=0 → "node0") under the nodeNameZeroBased feature gate.
+func FormatNodeName(nodeId int64, zeroBased bool) string {
+	if zeroBased {
+		return fmt.Sprintf("node%d", nodeId)
+	}
+	return fmt.Sprintf("node%d", nodeId+1)
+}
+
 // AccountIdForNode returns the default Hedera account ID for a node (3 + nodeId).
 func AccountIdForNode(nodeId int64) string {
 	return fmt.Sprintf("0.0.%d", 3+nodeId)

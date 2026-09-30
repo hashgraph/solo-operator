@@ -324,7 +324,7 @@ func TestBuildVolumes_PublicKeysProjectedIntoKeysVolume(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
 
-	volumes, mounts := r.buildVolumes(capsule)
+	volumes, mounts := r.buildVolumes(capsule, false)
 
 	proj := findProjectedVolume(volumes, "keys")
 	if proj == nil {
@@ -359,7 +359,7 @@ func TestBuildVolumes_PublicKeysProjectedAlongsidePrivateKey(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
 
-	volumes, _ := r.buildVolumes(capsule)
+	volumes, _ := r.buildVolumes(capsule, false)
 
 	proj := findProjectedVolume(volumes, "keys")
 	if proj == nil {
@@ -388,7 +388,7 @@ func TestBuildVolumes_PublicKeysPresentEvenWithoutPrivateKeySecret(t *testing.T)
 	// SecretResources set but SigningPrivateKey left empty
 	capsule := capsuleWithSecretResources("", "")
 
-	volumes, _ := r.buildVolumes(capsule)
+	volumes, _ := r.buildVolumes(capsule, false)
 
 	proj := findProjectedVolume(volumes, "keys")
 	if proj == nil {
@@ -413,7 +413,7 @@ func TestBuildVolumes_PrivateKeyPathDerivedFromNodeId(t *testing.T) {
 	capsule := capsuleWithSecretResources("node0-keys", "private.pem")
 	capsule.Spec.NodeId = 0
 
-	volumes, _ := r.buildVolumes(capsule)
+	volumes, _ := r.buildVolumes(capsule, false)
 
 	proj := findProjectedVolume(volumes, "keys")
 	if proj == nil {
@@ -440,6 +440,32 @@ func TestBuildVolumes_PrivateKeyPathDerivedFromNodeId(t *testing.T) {
 	t.Error("no Secret projected source found")
 }
 
+func TestBuildVolumes_PrivateKeyPathZeroBasedGate(t *testing.T) {
+	r := newStsReconciler()
+	// nodeNameZeroBased=true → nodeId=0 mounts as s-private-node0.pem (no +1).
+	capsule := capsuleWithSecretResources("node0-keys", "private.pem")
+	capsule.Spec.NodeId = 0
+
+	volumes, _ := r.buildVolumes(capsule, true)
+
+	proj := findProjectedVolume(volumes, "keys")
+	if proj == nil {
+		t.Fatal("expected projected 'keys' volume")
+	}
+
+	for _, src := range proj.Sources {
+		if src.Secret == nil {
+			continue
+		}
+		item := src.Secret.Items[0]
+		if item.Path != "s-private-node0.pem" {
+			t.Errorf("secret Path: want %q, got %q", "s-private-node0.pem", item.Path)
+		}
+		return
+	}
+	t.Error("no Secret projected source found")
+}
+
 // ── pod-level volume deduplication ───────────────────────────────────────────
 
 func TestBuildVolumes_PodVolumeOverrideReplacesExisting(t *testing.T) {
@@ -457,7 +483,7 @@ func TestBuildVolumes_PodVolumeOverrideReplacesExisting(t *testing.T) {
 		Saved: &customSaved,
 	}
 
-	volumes, _ := r.buildVolumes(capsule)
+	volumes, _ := r.buildVolumes(capsule, false)
 
 	count := 0
 	var found *corev1.Volume

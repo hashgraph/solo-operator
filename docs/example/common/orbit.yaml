@@ -3,6 +3,9 @@ kind: Orbit
 metadata:
   name: solo-orbit
 spec:
+  # A host-level provisioner daemon runs the upgrade execute phase (consensus UC in
+  # mainnet mode). Default false = cluster-only.
+  provisionerDaemonEnabled: false
   telemetry:
     alloy:
       enabled: true
@@ -59,6 +62,9 @@ spec:
       #   # consensus pod instead. Default: 30. Set 0 to always use pod-node targeting.
       #   maxNodes: 30
   consensus:
+    # consensus.featureGates holds transitional, rollout-only gates. Leave unset
+    # (defaults off); set by solo-provisioner/jobs to match the deployed CN.
+    # See docs/design/feature-gates.md.
     genesis:
       addressBook:
         # ledgerId is the consensus node's ledger.id (network identity);

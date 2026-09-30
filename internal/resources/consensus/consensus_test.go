@@ -516,7 +516,7 @@ func TestStatefulSetVolumes_DefaultEmptyDir(t *testing.T) {
 	// No PVCs configured — all data volumes should be emptyDir
 
 	r := &StatefulSetSubReconciler{}
-	volumes, mounts := r.buildVolumes(capsule)
+	volumes, mounts := r.buildVolumes(capsule, false)
 
 	// Index volumes and mounts by name for easy lookup
 	volByName := make(map[string]corev1.Volume)
@@ -615,7 +615,7 @@ func TestStatefulSetVolumes_WithPVC(t *testing.T) {
 	}
 
 	r := &StatefulSetSubReconciler{}
-	volumes, _ := r.buildVolumes(capsule)
+	volumes, _ := r.buildVolumes(capsule, false)
 
 	volByName := make(map[string]corev1.Volume)
 	for _, v := range volumes {
@@ -658,7 +658,7 @@ func TestStatefulSetVolumes_BlockNodes(t *testing.T) {
 	capsule.Spec.BlockNodesConfigRef = "node0-block-nodes"
 
 	r := &StatefulSetSubReconciler{}
-	volumes, mounts := r.buildVolumes(capsule)
+	volumes, mounts := r.buildVolumes(capsule, false)
 
 	volByName := make(map[string]corev1.Volume)
 	for _, v := range volumes {
@@ -687,7 +687,7 @@ func TestStatefulSetVolumes_BlockNodes(t *testing.T) {
 
 func TestStatefulSetVolumes_DataConfigDir(t *testing.T) {
 	r := &StatefulSetSubReconciler{}
-	volumes, mounts := r.buildVolumes(newTestCapsule())
+	volumes, mounts := r.buildVolumes(newTestCapsule(), false)
 
 	volByName := make(map[string]corev1.Volume)
 	for _, v := range volumes {

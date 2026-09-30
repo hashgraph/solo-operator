@@ -86,8 +86,9 @@ func (r *StatefulSetSubReconciler) Reconcile(ctx context.Context, capsule *opera
 	return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 }
 
-// buildStatefulSet builds the desired StatefulSet purely from the capsule spec; it
-// never reads the existing StatefulSet, so an omitted sidecar section is removed.
+// buildStatefulSet builds the desired StatefulSet from the capsule spec and the owning
+// Orbit (fetched once here for the node-name gate and UC mode); it never reads the
+// existing StatefulSet, so an omitted sidecar section is removed.
 func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (*appsv1.StatefulSet, error) {
 	replicas := int32(1)
 	if capsule.Spec.Offline {
@@ -96,7 +97,12 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	selectorLabels := SelectorLabels(capsule)
 	podLabels := PodLabels(capsule)
 
-	volumes, volumeMounts := r.buildVolumes(capsule)
+	orbit, err := ResolveOrbit(ctx, r.Client, capsule)
+	if err != nil {
+		return nil, err
+	}
+	zeroBased := orbit != nil && orbit.IsNodeNameZeroBased()
+	volumes, volumeMounts := r.buildVolumes(capsule, zeroBased)
 
 	consensusContainer, err := r.buildConsensusNodeContainer(capsule, volumeMounts)
 	if err != nil {
@@ -154,7 +160,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 
 	ucMode := uc.ModeClusterOnly
 	if containers := capsule.Spec.PodProperties.Containers; containers.UC != nil && containers.UC.Enabled {
-		ucMode, err = ResolveUCMode(ctx, r.Client, capsule)
+		ucMode, err = ucModeFromOrbit(capsule, orbit)
 		if err != nil {
 			return nil, err
 		}
@@ -328,7 +334,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 //   - emptyDir-only volumes: always created as emptyDir (populated by image or ephemeral).
 //   - PVC-optional volumes: created as PVC when configured, otherwise emptyDir fallback.
 //   - Secret volumes: created only when the relevant spec field is set.
-func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule) ([]corev1.Volume, []corev1.VolumeMount) {
+func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.ConsensusCapsule, zeroBased bool) ([]corev1.Volume, []corev1.VolumeMount) {
 	pvc := capsule.Spec.PersistentVolumeClaims
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
@@ -484,10 +490,10 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 
 			sr := capsule.Spec.Secrets.SecretResources
 			if sr.SigningPrivateKey.SecretName != "" {
-				// Mount under the CN-expected filename derived from nodeId: "s-private-node<nodeId+1>.pem".
-				// The secret key can be named anything; the operator normalizes it here so
-				// users don't need to know CN's internal formatNodeName convention.
-				privateKeyPath := fmt.Sprintf("s-private-node%d.pem", capsule.Spec.NodeId+1)
+				// Mount under the CN-expected filename derived from nodeId (see common.FormatNodeName).
+				// The secret key can be named anything; the operator normalizes it here.
+				nodeName := common.FormatNodeName(capsule.Spec.NodeId, zeroBased)
+				privateKeyPath := "s-private-" + nodeName + ".pem"
 				projectedSources = append(projectedSources, corev1.VolumeProjection{
 					Secret: &corev1.SecretProjection{
 						LocalObjectReference: corev1.LocalObjectReference{

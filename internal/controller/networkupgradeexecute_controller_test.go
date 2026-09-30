@@ -327,7 +327,7 @@ func newMainnetOrbit() *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: true},
+			ProvisionerDaemonEnabled: true,
 		},
 	}
 }
@@ -339,7 +339,7 @@ func newClusterOnlyOrbit() *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: false},
+			ProvisionerDaemonEnabled: false,
 		},
 	}
 }

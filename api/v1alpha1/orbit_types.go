@@ -45,6 +45,15 @@ type OrbitSpec struct {
 	// +optional
 	RequireDigestOnDeploy bool `json:"requireDigestOnDeploy,omitempty"`
 
+	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+	// When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
+	// phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+	// This is a host-level, cross-component infra fact, so it is network-wide config.
+	// +kubebuilder:default=false
+	// +optional
+	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
+
 	// Consensus contains shared configuration for all ConsensusCapsules
 	Consensus OrbitConsensus `json:"consensus"`
 }
@@ -228,17 +237,27 @@ type OrbitConsensus struct {
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
-	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-	// When true the UC sidecar runs as UC_MODE=mainnet (defers the execute phase
-	// to the host daemon). When false (default) the UC runs as UC_MODE=cluster-only
-	// and fulfils the provisioner role itself.
-	// +kubebuilder:default=false
+	// FeatureGates holds transitional, rollout-only consensus feature gates. See
+	// ConsensusFeatureGates.
 	// +optional
-	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
+	FeatureGates *ConsensusFeatureGates `json:"featureGates,omitempty"`
 
 	// Genesis contains genesis-specific configuration
 	Genesis OrbitGenesis `json:"genesis"`
+}
+
+// ConsensusFeatureGates holds transitional, rollout-only feature gates for consensus
+// behavior. Unlike configuration (permanent desired state), each gate is removed once
+// its behavior is everywhere. Convention: every gate's doc comment states its default
+// and when to remove it.
+type ConsensusFeatureGates struct {
+	// NodeNameZeroBased switches gossip key-file naming node<id+1> → node<id>.
+	// Default false. Remove once 0-based naming is the only convention the CN supports.
+	// Set to true only with a CN version that loads 0-based names — solo-provisioner
+	// sets it to match the deployed CN; the operator only honors it.
+	// +kubebuilder:default=false
+	// +optional
+	NodeNameZeroBased bool `json:"nodeNameZeroBased,omitempty"`
 }
 
 // OrbitGenesis contains genesis initialization configuration
@@ -322,6 +341,16 @@ type Orbit struct {
 
 	Spec   OrbitSpec   `json:"spec,omitempty"`
 	Status OrbitStatus `json:"status,omitempty"`
+}
+
+// IsNodeNameZeroBased resolves the consensus nodeNameZeroBased feature gate,
+// defaulting to false (node<id+1>) when the gate is unset. The operator only honors
+// the value; solo-provisioner sets it to match the deployed CN.
+func (o *Orbit) IsNodeNameZeroBased() bool {
+	if fg := o.Spec.Consensus.FeatureGates; fg != nil {
+		return fg.NodeNameZeroBased
+	}
+	return false
 }
 
 // +kubebuilder:object:root=true
