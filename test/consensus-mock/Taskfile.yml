@@ -35,10 +35,18 @@ vars:
 
 silent: true
 tasks:
-  default:
-    desc: List available tasks
+  build:
+    desc: "Build the consensus-mock images tagged {{.V1}} and {{.V2}} (cross-compiled linux/amd64 + linux/arm64)"
     cmds:
-      - task --list
+      - task: docker:build:versions
+
+  upgrade:
+    desc: "Run the beacon upgrade ({{.V1}} -> {{.V2}}) against a running node0: prepare, freeze, wait for Execute"
+    cmds:
+      - task: beacon:config
+      - task: beacon:prepare
+      - task: beacon:freeze
+      - task: wait:execute
 
   e2e:
     desc: "Full pipeline: build+load mock/beacon/operator images, kind cluster, Helm install, deploy, prepare+freeze+execute"
@@ -51,15 +59,7 @@ tasks:
       - task: kind:load:genesis-init
       - task: operator:deploy
       - task: deploy
-      - task: beacon:config
-      - task: beacon:prepare
-      - task: beacon:freeze
-      - task: wait:execute
-
-  build:
-    desc: "Build the consensus-mock binary for the current platform"
-    cmds:
-      - go build -o bin/consensus-mock .
+      - task: upgrade
 
   build:all:linux-amd64:
     internal: true
@@ -76,11 +76,13 @@ tasks:
       - chmod +x bin/consensus-mock-linux-arm64
 
   build:all:
+    internal: true
     desc: "Cross-compile consensus-mock for linux/amd64 and linux/arm64 (parallel)"
     run: once
     deps: [build:all:linux-amd64, build:all:linux-arm64]
 
   hash:
+    internal: true
     desc: "Generate SHA256 checksums for the cross-compiled binaries"
     run: once
     deps: [build:all]
@@ -89,17 +91,14 @@ tasks:
       - cd bin && sha256sum consensus-mock-linux-arm64 > consensus-mock-linux-arm64.sha256
 
   docker:build:
+    internal: true
     desc: "Build the consensus-mock image (tag with MOCK_IMG=...)"
     deps: [hash]
     cmds:
       - docker build -t {{.MOCK_IMG}} .
 
-  docker:push:
-    desc: "Push the consensus-mock image built by docker:build"
-    cmds:
-      - docker push {{.MOCK_IMG}}
-
   build:manifest:
+    internal: true
     desc: "Generate manifests/consensus-node-components.yaml with real deterministic layer hashes for IMAGE"
     vars:
       OUT_DIR: '{{.OUT_DIR | default "manifests"}}'
@@ -166,49 +165,58 @@ tasks:
 
 
   docker:build:v1:
+    internal: true
     desc: "Build consensus-mock image tagged {{.V1}}"
     cmds:
       - task: docker:build
         vars: { MOCK_IMG: '{{.IMG_V1}}' }
 
   docker:build:v2:
+    internal: true
     desc: "Build consensus-mock image tagged {{.V2}}"
     cmds:
       - task: docker:build
         vars: { MOCK_IMG: '{{.IMG_V2}}' }
 
   docker:build:versions:
+    internal: true
     desc: "Build both consensus-mock version tags ({{.V1}}, {{.V2}}) — same code, different tags"
     deps: [docker:build:v1, docker:build:v2]
 
   kind:load:v1:
+    internal: true
     desc: "Load consensus-mock:{{.V1}} into kind"
     cmds:
       - kind load docker-image {{.IMG_V1}} --name {{.CLUSTER}}
 
   registry:push:v2:
+    internal: true
     desc: "Push consensus-mock:{{.V2}} (the upgrade target) to the in-cluster registry"
     cmds:
       - docker tag {{.IMG_V2}} {{.REGISTRY_HOST}}/consensus-mock:{{.V2}}
       - docker push {{.REGISTRY_HOST}}/consensus-mock:{{.V2}}
 
   images:load:versions:
+    internal: true
     desc: "Load consensus-mock:{{.V1}} into kind and push {{.V2}} to the in-cluster registry"
     deps: [kind:load:v1, registry:push:v2]
 
   kind:load:beacon:
+    internal: true
     desc: "Build the beacon image, tag :dev, and load it into kind"
     cmds:
       - task: root:docker:build:beacon
       - task: root:kind:load:beacon
 
   kind:load:uc:
+    internal: true
     desc: "Build the UC sidecar image, tag :dev, and load it into kind"
     cmds:
       - task: root:docker:build:uc
       - task: root:kind:load:uc
 
   kind:load:genesis-init:
+    internal: true
     desc: "Pull and load the genesis-init image ({{.GENESIS_INIT_IMG}}) into kind"
     cmds:
       - |
@@ -221,12 +229,14 @@ tasks:
         rm -f "$TAR"
 
   registry:up:
+    internal: true
     desc: "Deploy the in-cluster local registry (kind/registry.yaml) used for real digest/layer-hash verification"
     cmds:
       - kubectl apply -f kind/registry.yaml
       - kubectl wait --for=condition=available --timeout=60s deployment/registry -n local-registry
 
   cluster:
+    internal: true
     desc: "Reset the kind cluster ({{.CLUSTER}}), install CRDs, and deploy the in-cluster registry"
     cmds:
       - task: root:kind:reset
@@ -234,6 +244,7 @@ tasks:
       - task: registry:up
 
   operator:deploy:
+    internal: true
     desc: "Build solo-operator from local source, load it into kind, and deploy via Helm"
     cmds:
       - task: root:docker:build
@@ -246,6 +257,7 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
 
   deploy:
+    internal: true
     desc: "Deploy a single-node network (node0) running consensus-mock:MOCK_TAG (default {{.V1}}) + genesis"
     vars:
       # MOCK_TAG (not VERSION) avoids colliding with root Taskfile's own VERSION var.
@@ -264,6 +276,7 @@ tasks:
       - echo ">> node0 ready on consensus-mock:{{.MOCK_TAG}}"
 
   beacon:config:
+    internal: true
     desc: "Apply beacon's config ConfigMap + payer key Secret, pointed at node0's own Service"
     cmds:
       - kubectl apply -f kind/beacon-config.yaml
@@ -276,21 +289,6 @@ tasks:
           --from-literal=account2.pem="$PEM" --from-literal=account2.pass="" \
           --dry-run=client -o yaml | kubectl apply -f -
         '
-
-  beacon:delete-job:
-    internal: true
-    desc: "Delete a beacon Job if it exists, so it can be re-applied (Job specs are immutable)"
-    cmds:
-      - kubectl delete job {{.JOB}} -n {{.NS}} --ignore-not-found
-
-  beacon:wait-job:
-    internal: true
-    desc: "Wait for a beacon Job to complete and print its log"
-    vars:
-      TIMEOUT: '{{.TIMEOUT | default "60s"}}'
-    cmds:
-      - kubectl wait --for=condition=complete --timeout={{.TIMEOUT}} job/{{.JOB}} -n {{.NS}}
-      - kubectl logs -n {{.NS}} job/{{.JOB}}
 
   beacon:stage-manifest:
     internal: true
@@ -306,6 +304,7 @@ tasks:
       - kubectl cp manifests/consensus-node-components.yaml {{.NS}}/node0-0:{{.UPGRADE_PATH}}/manifests/consensus-node-components.yaml -c consensus-node
 
   beacon:prepare:
+    internal: true
     desc: "Run a beacon Job: freeze prepare (PREPARE_UPGRADE) against node0, and wait for its Prepare CR to succeed"
     cmds:
       - task: beacon:stage-manifest
@@ -335,6 +334,7 @@ tasks:
         '
 
   beacon:freeze:
+    internal: true
     desc: "Run a beacon Job: freeze upgrade (FREEZE_UPGRADE), scheduled {{.FREEZE_DELAY_SECS | default \"10\"}}s out; waits for its Freeze CR to succeed"
     vars:
       FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
@@ -376,6 +376,7 @@ tasks:
         '
 
   wait:execute:
+    internal: true
     desc: "Wait for the UC-created NetworkUpgradeExecute CR to succeed, then print the freeze-window marker/detection logs and pod-restart timing"
     vars:
       FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
@@ -452,31 +453,6 @@ tasks:
         echo "── StatefulSet / pod restart events (most recent) ──"
         kubectl get events -n {{.NS}} --sort-by=.lastTimestamp -o custom-columns=TIME:.lastTimestamp,OBJ:.involvedObject.name,REASON:.reason | tail -15
         '
-
-  beacon:abort:
-    desc: "Run a beacon Job: freeze abort (FREEZE_ABORT) against node0"
-    cmds:
-      - task: beacon:delete-job
-        vars: { JOB: beacon-freeze-abort }
-      - kubectl apply -f kind/job-freeze-abort.yaml
-      - task: beacon:wait-job
-        vars: { JOB: beacon-freeze-abort }
-
-  beacon:watch:
-    desc: "Watch the NetworkUpgrade* CRs advance (UC -> operator) — leave running in its own terminal"
-    cmds:
-      - |
-        # kubectl -w only supports one resource type at a time, so poll instead.
-        while true; do
-          echo "──── $(date -u) ────"
-          kubectl -n {{.NS}} get networkupgradeprepares,networkupgradefreezes,networkupgradeexecutes,networkupgradefreezeaborts
-          sleep 2
-        done
-
-  uc:logs:
-    desc: "Tail the UC sidecar log on node0 (marker detection, CR creation, ACTIVE)"
-    cmds:
-      - kubectl -n {{.NS}} logs -f node0-0 -c uc
 
   clean:
     desc: "Remove build artifacts"

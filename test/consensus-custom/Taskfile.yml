@@ -84,16 +84,6 @@ tasks:
           EXECUTE_EXTRA_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
       - task: wait:active
 
-  cn:logs:
-    desc: Tail the consensus-node container log on node0
-    cmds:
-      - kubectl -n {{.NS}} logs -f node0-0 -c consensus-node
-
-  uc:logs:
-    desc: Tail the UC sidecar log on node0
-    cmds:
-      - kubectl -n {{.NS}} logs -f node0-0 -c uc
-
   clean:
     desc: Remove the generated upgrade package
     cmds:
