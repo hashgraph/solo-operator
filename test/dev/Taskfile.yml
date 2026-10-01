@@ -76,9 +76,10 @@ vars:
   # valid registry.
   CN_DECOY_POSITION_0: '{{ .CN_DECOY_POSITION_0 | default "false" }}'
   # Registry selection strategy written into the manifest's consensusNode block.
-  # "Sequential" (default) probes registries in listed order — deterministic
-  # preference, first valid wins. "Random" spreads pull traffic across registries.
-  # Empty omits the field (falls back to the operator's --registry-order default).
+  # "Sequential" probes registries in listed order — deterministic preference,
+  # first valid wins. "Random" spreads pull traffic across registries. Empty
+  # omits the field (falls back to the operator's --registry-order default,
+  # which is Random).
   CN_SELECTION_STRATEGY: '{{ .CN_SELECTION_STRATEGY | default "" }}'
   # Space-separated platforms to emit layer hashes for. A platform the image
   # does not publish is skipped with a warning.

@@ -349,9 +349,9 @@ kubectl -n solo-orbit get pods -l app.kubernetes.io/component=consensus-node -o 
 The build step in the e2e walkthrough above uses `CN_*` env vars to control the
 manifest the UC reads. Mix and match to exercise different operator paths. After
 rebuilding, re-export `ZIP` and `H` and continue with the normal
-[upgrade sequence](#4-drive-the-upgrade).
+[upgrade sequence](#manual-steps-reference).
 
-### Sequential selection + decoy failover (default above)
+### Sequential selection + decoy failover
 
 Decoy at `registries[0]`, Sequential strategy. The operator probes registries in
 listed order — the decoy fails immediately, so the prepare selects the next valid
