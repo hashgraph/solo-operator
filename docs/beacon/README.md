@@ -213,15 +213,12 @@ Version map for this test:
 | Deployed network | `0.74.0` | `docs/example/node{0..3}/consensus-capsule.yaml` (`imageTag`) |
 | Upgrade package (beacon uploads this) | `0.74.2` | `test/dev` `HEDERA_UPGRADE_VERSION` → `staging/build-v0.74.2.zip` |
 
-> **Run everything from the worktree that has beacon** — the `feat/beacon-cli-mvp`
-> branch. The main checkout on `docs/beacon-design` has neither `internal/beacon`
-> nor the aligned example/`test/dev`, so its `task build`/deploy produce the old
-> artifacts. Set once:
->
-> ```bash
-> export ROOT=/path/to/solo-operator/.claude/worktrees/replace-errx-package-bf48cf
-> cd "$ROOT"
-> ```
+All commands below run from the **repo root**. Set `ROOT` once:
+
+```bash
+export ROOT=/path/to/solo-operator
+cd "$ROOT"
+```
 
 ### 1. Build both deployment zips + capture the upgrade hash
 
