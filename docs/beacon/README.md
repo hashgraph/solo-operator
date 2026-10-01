@@ -136,43 +136,18 @@ kubectl -n solo create secret generic beacon-keys \
   --from-file=account2.pass=./keys/account2.pass  # or edit examples/secret-keys.yaml
 ```
 
-### Sourcing the deployment zip (tens of MB)
+### Sourcing the deployment zip
 
-The upgrade zip is far larger than a ConfigMap can hold (1 MiB etcd cap), and
-`beacon` is deliberately storage-agnostic — it reads a **local file path** and
-knows nothing about S3/HTTP. So the pod supplies the file on a shared volume.
-`fsGroup: 65532` on each Job makes the volume and mounted keys readable by the
-non-root beacon user (uid 65532); only the *sourcing* differs, never the beacon
-container.
+The upgrade zip is too large for a ConfigMap (1 MiB etcd cap). The pod supplies
+it on a shared volume; `fsGroup: 65532` makes it readable by the non-root beacon
+user. The zip is built by [`test/dev`](../../test/dev). Pick the delivery that
+matches your cluster:
 
-The zip is typically built on the host by [`test/dev`](../../test/dev), which
-produces two real versions — `staging/build-v<base>.zip` (the deployed version)
-and `staging/build-v<upgrade>.zip` (the next version). beacon uploads the
-**upgrade** zip. Pick the delivery that matches your cluster:
-
-| Source | How | Portable | Example |
-|---|---|---|---|
-| **kind hostPath (extraMounts)** | mount `test/dev/staging/` into the node at create time; the Job hostPath sees every rebuild with no copy | ✗ (kind) — **recommended for local/CI** | [kind-config-extramounts.yaml](examples/kind-config-extramounts.yaml) + [job-upload-hostpath.yaml](examples/job-upload-hostpath.yaml) |
-| **kind hostPath (docker cp)** | `docker cp staging/build-*.zip <cluster>-control-plane:/var/beacon/…` for a one-off | ✗ (kind) | [job-upload-hostpath.yaml](examples/job-upload-hostpath.yaml) |
-| **PVC + loader** | `kubectl cp` the zip into a PVC via a throwaway pod; beacon mounts it read-only | ✅ (real/multi-node) | [pvc-and-loader.yaml](examples/pvc-and-loader.yaml) + [job-upload-pvc.yaml](examples/job-upload-pvc.yaml) |
-| **S3 / MinIO / OCI / HTTP** | an `initContainer` fetches into an `emptyDir`; beacon mounts it read-only | ✅ | [job-upload-s3.yaml](examples/job-upload-s3.yaml) |
-
-**Why not a PVC on kind?** kind's default `local-path` provisioner is itself
-hostPath-backed, so a PVC only adds an indirection plus a populate step over a
-direct node hostPath — with no benefit on a single node. Reach for a PVC on
-real/multi-node clusters, where a node hostPath isn't available. (`--restart-from-failure`
-needs no local persistence — resume state is on-chain — so it's not a reason to
-prefer a PVC either.)
-
-**kind extraMounts loop:**
-
-```bash
-# absolute path; see examples/kind-config-extramounts.yaml
-kind create cluster --config examples/kind-config-extramounts.yaml
-( cd test/dev && task build )                       # writes staging/build-v<base|upgrade>.zip → node /var/beacon
-# point job-upload-hostpath.yaml's --zip at /work/build-v<upgrade>.zip (the upgrade version), then:
-kubectl apply -f examples/job-upload-hostpath.yaml
-```
+| Source | How | Example |
+|---|---|---|
+| **kind hostPath (extraMounts)** — recommended for local/CI | mount `test/dev/staging/` at create time | [kind-config-extramounts.yaml](examples/kind-config-extramounts.yaml) + [job-upload-hostpath.yaml](examples/job-upload-hostpath.yaml) |
+| **PVC + loader** — real/multi-node clusters | `kubectl cp` zip into a PVC | [pvc-and-loader.yaml](examples/pvc-and-loader.yaml) + [job-upload-pvc.yaml](examples/job-upload-pvc.yaml) |
+| **S3 / MinIO / OCI / HTTP** | initContainer fetches into emptyDir | [job-upload-s3.yaml](examples/job-upload-s3.yaml) |
 
 ### Upload, then freeze
 
@@ -184,76 +159,91 @@ kubectl -n solo logs -f job/beacon-upload
 kubectl apply -f examples/job-freeze.yaml
 ```
 
-Freeze Jobs (`examples/job-freeze.yaml`) need no artifact volume — just config +
-keys — and must pass `--yes` (no TTY to confirm).
+Freeze Jobs need no artifact volume — just config + keys — and must pass `--yes`.
 
 ---
 
 ## End-to-end upgrade test (local kind)
 
-A full, from-scratch walkthrough: stand up a network at **v0.74.0** (a single
-node is enough and is the recommended local path — see step 2), then use `beacon`
-to drive a software upgrade to **v0.74.2**. beacon is the HAPI control plane
-(upload + freeze); the consensus node, UC sidecar, operator, and provisioner
-carry out the actual node upgrade after the freeze fires.
+Stand up a **v0.74.0** single-node network on kind, then drive an upgrade to
+**v0.74.2** with beacon. beacon handles the HAPI control plane (upload + freeze);
+the consensus node, UC sidecar, operator, and provisioner carry out the actual
+upgrade after the freeze fires.
 
-> **Quick path — [`docs/beacon/Taskfile.yml`](Taskfile.yml).** Every step below is
-> wrapped as a task. Run `task -d docs/beacon` to print the ordered runbook, then
-> the tasks in sequence (`build`, `cluster`, `uc-image`, `operator`, `deploy`,
-> `config`, `port-forward`, `upgrade`, `watch`, `version`, `cleanup`). The
-> `operator` and `port-forward` tasks are long-running and each want their own
-> terminal; everything else is one-shot. The tasks run from the current checkout
-> (no worktree juggling) and `includes` the root, `docs/example`, and `test/dev`
-> Taskfiles. The manual steps below remain the reference for what each task does.
+### Quick path (recommended)
 
-Version map for this test:
+Every step is wrapped as a task in [`docs/beacon/Taskfile.yml`](Taskfile.yml).
+The `operator` and `port-forward` tasks are long-running (each needs its own
+terminal); everything else is one-shot.
 
-| Role | Version | Where it is set |
-|------|---------|-----------------|
+```
+task -d docs/beacon                         # print the ordered runbook
+
+# Terminal 1 — one-shot setup
+task -d docs/beacon prepare-cluster         # build zips + kind reset + UC image
+task -d docs/beacon deploy                  # warm images + single-node network + genesis
+task -d docs/beacon config                  # beacon binary + config + payer key
+
+# Terminal 2 — leave running
+task -d docs/beacon operator
+
+# Terminal 3 — leave running
+task -d docs/beacon port-forward
+
+# Terminal 1 — drive the upgrade
+task -d docs/beacon upgrade                 # upload → info → prepare → freeze
+task -d docs/beacon watch                   # observe NetworkUpgrade* CRs advance
+task -d docs/beacon version                 # confirm v0.74.2 is live
+task -d docs/beacon cleanup                 # kind delete
+```
+
+### Manual steps (reference)
+
+The manual commands below match the tasks above 1:1. All run from the **repo
+root**:
+
+```bash
+export ROOT=/path/to/solo-operator
+cd "$ROOT"
+```
+
+| Role | Version | Set in |
+|------|---------|--------|
 | Deployed network | `0.74.0` | `docs/example/node{0..3}/consensus-capsule.yaml` (`imageTag`) |
-| Upgrade package (beacon uploads this) | `0.74.2` | `test/dev` `HEDERA_UPGRADE_VERSION` → `staging/build-v0.74.2.zip` |
+| Upgrade package | `0.74.2` | `test/dev` `HEDERA_UPGRADE_VERSION` → `staging/build-v0.74.2.zip` |
 
-> **Run everything from the worktree that has beacon** — the `feat/beacon-cli-mvp`
-> branch. The main checkout on `docs/beacon-design` has neither `internal/beacon`
-> nor the aligned example/`test/dev`, so its `task build`/deploy produce the old
-> artifacts. Set once:
->
-> ```bash
-> export ROOT=/path/to/solo-operator/.claude/worktrees/replace-errx-package-bf48cf
-> cd "$ROOT"
-> ```
+**1. Build deployment zips + capture H**
 
-### 1. Build both deployment zips + capture the upgrade hash
+The default build includes multi-registry support (primary + mirror) with
+Sequential selection and a decoy at `registries[0]` to force failover. The
+operator must skip the unpullable decoy and select a valid registry.
 
 ```bash
 cd "$ROOT/test/dev"
 task setup      # downloads build-v0.74.0.zip + build-v0.74.2.zip (needs internet)
+CN_DECOY_REGISTRY=artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node:0.0.0-invalid \
+CN_DECOY_POSITION_0=true \
+CN_SELECTION_STRATEGY=Sequential \
 task build      # -> staging/build-v0.74.0.zip and staging/build-v0.74.2.zip
 export ZIP="$ROOT/test/dev/staging/build-v0.74.2.zip"
 export H=$(shasum -a 384 "$ZIP" | awk '{print $1}')
 echo "H=$H"
 ```
 
-`H` is the SHA-384 that couples the whole chain (upload memo, `file info`,
-`freeze prepare`, `freeze upgrade`). Recompute it whenever the zip is rebuilt.
+For a plain single-registry build (no failover), omit the `CN_*` env vars.
 
-### 2. Cluster + operator + network at v0.74.0
+**2. Cluster + operator + network**
 
 ```bash
 cd "$ROOT"
-kind delete cluster --name solo || true          # remove any stray cluster
-task kind:reset                                   # creates 'solo-operator' + installs CRDs
+kind delete cluster --name solo || true
+task kind:reset                              # creates 'solo-operator' + installs CRDs
 ```
 
-Start the operator in its **own terminal** and leave it running:
+Start the operator in its **own terminal**: `cd "$ROOT" && task run`
 
-```bash
-cd "$ROOT" && task run
-```
-
-The UC sidecar image the operator injects is tagged with the operator's build
-version (`:dev` under `go run`), which is not published — build and load it
-locally so the `PullIfNotPresent` sidecar finds it:
+Build and load the UC sidecar (`:dev` is not published, `PullIfNotPresent`
+needs it local):
 
 ```bash
 cd "$ROOT"
@@ -261,54 +251,37 @@ task docker:build:uc
 kind load docker-image ghcr.io/hashgraph/solo-operator/uc:dev --name solo-operator
 ```
 
-Deploy the network into namespace `solo-orbit`. For local beacon testing prefer
-the **single-node** path — one consensus node reaches ACTIVE trivially and won't
-starve a laptop the way four JVMs do (four nodes commonly return `BUSY` and stall
-receipts under CPU pressure). `task deploy:single` deploys orbit + node0 (with
-its HAProxy) + genesis; genesis derives the roster from the deployed capsules, so
-one node yields a valid 1-node roster at 100% weight:
+Deploy a single-node network (one node reaches ACTIVE without starving a laptop):
 
 ```bash
 cd "$ROOT/docs/example"
 task setup
-task deploy:single                                # node0 + genesis; waits for Ready + prints the port-forward
+task deploy:single                           # node0 + genesis; waits for Ready
 ```
 
 <details>
-<summary>Alternative: full 4-node network</summary>
-
-Only needed to exercise multi-node behaviour. Requires a well-resourced Docker VM
-(8+ CPU / 16+ GB); under-provisioned, nodes return `BUSY` and transactions never
-get receipts.
+<summary>Alternative: full 4-node network (8+ CPU / 16+ GB)</summary>
 
 ```bash
 cd "$ROOT/docs/example"
 task setup
-task deploy                                       # orbit + 4 nodes + genesis
-kubectl apply -f node0/haproxycapsule.yaml        # node0 gRPC endpoint for beacon
+task deploy                                  # orbit + 4 nodes + genesis
+kubectl apply -f node0/haproxycapsule.yaml
 kubectl -n solo-orbit rollout status deploy/haproxy-node0 --timeout=120s
 ```
 
 </details>
 
-Checkpoint — node0 pod `3/3 Running` (consensus-node + alloy + uc); the 4-node
-path shows all four:
-
-```bash
-kubectl -n solo-orbit get pods -l app.kubernetes.io/component=consensus-node
-```
-
-### 3. beacon config + payer key (well-known 0.0.2 genesis key)
+**3. beacon config + payer key**
 
 ```bash
 cd "$ROOT"
-task build:beacon                                 # -> bin/beacon
+task build:beacon                            # -> bin/beacon
 mkdir -p /tmp/beacon-solo/keys
 
-# 0.0.2 genesis key (public key matches network-genesis bootstrap.genesisPublicKey)
 KEY_HEX=302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137
 { echo "-----BEGIN PRIVATE KEY-----"; echo "$KEY_HEX" | xxd -r -p | base64; echo "-----END PRIVATE KEY-----"; } > /tmp/beacon-solo/keys/account2.pem
-: > /tmp/beacon-solo/keys/account2.pass           # empty passphrase (unencrypted PEM)
+: > /tmp/beacon-solo/keys/account2.pass
 
 cat > /tmp/beacon-solo/config.yaml <<'EOF'
 name: solo-local
@@ -325,77 +298,90 @@ nodes:
 EOF
 ```
 
-### 4. Drive the upgrade with beacon
+**4. Drive the upgrade**
 
-Port-forward node0's HAProxy in a **separate terminal** (leave running):
-
-```bash
-kubectl -n solo-orbit port-forward svc/haproxy-node0 50211:50211
-```
-
-Then run the HAPI sequence:
+Port-forward in a **separate terminal**: `kubectl -n solo-orbit port-forward svc/haproxy-node0 50211:50211`
 
 ```bash
 cd "$ROOT"
 
-# a) upload the v0.74.2 package into special file 0.0.150 (verify-before-write)
+# a) upload the v0.74.2 package into special file 0.0.150
 ./bin/beacon -c /tmp/beacon-solo/config.yaml file upload --zip "$ZIP" --expect-hash "$H"
 
-# b) confirm the network holds exactly that hash
-./bin/beacon -c /tmp/beacon-solo/config.yaml file info                    # SHA-384 must equal H
+# b) confirm the network holds that hash
+./bin/beacon -c /tmp/beacon-solo/config.yaml file info
 
-# c) stage the upgrade on every node, pinned to H
+# c) stage the upgrade on every node
 ./bin/beacon -c /tmp/beacon-solo/config.yaml freeze prepare --upgrade-zip-hash "$H" --yes
 
-# d) schedule the freeze that boots the new software (~3 min out, UTC)
+# d) schedule the freeze (~3 min out, UTC)
 START=$(date -u -v+3M '+%Y-%m-%d.%H:%M:%S' 2>/dev/null || date -u -d '+3 min' '+%Y-%m-%d.%H:%M:%S')
 ./bin/beacon -c /tmp/beacon-solo/config.yaml freeze upgrade --start-time "$START" --upgrade-zip-hash "$H" --yes
 ```
 
-### 5. Observe the automated upgrade (no beacon involvement past the freeze)
-
-At the scheduled time the network freezes and the rest of the pipeline runs on
-its own. Watch it unfold:
+**5. Observe the upgrade** (beacon has exited; the pipeline runs on its own)
 
 ```bash
-# nodes reach FREEZE_COMPLETE, then the consensus node writes upgrade markers
 kubectl -n solo-orbit logs -f node0-0 -c consensus-node | grep -iE "freeze|upgrade"
-# the UC sidecar detects the marker, mints the operationId from disk, creates CRs
 kubectl -n solo-orbit logs -f node0-0 -c uc
-# the operator + provisioner advance the NetworkUpgrade* CRs
 kubectl -n solo-orbit get networkupgradeprepare,networkupgradefreeze,networkupgradeexecute -w
 ```
 
-Expected chain: `FREEZE_COMPLETE` → node writes `execute_immediate.mf` → NMT
-extracts 0.0.150 into the upgrade dir → UC creates Prepare/Freeze/Execute CRs
-(operationId derived from the on-disk package) → operator/provisioner swap the
-image and restart the pod on the new software → UC reports `ACTIVE`.
-
-### 6. Verify the new version
+**6. Verify**
 
 ```bash
 cd "$ROOT"
-bin/beacon -c /tmp/beacon-solo/config.yaml network version   # Services version -> 0.74.2
+bin/beacon -c /tmp/beacon-solo/config.yaml network version   # expect 0.74.2
 kubectl -n solo-orbit get pods -l app.kubernetes.io/component=consensus-node -o wide
 ```
 
-### 7. Cleanup
+**7. Cleanup:** `kind delete cluster --name solo-operator`
+
+> **Boundary note.** Steps (a)–(d) are beacon's job. Everything in step 5 is the
+> consensus node + UC + operator + provisioner reacting to the freeze. If the
+> network does not return on `0.74.2`, inspect the `uc` container log and the
+> NetworkUpgrade* CR phases.
+
+---
+
+## Test variants
+
+The build step in the e2e walkthrough above uses `CN_*` env vars to control the
+manifest the UC reads. Mix and match to exercise different operator paths. After
+rebuilding, re-export `ZIP` and `H` and continue with the normal
+[upgrade sequence](#manual-steps-reference).
+
+### Sequential selection + decoy failover
+
+Decoy at `registries[0]`, Sequential strategy. The operator probes registries in
+listed order — the decoy fails immediately, so the prepare selects the next valid
+candidate.
 
 ```bash
-kind delete cluster --name solo-operator
+CN_DECOY_REGISTRY=artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node:0.0.0-invalid \
+CN_DECOY_POSITION_0=true \
+CN_SELECTION_STRATEGY=Sequential \
+task build
 ```
 
-> **What beacon guarantees vs. what the pipeline does.** Steps (a)–(d) are
-> beacon's job and are fully verifiable on their own: the upload records `H` in
-> the 0.0.150 memo, `file info` reads it back, and the freeze transactions land
-> with receipts. Everything in **step 5** is the consensus node + UC + operator +
-> provisioner reacting to the freeze — beacon has already exited. Unlike the
-> synthetic `docs/example` `upgrade:*` tasks (which hand-apply CRs and manually
-> patch `status.phase`, because no real package reaches the node's disk), this
-> beacon-driven path delivers the package for real, so the UC advances the CRs on
-> its own. If the network does not return on `0.74.2`, inspect the `uc` container
-> log and the NetworkUpgrade* CR phases — that is the UC→operator→provisioner
-> stage, not beacon.
+### Random selection
+
+Random strategy, no decoy. The operator spreads pull traffic across all valid
+registries — useful to verify that every candidate passes independently.
+
+```bash
+CN_SELECTION_STRATEGY=Random \
+task build
+```
+
+### Plain single-registry (no failover)
+
+Omit all `CN_*` vars to produce a manifest with only the primary registry and no
+strategy override (falls back to the operator's `--registry-order` default).
+
+```bash
+task build
+```
 
 ---
 

@@ -64,10 +64,23 @@ vars:
   # Optional decoy registry (full image ref WITH tag) added as an extra candidate to
   # test the operator skipping a registry it cannot pull from: a real public host but
   # an image/tag that does not exist. Empty by default so the normal build is not
-  # affected. It is appended AFTER the valid registries (never registries[0], which
-  # weaver uses for the single SoftwareVersion fallback), and its layer hashes are not
-  # checked. Set e.g. CN_DECOY_REGISTRY=artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node:0.0.0-invalid
+  # affected. By default the decoy is appended AFTER the valid registries; set
+  # CN_DECOY_POSITION_0=true to insert it as registries[0] instead, forcing the
+  # operator to fail over to the second registry on every prepare. Layer hashes are
+  # not checked for the decoy.
+  # Set e.g. CN_DECOY_REGISTRY=artifacts.hashgraph.io/consensus-node-docker-release-local/consensus-node:0.0.0-invalid
   CN_DECOY_REGISTRY: ""
+  # When true and CN_DECOY_REGISTRY is set, the decoy is inserted at registries[0]
+  # instead of appended last. This forces the operator's multi-registry failover
+  # path: the first candidate is unpullable, so the prepare must fall through to a
+  # valid registry.
+  CN_DECOY_POSITION_0: '{{ .CN_DECOY_POSITION_0 | default "false" }}'
+  # Registry selection strategy written into the manifest's consensusNode block.
+  # "Sequential" probes registries in listed order — deterministic preference,
+  # first valid wins. "Random" spreads pull traffic across registries. Empty
+  # omits the field (falls back to the operator's --registry-order default,
+  # which is Random).
+  CN_SELECTION_STRATEGY: '{{ .CN_SELECTION_STRATEGY | default "" }}'
   # Space-separated platforms to emit layer hashes for. A platform the image
   # does not publish is skipped with a warning.
   CN_PLATFORMS: "linux/amd64 linux/arm64"
@@ -222,11 +235,21 @@ tasks:
         done
 
         # Optional decoy: a reachable public host with an image/tag that does not
-        # exist, appended last so registries[0] stays valid. Exercises the operator
-        # skipping a candidate it cannot pull.
+        # exist, exercising the operator skipping a candidate it cannot pull.
+        # CN_DECOY_POSITION_0=true inserts it as registries[0] (forces failover);
+        # otherwise it is appended last.
         if [ -n "{{ .CN_DECOY_REGISTRY }}" ]; then
-          echo "      - image: \"{{ .CN_DECOY_REGISTRY }}\"" >> "$registries_block"
-          warn "decoy registry added (intentionally unpullable): {{ .CN_DECOY_REGISTRY }}"
+          decoy_line="      - image: \"{{ .CN_DECOY_REGISTRY }}\""
+          if [ "{{ .CN_DECOY_POSITION_0 }}" = "true" ]; then
+            decoy_block="$(mktemp)"
+            echo "$decoy_line" > "$decoy_block"
+            cat "$registries_block" >> "$decoy_block"
+            mv "$decoy_block" "$registries_block"
+            warn "decoy registry inserted at registries[0] (forces failover): {{ .CN_DECOY_REGISTRY }}"
+          else
+            echo "$decoy_line" >> "$registries_block"
+            warn "decoy registry appended (intentionally unpullable): {{ .CN_DECOY_REGISTRY }}"
+          fi
         fi
 
         {
@@ -234,6 +257,9 @@ tasks:
           echo "images:"
           echo "  consensusNode:"
           echo "    version: \"{{ .CN_VERSION }}\""
+          if [ -n "{{ .CN_SELECTION_STRATEGY }}" ]; then
+            echo "    selectionStrategy: \"{{ .CN_SELECTION_STRATEGY }}\""
+          fi
           echo "    deterministic:"
           echo "      supported: true"
           echo "      layerHashes:"
