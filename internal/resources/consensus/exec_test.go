@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
@@ -126,6 +127,31 @@ func TestS6Controller_TransportError_Retryable(t *testing.T) {
 	}
 }
 
+func TestS6Controller_PodNotReady_DistinctType(t *testing.T) {
+	cases := map[string]string{
+		"container_not_created": `Internal error occurred: error executing command in container: container is not created or running`,
+		"container_not_found":   `unable to upgrade connection: container not found ("consensus-node")`,
+	}
+	for name, msg := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := newTestController(t, &fakeExecutor{streamErr: errors.New(msg)})
+			_, err := c.exec(context.Background(), testCapsule(), s6QueryCmd)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !errorx.IsOfType(err, errExecPodNotReady) {
+				t.Errorf("expected errExecPodNotReady, got %v", err)
+			}
+			if !errorx.HasTrait(err, errorx.Temporary()) {
+				t.Error("pod-not-ready error must be temporary (retryable)")
+			}
+			if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonExecPodNotReady {
+				t.Errorf("expected reason %s, got %q (ok=%v)", ReasonExecPodNotReady, reason, ok)
+			}
+		})
+	}
+}
+
 func TestS6Controller_Forbidden_RBACHint(t *testing.T) {
 	// The API server's 403 body as it arrives wrapped in a WebSocket upgrade error.
 	forbidden := errors.New(`unable to upgrade streaming request: pods "n-0" is forbidden: ` +
@@ -239,6 +265,25 @@ func TestActuationSubReconciler_SetsStatusRunState(t *testing.T) {
 		}
 		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
 			t.Errorf("expected RunStateStopped after Stop, got %v", capsule.Status.RunState)
+		}
+	})
+
+	t.Run("pod_not_ready_requeues_quietly", func(t *testing.T) {
+		podNotReadyErr := errExecPodNotReady.New("container not found")
+		runner := &fakeS6Runner{err: podNotReadyErr}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+
+		result, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("expected no error (quiet requeue), got: %v", err)
+		}
+		if result.RequeueAfter != 2*time.Second {
+			t.Errorf("expected RequeueAfter=2s, got %v", result.RequeueAfter)
+		}
+		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
+			t.Errorf("expected RunStateStopped during pod-not-ready, got %v", capsule.Status.RunState)
 		}
 	})
 }

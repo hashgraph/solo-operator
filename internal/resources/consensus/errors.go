@@ -18,6 +18,11 @@ var (
 	// establish. Retryable — the pod may still be starting or rescheduling.
 	errExecTransport = errNS.NewType("exec_transport", errorx.Temporary())
 
+	// errExecPodNotReady: the exec transport failed because the pod/container
+	// does not exist yet (e.g. during a StatefulSet rollout). Retryable and
+	// expected during upgrades — callers should requeue quietly.
+	errExecPodNotReady = errNS.NewType("exec_pod_not_ready", errorx.Temporary())
+
 	// errExecCommand: the s6 command ran but exited non-zero. Terminal — retrying
 	// the same command will not change the outcome.
 	errExecCommand = errNS.NewType("exec_command")

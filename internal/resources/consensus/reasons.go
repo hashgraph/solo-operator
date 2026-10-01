@@ -19,4 +19,8 @@ const (
 
 	// ReasonExecCommandFailed: the s6 command exited non-zero.
 	ReasonExecCommandFailed errx.Reason = "ExecCommandFailed"
+
+	// ReasonExecPodNotReady: the exec transport failed because the pod or
+	// container does not exist yet (e.g. during a StatefulSet rollout).
+	ReasonExecPodNotReady errx.Reason = "ExecPodNotReady"
 )

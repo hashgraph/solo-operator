@@ -8,8 +8,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/automa-saga/errx"
+	"github.com/joomcode/errorx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
@@ -24,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
 
@@ -151,12 +154,38 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 				"If installed via Helm, upgrade to a solo-operator chart whose RBAC includes the pods/exec get+create rule",
 			)
 		}
+		// During a StatefulSet rollout the container may not exist yet. Classify
+		// this distinctly so callers can requeue quietly instead of logging ERR.
+		if isPodNotReady(streamErr) {
+			return res, errx.WithReason(
+				errExecPodNotReady.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName),
+				ReasonExecPodNotReady,
+			)
+		}
 		return res, errx.WithHints(
 			errx.WithReason(errExecTransport.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName), ReasonExecTransportFailed),
 			"Verify the pod is Running and the consensus-node container is ready",
 		)
 	}
 	return res, nil
+}
+
+// Kubernetes API-server error substrings returned when a container does not
+// exist yet during a StatefulSet rollout. These are not exposed as typed errors
+// by client-go, so string matching is the only option (same approach as
+// isForbidden below). Centralised here so tests can reference them.
+const (
+	errMsgContainerNotCreated = "container is not created or running"
+	errMsgContainerNotFound   = "container not found"
+)
+
+// isPodNotReady reports whether the error indicates the pod or container does
+// not exist yet — the two messages the API server returns during a StatefulSet
+// rollout when the old pod is terminating and the new one has not started.
+func isPodNotReady(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, errMsgContainerNotCreated) ||
+		strings.Contains(msg, errMsgContainerNotFound)
 }
 
 // isForbidden reports whether err is an API-server 403. The WebSocket exec
@@ -215,6 +244,16 @@ func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operato
 
 	isUp, err := r.s6.IsUp(ctx, capsule)
 	if err != nil {
+		// During a StatefulSet rollout the container may not exist yet. Treat
+		// this as "not up" with a quiet short requeue instead of propagating an
+		// error that the subreconciler framework would log at ERR.
+		if errorx.IsOfType(err, errExecPodNotReady) {
+			common.Debug(ctx, ReasonExecPodNotReady).
+				Str("pod", PodName(capsule)).
+				Msg("Pod/container not ready; will retry")
+			capsule.Status.RunState = operatorv1alpha1.RunStateStopped
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
