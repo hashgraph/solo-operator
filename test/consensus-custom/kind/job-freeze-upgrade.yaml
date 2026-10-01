@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Submits FREEZE_UPGRADE as a Kubernetes Job. ${ZIP_HASH} is the SHA-384 of the uploaded package (envsubst). ${START_TIME} is a near-future UTC timestamp.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-freeze-upgrade
+  namespace: solo-orbit
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "freeze"
+            - "upgrade"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--start-time"
+            - "${START_TIME}"
+            - "--upgrade-zip-hash"
+            - "${ZIP_HASH}"
+            - "--yes"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }

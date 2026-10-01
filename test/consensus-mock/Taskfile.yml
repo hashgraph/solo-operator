@@ -380,7 +380,7 @@ tasks:
     vars:
       FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
       WAIT_SECS:
-        sh: echo "$(( {{.FREEZE_DELAY_SECS}} + 90 ))"
+        sh: echo "$(( {{.FREEZE_DELAY_SECS}} + {{.EXECUTE_EXTRA_SECS | default "90"}} ))"
     cmds:
       - |
         bash -lc '

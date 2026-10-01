@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Single-node ConsensusCapsule for local kind testing with a locally built
+# consensus-node image. alloy/uploaders disabled to avoid pulling remote images.
+# ${CN_REPO}, ${CN_NAME}, ${CN_TAG} are substituted by the Taskfile (envsubst).
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  name: node0
+  namespace: "solo-orbit"
+  labels:
+    app.kubernetes.io/component: consensus-node
+    app.kubernetes.io/managed-by: solo-operator
+spec:
+  orbit: solo-orbit
+  nodeId: 0
+  accountId: "0.0.3"
+  weight: 500
+  serviceType: ClusterIP
+  startPolicy: Auto
+  podProperties:
+    containers:
+      consensusNode:
+        name: "consensus-node"
+        softwareVersion:
+          repository: "${CN_REPO}"
+          imageName: "${CN_NAME}"
+          imageTag: "${CN_TAG}"
+          imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: "2"
+            memory: 5Gi
+          requests:
+            cpu: "250m"
+            memory: 1Gi
+        javaHeapMin: "1g"
+        javaHeapMax: "3g"
+        javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
+
+      uc:
+        enabled: true
+        pollInterval: "100ms"
+        freezePollInterval: "100ms"
+        platformPollInterval: "100ms"
+        softwareVersion:
+          repository: "ghcr.io/hashgraph/solo-operator"
+          imageName: "uc"
+          imageTag: "dev"
+          imagePullPolicy: IfNotPresent
+
+      alloy:
+        enabled: false
+
+  persistentVolumeClaims:
+    logs:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    stats:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    state:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+    saved:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+    upgrade:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+
+  secrets:
+    secretResources:
+      grpcTlsPrivateKey:
+        keyName: "hedera-node0.key"
+        secretName: "node0-grpc-tls-keys"
+      grpcTlsPublicCertificate:
+        keyName: "hedera-node0.crt"
+        secretName: "node0-grpc-tls-keys"
+      signingPrivateKey:
+        keyName: "private.pem"
+        secretName: "node0-gossip-keys"
+      signingPublicCertificate:
+        keyName: "public.pem"
+        secretName: "node0-gossip-keys"
+
+  log4j2ConfigRef: node0-log4j2
+  settingsConfigRef: node0-settings
+  applicationPropertiesRef: node0-application-properties
+  apiPermissionPropertiesRef: node0-api-permission-properties
+  nodePropertiesRef: node0-node-properties
+  throttlesConfigRef: node0-throttles
+  feeSchedulesRef: node0-fee-schedules
+  simpleFeesSchedulesRef: node0-simple-fee-schedules
+  applicationOverridePropertiesRef: node0-application-override-properties
+  bootstrapPropertiesRef: node0-bootstrap-properties
+  blockNodesConfigRef: node0-block-nodes

@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Uploads the upgrade zip from the beacon-artifacts PVC into special file 0.0.150.
+# ${ZIP_HASH} is the expected SHA-384 of the zip (envsubst).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: beacon-upload
+  namespace: solo-orbit
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: beacon
+          image: ghcr.io/hashgraph/solo-operator/beacon:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - "file"
+            - "upload"
+            - "-c"
+            - "/etc/beacon/config.yaml"
+            - "--zip"
+            - "/work/softwareUpgrade.zip"
+            - "--expect-hash"
+            - "${ZIP_HASH}"
+          volumeMounts:
+            - { name: config, mountPath: /etc/beacon/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: keys, mountPath: /etc/beacon/keys, readOnly: true }
+            - { name: work, mountPath: /work, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: beacon-config }
+        - name: keys
+          secret: { secretName: beacon-keys }
+        - name: work
+          persistentVolumeClaim:
+            claimName: beacon-artifacts

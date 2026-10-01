@@ -1,0 +1,174 @@
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3'
+
+# Builds a consensus-node image from a local hiero-consensus-node checkout, runs it via the operator in kind,
+# and drives a V1 -> V2 upgrade (same image, two tags) with beacon; invoke as `task -d test/consensus-custom <task>`.
+
+includes:
+  mock:
+    taskfile: ../consensus-mock/Taskfile.yml
+    dir: ../consensus-mock
+    internal: true
+  example:
+    taskfile: ../../docs/example/Taskfile.yml
+    dir: ../../docs/example
+    internal: true
+
+vars:
+  CN_DIR: '{{.CN_DIR | default (printf "%s/../../../../hiero-ledger/hiero-consensus-node" .TASKFILE_DIR)}}'
+  CN_REPO: '{{.CN_REPO | default "ghcr.io/hashgraph/solo-operator"}}'
+  CN_NAME: '{{.CN_NAME | default "consensus-node"}}'
+  CN_V1: "0.1.0"
+  CN_V2: "0.2.0"
+  CN_IMG_V1: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V1}}'
+  CN_IMG_V2: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V2}}'
+  CN_PLATFORM: '{{.CN_PLATFORM | default ""}}'
+  # Also picks the Debian apt snapshot date in the Dockerfile; must be after the base image date (2025-06-30).
+  CN_SOURCE_DATE_EPOCH: '{{.CN_SOURCE_DATE_EPOCH | default "1751328000"}}'
+  CN_CONTEXT: '{{.CN_DIR}}/hedera-node/infrastructure/docker/containers/production-next/consensus-node'
+  CLUSTER: '{{.CLUSTER | default "solo-operator"}}'
+  NS: solo-orbit
+  REGISTRY_HOST: "localhost:5001"
+  CN_REGISTRY_ADDR: "10.96.100.100:5000"
+  OVERLAY_DIR: ../dev/overlay
+  OUT_DIR: build
+  ZIP: '{{.OUT_DIR}}/softwareUpgrade.zip'
+  FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "30"}}'
+  STEP_TIMEOUT_SECS: '{{.STEP_TIMEOUT_SECS | default "300"}}'
+  UPLOAD_TIMEOUT_SECS: '{{.UPLOAD_TIMEOUT_SECS | default "1800"}}'
+  ACTIVE_TIMEOUT: '{{.ACTIVE_TIMEOUT | default "600s"}}'
+
+silent: true
+tasks:
+  build:
+    desc: Build the consensus-node image from CN_DIR, tagged {{.CN_V1}} and {{.CN_V2}} (CN_PLATFORM=linux/amd64 to cross-build)
+    preconditions:
+      - sh: test -f '{{.CN_DIR}}/gradlew'
+        msg: "CN_DIR={{.CN_DIR}} is not a hiero-consensus-node checkout; set CN_DIR=<path>"
+    cmds:
+      - cd '{{.CN_DIR}}' && bash gradlew :app:assemble
+      - defer: rm -rf '{{.CN_CONTEXT}}/sdk'
+      - rm -rf '{{.CN_CONTEXT}}/sdk' && mkdir -p '{{.CN_CONTEXT}}/sdk/data'
+      - cp -r '{{.CN_DIR}}/hedera-node/data/apps' '{{.CN_DIR}}/hedera-node/data/lib' '{{.CN_CONTEXT}}/sdk/data/'
+      - cp '{{.CN_DIR}}/version.txt' '{{.CN_CONTEXT}}/sdk/VERSION'
+      - >-
+        docker build
+        --build-arg SOURCE_DATE_EPOCH={{.CN_SOURCE_DATE_EPOCH}}
+        {{if .CN_PLATFORM}}--platform {{.CN_PLATFORM}}{{end}}
+        -t {{.CN_IMG_V1}} -t {{.CN_IMG_V2}}
+        '{{.CN_CONTEXT}}'
+
+  e2e:
+    desc: "Full pipeline: build, kind cluster, deploy node0 on {{.CN_V1}}, wait ACTIVE, then upload/prepare/freeze to {{.CN_V2}} with beacon"
+    cmds:
+      - task: build
+      - task: cluster
+      - task: images:load
+      - task: mock:operator:deploy
+      - task: deploy
+      - task: wait:active
+      - task: upgrade
+
+  upgrade:
+    desc: "Run the beacon upgrade ({{.CN_V1}} -> {{.CN_V2}}) against a running node0: package, upload, prepare, freeze, wait for Execute"
+    cmds:
+      - task: package
+      - task: mock:beacon:config
+      - task: upload
+      - task: prepare
+      - task: freeze
+      - task: mock:wait:execute
+        vars:
+          FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS}}'
+          EXECUTE_EXTRA_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
+      - task: wait:active
+
+  cn:logs:
+    desc: Tail the consensus-node container log on node0
+    cmds:
+      - kubectl -n {{.NS}} logs -f node0-0 -c consensus-node
+
+  uc:logs:
+    desc: Tail the UC sidecar log on node0
+    cmds:
+      - kubectl -n {{.NS}} logs -f node0-0 -c uc
+
+  clean:
+    desc: Remove the generated upgrade package
+    cmds:
+      - rm -rf '{{.OUT_DIR}}'
+
+  cluster:
+    internal: true
+    cmds:
+      - task: mock:cluster
+
+  images:load:
+    internal: true
+    preconditions:
+      - sh: docker image inspect {{.CN_IMG_V1}} >/dev/null 2>&1
+        msg: "image {{.CN_IMG_V1}} not found locally; run `task build` first"
+    cmds:
+      - kind load docker-image {{.CN_IMG_V1}} --name {{.CLUSTER}}
+      - task: mock:kind:load:uc
+      - task: mock:kind:load:beacon
+      - task: mock:kind:load:genesis-init
+      # V2 goes through the in-cluster registry so the operator verifies its layer hashes for real
+      - docker tag {{.CN_IMG_V1}} {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
+      - docker push {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
+
+  deploy:
+    internal: true
+    cmds:
+      # apply the mock orbit last so it wins over example:deploy:common's own orbit.yaml
+      - task: example:deploy:common
+      - kubectl apply -f ../consensus-mock/kind/orbit.yaml
+      - >-
+        CN_REPO={{.CN_REPO}} CN_NAME={{.CN_NAME}} CN_TAG={{.CN_V1}}
+        envsubst '${CN_REPO} ${CN_NAME} ${CN_TAG}' < kind/consensus-capsule.yaml | kubectl apply -f -
+      - kubectl apply -f ../../docs/example/node0/secrets.yaml
+      - kubectl apply -f ../../docs/example/network-genesis/network-genesis.yaml
+      - echo ">> Waiting for genesis to complete..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n {{.NS}} --timeout=300s
+      - echo ">> Waiting for node0 pod to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n {{.NS}} --timeout=600s
+      - echo ">> node0 ready on {{.CN_IMG_V1}}"
+
+  wait:active:
+    internal: true
+    cmds:
+      - kubectl wait --for=jsonpath='{.status.platformStatus}'=ACTIVE consensuscapsule/node0 -n {{.NS}} --timeout={{.ACTIVE_TIMEOUT}}
+
+  package:
+    internal: true
+    cmds:
+      - >-
+        CN_DIR='{{.CN_DIR}}' CN_IMG={{.CN_IMG_V1}} CN_NAME={{.CN_NAME}} CN_V2={{.CN_V2}}
+        REGISTRY_CLUSTER_ADDR={{.CN_REGISTRY_ADDR}} OVERLAY_DIR='{{.OVERLAY_DIR}}' OUT_DIR='{{.OUT_DIR}}'
+        bash scripts/package.sh
+
+  upload:
+    internal: true
+    cmds:
+      - kubectl delete pod beacon-zip-loader -n {{.NS}} --ignore-not-found
+      - kubectl apply -f kind/beacon-artifacts.yaml
+      - kubectl wait --for=condition=Ready pod/beacon-zip-loader -n {{.NS}} --timeout=120s
+      - kubectl cp '{{.ZIP}}' {{.NS}}/beacon-zip-loader:/data/softwareUpgrade.zip
+      - kubectl delete pod beacon-zip-loader -n {{.NS}}
+      - ZIP_HASH=$(cat '{{.ZIP}}.sha384') bash scripts/beacon-step.sh beacon-upload kind/job-upload.yaml {{.UPLOAD_TIMEOUT_SECS}}
+
+  prepare:
+    internal: true
+    cmds:
+      - ZIP_HASH=$(cat '{{.ZIP}}.sha384') bash scripts/beacon-step.sh beacon-freeze-prepare kind/job-freeze-prepare.yaml {{.STEP_TIMEOUT_SECS}} networkupgradeprepares
+
+  freeze:
+    internal: true
+    cmds:
+      - bash scripts/capture-logs.sh
+      - |
+        START_TIME=$(date -u -v+{{.FREEZE_DELAY_SECS}}S "+%Y-%m-%d.%H:%M:%S" 2>/dev/null || date -u -d "+{{.FREEZE_DELAY_SECS}} sec" "+%Y-%m-%d.%H:%M:%S")
+        echo ">> freeze start-time (UTC): $START_TIME"
+        export START_TIME ZIP_HASH="$(cat '{{.ZIP}}.sha384')" LOG_COPY=/tmp/consensus-mock-freeze-window-beacon.log
+        bash scripts/beacon-step.sh beacon-freeze-upgrade kind/job-freeze-upgrade.yaml {{.STEP_TIMEOUT_SECS}} networkupgradefreezes
