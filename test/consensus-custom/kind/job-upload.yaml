@@ -1,7 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# Uploads the upgrade zip from the beacon-artifacts PVC into special file 0.0.150.
-# ${ZIP_HASH} is the expected SHA-384 of the zip (envsubst).
 apiVersion: batch/v1
 kind: Job
 metadata:

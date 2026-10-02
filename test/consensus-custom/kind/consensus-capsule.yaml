@@ -1,7 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# Single-node ConsensusCapsule for local kind testing with a locally built
-# consensus-node image. alloy/uploaders disabled to avoid pulling remote images.
 # ${CN_REPO}, ${CN_NAME}, ${CN_TAG} are substituted by the Taskfile (envsubst).
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: ConsensusCapsule

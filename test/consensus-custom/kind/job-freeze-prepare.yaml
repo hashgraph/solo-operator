@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# Submits PREPARE_UPGRADE as a Kubernetes Job. ${ZIP_HASH} is the SHA-384 of the uploaded package (envsubst).
 apiVersion: batch/v1
 kind: Job
 metadata:

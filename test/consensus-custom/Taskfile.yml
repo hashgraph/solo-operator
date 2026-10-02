@@ -2,9 +2,6 @@
 
 version: '3'
 
-# Builds a consensus-node image from a local hiero-consensus-node checkout, runs it via the operator in kind,
-# and drives a V1 -> V2 upgrade (same image, two tags) with beacon; invoke as `task -d test/consensus-custom <task>`.
-
 includes:
   mock:
     taskfile: ../consensus-mock/Taskfile.yml
@@ -16,6 +13,7 @@ includes:
     internal: true
 
 vars:
+  CN_IMAGE: '{{.CN_IMAGE | default ""}}'
   CN_DIR: '{{.CN_DIR | default (printf "%s/../../../../hiero-ledger/hiero-consensus-node" .TASKFILE_DIR)}}'
   CN_REPO: '{{.CN_REPO | default "ghcr.io/hashgraph/solo-operator"}}'
   CN_NAME: '{{.CN_NAME | default "consensus-node"}}'
@@ -24,7 +22,7 @@ vars:
   CN_IMG_V1: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V1}}'
   CN_IMG_V2: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V2}}'
   CN_PLATFORM: '{{.CN_PLATFORM | default ""}}'
-  # Also picks the Debian apt snapshot date in the Dockerfile; must be after the base image date (2025-06-30).
+  # Also selects the Debian apt snapshot date; must be after 2025-06-30.
   CN_SOURCE_DATE_EPOCH: '{{.CN_SOURCE_DATE_EPOCH | default "1751328000"}}'
   CN_CONTEXT: '{{.CN_DIR}}/hedera-node/infrastructure/docker/containers/production-next/consensus-node'
   CLUSTER: '{{.CLUSTER | default "solo-operator"}}'
@@ -42,10 +40,18 @@ vars:
 silent: true
 tasks:
   build:
-    desc: Build the consensus-node image from CN_DIR, tagged {{.CN_V1}} and {{.CN_V2}} (CN_PLATFORM=linux/amd64 to cross-build)
+    desc: "Build the consensus-node image from CN_DIR, or reuse an already-built one (CN_IMAGE=repo/name:tag); tags {{.CN_V1}} and {{.CN_V2}}"
     preconditions:
-      - sh: test -f '{{.CN_DIR}}/gradlew'
-        msg: "CN_DIR={{.CN_DIR}} is not a hiero-consensus-node checkout; set CN_DIR=<path>"
+      - sh: test -n '{{.CN_IMAGE}}' || test -f '{{.CN_DIR}}/gradlew'
+        msg: "CN_DIR={{.CN_DIR}} is not a hiero-consensus-node checkout; set CN_DIR=<path> or CN_IMAGE=<built image>"
+    cmds:
+      - task: build:source
+        if: 'test -z "{{.CN_IMAGE}}"'
+      - task: build:retag
+        if: 'test -n "{{.CN_IMAGE}}"'
+
+  build:source:
+    internal: true
     cmds:
       - cd '{{.CN_DIR}}' && bash gradlew :app:assemble
       - defer: rm -rf '{{.CN_CONTEXT}}/sdk'
@@ -58,6 +64,13 @@ tasks:
         {{if .CN_PLATFORM}}--platform {{.CN_PLATFORM}}{{end}}
         -t {{.CN_IMG_V1}} -t {{.CN_IMG_V2}}
         '{{.CN_CONTEXT}}'
+
+  build:retag:
+    internal: true
+    cmds:
+      - docker image inspect {{.CN_IMAGE}} >/dev/null 2>&1 || docker pull {{.CN_IMAGE}}
+      - docker tag {{.CN_IMAGE}} {{.CN_IMG_V1}}
+      - docker tag {{.CN_IMAGE}} {{.CN_IMG_V2}}
 
   e2e:
     desc: "Full pipeline: build, kind cluster, deploy node0 on {{.CN_V1}}, wait ACTIVE, then upload/prepare/freeze to {{.CN_V2}} with beacon"
@@ -104,14 +117,14 @@ tasks:
       - task: mock:kind:load:uc
       - task: mock:kind:load:beacon
       - task: mock:kind:load:genesis-init
-      # V2 goes through the in-cluster registry so the operator verifies its layer hashes for real
+      # V2 goes via the in-cluster registry so the operator verifies its layer hashes
       - docker tag {{.CN_IMG_V1}} {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
       - docker push {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
 
   deploy:
     internal: true
     cmds:
-      # apply the mock orbit last so it wins over example:deploy:common's own orbit.yaml
+      # mock orbit last so it wins over the example orbit
       - task: example:deploy:common
       - kubectl apply -f ../consensus-mock/kind/orbit.yaml
       - >-
@@ -134,7 +147,7 @@ tasks:
     internal: true
     cmds:
       - >-
-        CN_DIR='{{.CN_DIR}}' CN_IMG={{.CN_IMG_V1}} CN_NAME={{.CN_NAME}} CN_V2={{.CN_V2}}
+        CN_IMG={{.CN_IMG_V1}} CN_NAME={{.CN_NAME}} CN_V2={{.CN_V2}}
         REGISTRY_CLUSTER_ADDR={{.CN_REGISTRY_ADDR}} OVERLAY_DIR='{{.OVERLAY_DIR}}' OUT_DIR='{{.OUT_DIR}}'
         bash scripts/package.sh
 

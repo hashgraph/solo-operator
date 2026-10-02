@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-#
-# Builds the upgrade package (zip + SHA-384) from a local consensus-node build, with a
-# consensus-node-components.yaml manifest whose layer hashes come from the local docker image.
-# Required env: CN_DIR CN_IMG CN_NAME CN_V2 REGISTRY_CLUSTER_ADDR OVERLAY_DIR OUT_DIR
 set -euo pipefail
 
-: "${CN_DIR:?}" "${CN_IMG:?}" "${CN_NAME:?}" "${CN_V2:?}" "${REGISTRY_CLUSTER_ADDR:?}" "${OVERLAY_DIR:?}" "${OUT_DIR:?}"
+: "${CN_IMG:?}" "${CN_NAME:?}" "${CN_V2:?}" "${REGISTRY_CLUSTER_ADDR:?}" "${OVERLAY_DIR:?}" "${OUT_DIR:?}"
 
 err() { echo "ERROR: $*" >&2; exit 1; }
 
-[ -d "$CN_DIR/hedera-node/data/apps" ] && [ -d "$CN_DIR/hedera-node/data/lib" ] ||
-  err "no consensus-node build output under $CN_DIR/hedera-node/data; run 'task build' first"
 [ -d "$OVERLAY_DIR/data/config" ] || err "overlay $OVERLAY_DIR not found"
 command -v zip >/dev/null || err "zip not found"
 
@@ -25,8 +19,13 @@ ZIP="$OUT_DIR/softwareUpgrade.zip"
 rm -rf "$PKG" "$ZIP"
 mkdir -p "$PKG/data/config" "$PKG/manifests" "$PKG/block-nodes/config"
 
-cp -R "$CN_DIR/hedera-node/data/apps" "$CN_DIR/hedera-node/data/lib" "$PKG/data/"
-cp "$CN_DIR/version.txt" "$PKG/VERSION"
+APP_HOME=/opt/hgcapp/services-hedera/HapiApp2.0
+cid="$(docker create "$CN_IMG")"
+trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+for f in data/apps data/lib VERSION; do
+  mkdir -p "$(dirname "$PKG/$f")"
+  docker cp "$cid:$APP_HOME/$f" "$PKG/$f" || err "$APP_HOME/$f not found in image $CN_IMG"
+done
 
 # Only the HIP-1494 config set; other files make the UC abort at execute time.
 for f in application.properties application-override.properties api-permission.properties bootstrap.properties \

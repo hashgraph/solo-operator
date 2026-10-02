@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-#
-# Starts background log captures for the freeze window (node0 pod and operator logs get replaced/rotated).
-# Output paths are the ones consensus-mock's wait:execute reads.
+# Output paths match what consensus-mock's wait:execute reads.
 set -euo pipefail
 
 NS="${NS:-solo-orbit}"

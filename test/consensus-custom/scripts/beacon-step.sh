@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-#
-# Applies a beacon Job manifest (envsubst of ZIP_HASH/START_TIME), waits for it, then optionally
-# waits for the new NetworkUpgrade* CR it triggers to reach Succeeded.
-# Usage: beacon-step.sh <job> <manifest> <timeout-secs> [cr-resource]
-# Env: NS (default solo-orbit), ZIP_HASH, START_TIME, LOG_COPY (file to tee the job log into)
 set -euo pipefail
 
 JOB="${1:?job}"

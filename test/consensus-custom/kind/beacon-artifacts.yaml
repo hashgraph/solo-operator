@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# PVC + throwaway loader pod used to `kubectl cp` the upgrade zip into the cluster for the upload Job.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
