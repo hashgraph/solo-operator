@@ -386,6 +386,7 @@ tasks:
     desc: "Wait for the UC-created NetworkUpgradeExecute CR to succeed, then print the freeze-window marker/detection logs and pod-restart timing"
     vars:
       FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "10"}}'
+      ACTIVE_TIMEOUT_SECS: '{{.ACTIVE_TIMEOUT_SECS | default "0"}}'
       WAIT_SECS:
         sh: echo "$(( {{.FREEZE_DELAY_SECS}} + {{.EXECUTE_EXTRA_SECS | default "90"}} ))"
     cmds:
@@ -393,6 +394,7 @@ tasks:
         bash -lc '
         set -euo pipefail
         BASELINE="$(kubectl get networkupgradeexecutes -n {{.NS}} -o jsonpath="{.items[*].metadata.name}" 2>/dev/null)"
+        OLD_UID="$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.metadata.uid}" 2>/dev/null || true)"
 
         echo ">> waiting for a new NetworkUpgradeExecute CR (scheduled freeze is up to {{.FREEZE_DELAY_SECS}}s out)..."
         NAME=""
@@ -407,6 +409,18 @@ tasks:
 
         echo ">>   NetworkUpgradeExecute/$NAME — waiting for Succeeded..."
         kubectl wait --for=jsonpath="{.status.phase}"=Succeeded networkupgradeexecutes/"$NAME" -n {{.NS}} --timeout={{.WAIT_SECS}}s
+
+        if [ "{{.ACTIVE_TIMEOUT_SECS}}" -gt 0 ]; then
+          echo ">> waiting for a new node0-0 pod to report platform status ACTIVE (up to {{.ACTIVE_TIMEOUT_SECS}}s)..."
+          PS=""
+          for i in $(seq 1 {{.ACTIVE_TIMEOUT_SECS}}); do
+            UID_NOW="$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.metadata.uid}" 2>/dev/null || true)"
+            PS="$(kubectl get consensuscapsule node0 -n {{.NS}} -o jsonpath="{.status.platformStatus}" 2>/dev/null || true)"
+            [ -n "$UID_NOW" ] && [ "$UID_NOW" != "$OLD_UID" ] && [ "$PS" = "ACTIVE" ] && break
+            sleep 1
+          done
+          [ "$PS" = "ACTIVE" ] && [ "$UID_NOW" != "$OLD_UID" ] || { echo "!! node0-0 did not report ACTIVE on a new pod within {{.ACTIVE_TIMEOUT_SECS}}s (platformStatus=${PS:-unset})" >&2; exit 1; }
+        fi
 
         echo
         echo "── beacon: freeze upgrade tx ──"

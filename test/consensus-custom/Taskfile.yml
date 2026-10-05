@@ -95,7 +95,7 @@ tasks:
         vars:
           FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS}}'
           EXECUTE_EXTRA_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
-      - task: wait:active
+          ACTIVE_TIMEOUT_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
 
   clean:
     desc: Remove the generated upgrade package
