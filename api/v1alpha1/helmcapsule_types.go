@@ -42,10 +42,11 @@ import (
 //     Injected only when OrbitRef is set; otherwise the user must supply config via Values.
 //
 // block-node (chart: block-node-server):
-//   - blockNode.config.BLOCK_NODE_ENDPOINTS  comma-separated "host:port" list derived
-//     from ConsensusCapsule status.addressBookEntry entries
-//   - blockNode.config.CONSENSUS_NODE_COUNT  number of ConsensusCapsules found in the
-//     namespace that belong to the referenced Orbit
+//   - nothing; topology comes from Values.
+//
+// # Published outputs (status.outputs)
+//
+// block-node: address, streamingPort, servicePort.
 //
 // +kubebuilder:validation:Enum=mirror;explorer;relay;relay-websocket;block-node
 type HelmComponent string
@@ -219,6 +220,10 @@ type HelmCapsuleStatus struct {
 	// auto-injected topology values).
 	// +optional
 	ValuesHash string `json:"valuesHash,omitempty"`
+
+	// Outputs are component-specific key-values for consumers (see HelmComponent).
+	// +optional
+	Outputs map[string]string `json:"outputs,omitempty"`
 
 	// Conditions holds the latest observations of the HelmCapsule state.
 	// Ready=True means the release is deployed and up-to-date.

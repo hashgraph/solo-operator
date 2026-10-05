@@ -207,6 +207,7 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	upgrade.MaxHistory = opts.MaxHistory
 	upgrade.DisableHooks = opts.DisableHooks
 	upgrade.ReuseValues = false
+	// TODO: volumeClaimTemplates are immutable; size/storageClass changes need a StatefulSet orphan-delete first.
 	upgrade.Version = chart.Version
 	if err := applyCredentials(cfg.RegistryClient, &upgrade.ChartPathOptions, chart, opts.Credentials); err != nil {
 		return nil, errx.WithHints(

@@ -5,6 +5,7 @@ package helm
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -70,6 +71,9 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 			return ctrl.Result{}, fmt.Errorf("checking existing release: %w", err)
 		}
 		if existing != nil && existing.Status == "deployed" {
+			if err := r.syncOutputs(ctx, hc, componentOutputs(hc, releaseName, values)); err != nil {
+				return ctrl.Result{}, err
+			}
 			common.DebugL(&rl, ReasonReleaseUpToDate).Msg("Release up-to-date, skipping upgrade")
 			return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 		}
@@ -131,6 +135,7 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		hc.Status.ReleaseVersion = info.Version
 		hc.Status.InstalledChart = info.ChartString
 		hc.Status.ReleaseStatus = info.Status
+		hc.Status.Outputs = componentOutputs(hc, releaseName, values)
 		if info.Status == "deployed" {
 			hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
 		}
@@ -143,6 +148,20 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		common.InfoL(&rl, ReasonReleasePending).Str("helmStatus", info.Status).Msg("Helm release not yet deployed, requeueing")
 	}
 	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
+}
+
+// syncOutputs backfills releases deployed before outputs existed.
+func (r *ReleaseSubReconciler) syncOutputs(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, outputs map[string]string) error {
+	if maps.Equal(hc.Status.Outputs, outputs) {
+		return nil
+	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+			return err
+		}
+		hc.Status.Outputs = outputs
+		return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
+	})
 }
 
 // checkReleaseNameConflict returns an error if another HelmCapsule in the namespace owns this release name.
