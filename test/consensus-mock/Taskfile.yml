@@ -241,6 +241,12 @@ tasks:
     cmds:
       - task: root:kind:reset
         vars: { KIND_CONFIG: '{{.TASKFILE_DIR}}/kind/kind-config.yaml' }
+      - |
+        for n in $(kind get nodes --name {{.CLUSTER}}); do
+          docker exec "$n" mkdir -p /etc/containerd/certs.d/{{.REGISTRY_CLUSTER_ADDR}}
+          printf 'server = "http://{{.REGISTRY_CLUSTER_ADDR}}"\n\n[host."http://{{.REGISTRY_CLUSTER_ADDR}}"]\n  capabilities = ["pull", "resolve"]\n' |
+            docker exec -i "$n" tee /etc/containerd/certs.d/{{.REGISTRY_CLUSTER_ADDR}}/hosts.toml >/dev/null
+        done
       - task: registry:up
 
   operator:deploy:
@@ -417,23 +423,23 @@ tasks:
         echo
         echo "── containerd: new pod sandbox / container timing (ns precision, from the runtime itself) ──"
         NODE={{.CLUSTER}}-control-plane
-        for i in $(seq 1 20); do
-          UC_CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.containerStatuses[?(@.name==\"uc\")].containerID}" 2>/dev/null)
+        for i in $(seq 1 60); do
+          UC_CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.containerStatuses[?(@.name==\"uc\")].containerID}" 2>/dev/null || true)
           [ -n "$UC_CID" ] && break
           sleep 0.5
         done
         SANDBOX_PRINTED=0
         for cname in genesis-init consensus-node uc; do
-          CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.initContainerStatuses[?(@.name==\"$cname\")].containerID}{.status.containerStatuses[?(@.name==\"$cname\")].containerID}" 2>/dev/null | sed "s#containerd://##")
+          CID=$(kubectl get pod node0-0 -n {{.NS}} -o jsonpath="{.status.initContainerStatuses[?(@.name==\"$cname\")].containerID}{.status.containerStatuses[?(@.name==\"$cname\")].containerID}" 2>/dev/null | sed "s#containerd://##" || true)
           [ -n "$CID" ] || continue
-          INSPECT=$(docker exec "$NODE" crictl inspect "$CID" 2>/dev/null)
+          INSPECT=$(docker exec "$NODE" crictl inspect "$CID" 2>/dev/null || true)
           if [ "$SANDBOX_PRINTED" = 0 ]; then
-            SANDBOX=$(echo "$INSPECT" | grep -o "\"sandboxID\": *\"[^\"]*\"" | head -1 | sed "s/.*\"\(.*\)\"/\1/")
-            [ -n "$SANDBOX" ] && docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep "\"createdAt\"" | sed "s/^/  sandbox created: /"
+            SANDBOX=$(echo "$INSPECT" | grep -o "\"sandboxID\": *\"[^\"]*\"" | head -1 | sed "s/.*\"\(.*\)\"/\1/" || true)
+            [ -n "$SANDBOX" ] && docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep "\"createdAt\"" | sed "s/^/  sandbox created: /" || true
             SANDBOX_PRINTED=1
           fi
           echo "  $cname:"
-          echo "$INSPECT" | grep -E "\"createdAt\"|\"startedAt\"|\"finishedAt\"" | sed "s/^/    /"
+          echo "$INSPECT" | grep -E "\"createdAt\"|\"startedAt\"|\"finishedAt\"" | sed "s/^/    /" || true
         done
 
         echo
