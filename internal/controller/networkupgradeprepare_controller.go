@@ -93,7 +93,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
-		return r.reconcilePrefetch(ctx, &prepare)
+		return ctrl.Result{}, nil
 	}
 
 	if ok, msg := validateOperationIDLabel(prepare.Labels, prepare.Spec.OperationID); !ok {
@@ -118,6 +118,10 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, wrapStatusInit(err)
 		}
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if prepare.Status.Phase == operatorv1alpha1.PhaseRunning && prepareReadyForPrefetch(&prepare) {
+		return r.reconcilePrefetch(ctx, &prepare)
 	}
 
 	sibling, err := prepareSiblingExists(ctx, r.Client, prepare.Namespace, string(prepare.UID), prepare.Spec.OperationID)
@@ -160,7 +164,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		comp, present := prepare.Spec.Images.Component(name)
 		if !present {
 			r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-				"%s: omitted from manifest; current image left unchanged", name)
+				"%s: not specified in upgrade images; keeping current image", name)
 			continue
 		}
 		if comp.Enabled != nil && !*comp.Enabled {
@@ -222,9 +226,9 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	prepare.Status.ObservedGeneration = prepare.Generation
 
 	if succeeded {
-		now := metav1.Now()
-		prepare.Status.CompletionTime = &now
-		prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		// Keep Prepare in Running while prefetch work is pending. We only mark
+		// Succeeded once prefetch reaches a terminal condition.
+		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 		prepare.Status.SelectedSources = selected
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
@@ -281,15 +285,51 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 func (r *NetworkUpgradePrepareReconciler) reconcilePrefetch(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
 	completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
 	if completed != nil {
-		return ctrl.Result{}, nil
+		return r.markPrepareSucceeded(ctx, prepare)
 	}
 
 	created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
 	if created == nil {
-		return r.createPrefetchJobs(ctx, prepare)
+		res, err := r.createPrefetchJobs(ctx, prepare)
+		if err != nil || res.Requeue || res.RequeueAfter > 0 {
+			return res, err
+		}
+		if findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted) != nil {
+			return r.markPrepareSucceeded(ctx, prepare)
+		}
+		return res, nil
 	}
 
-	return r.checkPrefetchJobs(ctx, prepare)
+	res, err := r.checkPrefetchJobs(ctx, prepare)
+	if err != nil || res.Requeue || res.RequeueAfter > 0 {
+		return res, err
+	}
+	if findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted) != nil {
+		return r.markPrepareSucceeded(ctx, prepare)
+	}
+	return res, nil
+}
+
+func prepareReadyForPrefetch(prepare *operatorv1alpha1.NetworkUpgradePrepare) bool {
+	if prepare.Status.SelectedSources == nil {
+		return false
+	}
+	cond := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
+	return cond != nil && cond.Status == metav1.ConditionTrue
+}
+
+func (r *NetworkUpgradePrepareReconciler) markPrepareSucceeded(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+		return ctrl.Result{}, nil
+	}
+	now := metav1.Now()
+	prepare.Status.CompletionTime = &now
+	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.ObservedGeneration = prepare.Generation
+	if err := r.Status().Update(ctx, prepare); err != nil {
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating final prepare status")
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
