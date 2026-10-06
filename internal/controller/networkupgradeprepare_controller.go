@@ -78,21 +78,13 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradeprepare", "NetworkUpgradePrepare", &prepare)
-	common.Info(ctx, ReasonReconcileStart).
-		Str("phase", string(prepare.Status.Phase)).
-		Int64("generation", prepare.Generation).
-		Int64("observedGeneration", prepare.Status.ObservedGeneration).
-		Msg("Reconciling NetworkUpgradePrepare")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &prepare, FinalizerNetworkUpgradePrepare); res != nil {
 		return *res, err
 	}
 
-	if prepare.Status.Phase == operatorv1alpha1.PhaseFailed {
-		return ctrl.Result{}, nil
-	}
-
-	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseFailed ||
+		prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
 		return ctrl.Result{}, nil
 	}
 
@@ -111,6 +103,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if prepare.Status.Phase == "" || prepare.Status.Phase == operatorv1alpha1.PhasePending {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: starting prepare")
 		now := metav1.Now()
 		prepare.Status.StartTime = &now
 		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
@@ -123,6 +116,8 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	if prepare.Status.Phase == operatorv1alpha1.PhaseRunning && prepareReadyForPrefetch(&prepare) {
 		return r.reconcilePrefetch(ctx, &prepare)
 	}
+
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: selecting registries for upgrade components")
 
 	sibling, err := prepareSiblingExists(ctx, r.Client, prepare.Namespace, string(prepare.UID), prepare.Spec.OperationID)
 	if err != nil {
@@ -285,11 +280,13 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 func (r *NetworkUpgradePrepareReconciler) reconcilePrefetch(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
 	completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
 	if completed != nil {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: prefetch complete, marking succeeded")
 		return r.markPrepareSucceeded(ctx, prepare)
 	}
 
 	created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
 	if created == nil {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: creating prefetch jobs for selected images")
 		res, err := r.createPrefetchJobs(ctx, prepare)
 		if err != nil || res.Requeue || res.RequeueAfter > 0 {
 			return res, err
@@ -300,6 +297,7 @@ func (r *NetworkUpgradePrepareReconciler) reconcilePrefetch(ctx context.Context,
 		return res, nil
 	}
 
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: waiting for prefetch jobs to complete")
 	res, err := r.checkPrefetchJobs(ctx, prepare)
 	if err != nil || res.Requeue || res.RequeueAfter > 0 {
 		return res, err
