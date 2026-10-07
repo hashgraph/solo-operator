@@ -661,7 +661,7 @@ func (m *UpgradeOutcomeMonitor) observePhase(cr *unstructured.Unstructured) {
 	kind := cr.GetKind()
 	logx.As().Info().Str("reason", ReasonPhaseChanged.String()).Str("operation_id", operationID).
 		Str("cr_kind", kind).Str("step", step).Str("phase", phase).Str("previous_phase", from).
-		Msgf("Changed %s phase: %s → %s", kind, from, phase)
+		Msgf("Detected %s phase change: %s → %s", kind, from, phase)
 	m.events.info(operationID, ReasonPhaseChanged.String(),
 		fmt.Sprintf("%s phase %s -> %s", step, from, phase))
 
