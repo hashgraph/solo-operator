@@ -395,6 +395,21 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 
 	images := collectUniqueImages(prepare.Status.SelectedSources)
 	if len(images) == 0 {
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCreated,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no images to prefetch; all components skipped or disabled",
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no images to prefetch; prefetch skipped",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch status")
+		}
 		return ctrl.Result{}, nil
 	}
 
