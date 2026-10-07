@@ -407,6 +407,34 @@ func TestPrepareReconcile_EmitsSidecarDisabled(t *testing.T) {
 	}
 }
 
+func TestPrepareReconcile_NoEnabledComponents_Fails(t *testing.T) {
+	prepare := newPrepareForTest()
+	prepare.Spec.Images.ConsensusNode = operatorv1alpha1.ImageComponentSpec{
+		Version:    "0.62.0",
+		Enabled:    boolPtr(false),
+		Registries: registriesFor("gcr.io/a/cn:0.62.0"),
+	}
+
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed when no components enabled, got %s", res.prepare.Status.Phase)
+	}
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonSchemaInvalid.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonSchemaInvalid.String(), cond.Reason)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventManifestInvalid.String()); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, res.events)
+	}
+}
+
 func TestPrepareReconcile_OperationIDLabelMissing(t *testing.T) {
 	prepare := newPrepareForTest()
 	prepare.Labels = nil

@@ -154,6 +154,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
 	allHashesValid := true
+	enabledCount := 0
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
@@ -167,6 +168,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				"%s: enabled=false; sidecar will be removed on execute", name)
 			continue
 		}
+		enabledCount++
 
 		results, winner, ok := registry.SelectComponent(ctx, checker, comp, checkTimeout, rng, r.StrategyName)
 
@@ -216,6 +218,24 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		selected.Set(name, &src)
 		r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventRegistrySelected,
 			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)
+	}
+
+	if enabledCount == 0 {
+		msg := "No upgrade components selected; every component is either omitted or disabled"
+		r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
+		prepare.Status.ObservedGeneration = prepare.Generation
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonSchemaInvalid.String(),
+			Message:            msg,
+			ObservedGeneration: prepare.Generation,
+		})
+		if err := r.Status().Update(ctx, &prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
+		}
+		return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
 	}
 
 	prepare.Status.ObservedGeneration = prepare.Generation
