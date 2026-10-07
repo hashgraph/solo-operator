@@ -12,6 +12,8 @@ import (
 
 	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -128,13 +130,14 @@ func TestS6Controller_TransportError_Retryable(t *testing.T) {
 }
 
 func TestS6Controller_PodNotReady_DistinctType(t *testing.T) {
-	cases := map[string]string{
-		"container_not_created": `Internal error occurred: error executing command in container: container is not created or running`,
-		"container_not_found":   `unable to upgrade connection: container not found ("consensus-node")`,
+	cases := map[string]error{
+		"container_not_created": errors.New(`Internal error occurred: error executing command in container: container is not created or running`),
+		"container_not_found":   errors.New(`unable to upgrade connection: container not found ("consensus-node")`),
+		"pod_not_found":         apierrors.NewNotFound(corev1.Resource("pods"), "node0-0"),
 	}
-	for name, msg := range cases {
+	for name, streamErr := range cases {
 		t.Run(name, func(t *testing.T) {
-			c := newTestController(t, &fakeExecutor{streamErr: errors.New(msg)})
+			c := newTestController(t, &fakeExecutor{streamErr: streamErr})
 			_, err := c.exec(context.Background(), testCapsule(), s6QueryCmd)
 			if err == nil {
 				t.Fatal("expected error")
@@ -281,9 +284,6 @@ func TestActuationSubReconciler_SetsStatusRunState(t *testing.T) {
 		}
 		if result.RequeueAfter != 2*time.Second {
 			t.Errorf("expected RequeueAfter=2s, got %v", result.RequeueAfter)
-		}
-		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
-			t.Errorf("expected RunStateStopped during pod-not-ready, got %v", capsule.Status.RunState)
 		}
 	})
 }

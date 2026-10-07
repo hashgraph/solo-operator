@@ -154,9 +154,9 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 				"If installed via Helm, upgrade to a solo-operator chart whose RBAC includes the pods/exec get+create rule",
 			)
 		}
-		// During a StatefulSet rollout the container may not exist yet. Classify
-		// this distinctly so callers can requeue quietly instead of logging ERR.
-		if isPodNotReady(streamErr) {
+		// During a StatefulSet rollout the pod or container may not exist yet.
+		// Classify distinctly so callers can requeue quietly instead of logging ERR.
+		if apierrors.IsNotFound(streamErr) || isPodNotReady(streamErr) {
 			return res, errx.WithReason(
 				errExecPodNotReady.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName),
 				ReasonExecPodNotReady,
@@ -251,7 +251,6 @@ func (r *ActuationSubReconciler) Reconcile(ctx context.Context, capsule *operato
 			common.Debug(ctx, ReasonExecPodNotReady).
 				Str("pod", PodName(capsule)).
 				Msg("Pod/container not ready; will retry")
-			capsule.Status.RunState = operatorv1alpha1.RunStateStopped
 			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{}, err
