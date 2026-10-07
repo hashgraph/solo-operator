@@ -51,6 +51,19 @@ task deploy:node2
 task deploy:node3
 ```
 
+## Block Node (optional)
+
+```shell
+# Deploy a block node HelmCapsule and wait for Ready (prints status.outputs)
+task deploy:blocknode
+
+# Point node0 at it (needs blockStream properties, see helmcapsule/block-nodes-config.yaml)
+task deploy:blocknode:config
+
+# Remove the block node, its PVCs, and reset node0 block-nodes config
+task destroy:blocknode
+```
+
 ## Proxy Sidecars (optional)
 
 Each node has its own `HAProxyCapsule` and `EnvoyProxy` deployed alongside its `ConsensusCapsule` via `task deploy:nodeX`. To deploy proxies manually:

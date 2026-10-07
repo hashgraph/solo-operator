@@ -132,6 +132,19 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
       - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/haproxy-node0 50211 50211"
 
+  deploy:blocknode:
+    desc: Deploy the block node HelmCapsule and wait until Ready
+    deps: [deploy:orbit]
+    cmds:
+      - kubectl apply -f helmcapsule/block-node.yaml
+      - kubectl wait --for=condition=Ready helmcapsule/block-node -n solo-orbit --timeout=15m
+      - kubectl get helmcapsule block-node -n solo-orbit -o jsonpath='{.status.outputs}{"\n"}'
+
+  deploy:blocknode:config:
+    desc: Point node0 at the block node (overwrites node0-block-nodes; deploy:common resets it)
+    cmds:
+      - kubectl apply -f helmcapsule/block-nodes-config.yaml
+
   status:
     desc: Show status of all consensus capsules, pods, and services
     cmds:
@@ -248,6 +261,13 @@ tasks:
       - kubectl delete -f common/blocknodesconfig.yaml || true
       - kubectl delete -f common/configs.yaml || true
       - kubectl delete -f common/secrets.yaml || true
+
+  destroy:blocknode:
+    desc: Destroy the block node HelmCapsule and its PVCs, and reset node0 block-nodes config
+    cmds:
+      - kubectl delete -f helmcapsule/block-node.yaml || true
+      - kubectl delete pvc -n solo-orbit -l app.kubernetes.io/instance=block-node --ignore-not-found
+      - kubectl apply -f common/blocknodesconfig.yaml
 
   destroy:orbit:
     desc: Destroy Orbit and namespace
