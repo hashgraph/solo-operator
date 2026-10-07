@@ -13,7 +13,7 @@ spec:
   chart:
     repo: oci://ghcr.io/hiero-ledger/hiero-block-node
     chart: block-node-server
-    version: "0.41.0"
+    version: "0.44.2"
 
   component: block-node
 
