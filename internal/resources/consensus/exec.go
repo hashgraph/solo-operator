@@ -156,7 +156,7 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 		}
 		// During a StatefulSet rollout the pod or container may not exist yet.
 		// Classify distinctly so callers can requeue quietly instead of logging ERR.
-		if apierrors.IsNotFound(streamErr) || isPodNotReady(streamErr) {
+		if isPodNotReady(streamErr) {
 			return res, errx.WithReason(
 				errExecPodNotReady.Wrap(streamErr, "exec into %s/%s", capsule.Namespace, podName),
 				ReasonExecPodNotReady,
@@ -170,22 +170,36 @@ func (c *S6Controller) exec(ctx context.Context, capsule *operatorv1alpha1.Conse
 	return res, nil
 }
 
-// Kubernetes API-server error substrings returned when a container does not
-// exist yet during a StatefulSet rollout. These are not exposed as typed errors
-// by client-go, so string matching is the only option (same approach as
-// isForbidden below). Centralised here so tests can reference them.
+// Kubernetes error substrings returned when a pod or container does not exist
+// yet during a StatefulSet rollout. The WebSocket exec transport surfaces these
+// as plain (untyped) errors — the same reason isForbidden below falls back to a
+// string check — so apierrors.IsNotFound misses the wrapped 404 and matching the
+// message is the only reliable option. Centralised here so tests can reference them.
 const (
+	// errMsgContainerNotCreated: the container exists in the pod spec but its
+	// runtime has not started yet.
 	errMsgContainerNotCreated = "container is not created or running"
-	errMsgContainerNotFound   = "container not found"
+	// errMsgContainerNotFound: the kubelet reports no such container on the pod.
+	errMsgContainerNotFound = "container not found"
+	// errMsgPodResource + errMsgNotFound together match the wrapped API-server 404
+	// (`pods "<name>" not found`) when the pod itself is gone. Both substrings are
+	// required so a bare "not found" elsewhere in a message can't trigger this.
+	errMsgPodResource = `pods "`
+	errMsgNotFound    = "not found"
 )
 
 // isPodNotReady reports whether the error indicates the pod or container does
-// not exist yet — the two messages the API server returns during a StatefulSet
-// rollout when the old pod is terminating and the new one has not started.
+// not exist yet — the states the API server returns during a StatefulSet rollout
+// when the old pod is terminating and the new one has not started. It covers both
+// the typed pod 404 and the plain-string variants the exec transport wraps.
 func isPodNotReady(err error) bool {
+	if apierrors.IsNotFound(err) {
+		return true
+	}
 	msg := err.Error()
 	return strings.Contains(msg, errMsgContainerNotCreated) ||
-		strings.Contains(msg, errMsgContainerNotFound)
+		strings.Contains(msg, errMsgContainerNotFound) ||
+		(strings.Contains(msg, errMsgPodResource) && strings.Contains(msg, errMsgNotFound))
 }
 
 // isForbidden reports whether err is an API-server 403. The WebSocket exec

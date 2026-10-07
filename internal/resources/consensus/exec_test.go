@@ -133,7 +133,11 @@ func TestS6Controller_PodNotReady_DistinctType(t *testing.T) {
 	cases := map[string]error{
 		"container_not_created": errors.New(`Internal error occurred: error executing command in container: container is not created or running`),
 		"container_not_found":   errors.New(`unable to upgrade connection: container not found ("consensus-node")`),
-		"pod_not_found":         apierrors.NewNotFound(corev1.Resource("pods"), "node0-0"),
+		"pod_not_found_typed":   apierrors.NewNotFound(corev1.Resource("pods"), "node0-0"),
+		// The WebSocket exec transport surfaces the 404 as a plain, untyped error
+		// (same as the forbidden case), so apierrors.IsNotFound misses it and the
+		// string fallback must catch it.
+		"pod_not_found_wrapped": errors.New(`unable to upgrade connection: pods "node0-0" not found`),
 	}
 	for name, streamErr := range cases {
 		t.Run(name, func(t *testing.T) {
