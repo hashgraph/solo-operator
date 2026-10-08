@@ -165,7 +165,7 @@ tasks:
   
   # ── 3. network ────────────────────────────────────────────────────────────--
   deploy:
-    desc: "Install kind prereqs (MetalLB/MinIO) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
+    desc: "Install kind prereqs (MetalLB/RustFS) and deploy a single-node v{{.BASE_VERSION}} network + genesis"
     cmds:
       - task: warm-up-cluster
       - task: example:setup

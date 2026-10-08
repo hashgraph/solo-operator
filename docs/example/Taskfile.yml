@@ -1,14 +1,21 @@
 version: '3'
 
+includes:
+  root:
+    taskfile: ../../Taskfile.yml
+    dir: ../..
+    internal: true
+
 tasks:
   setup:
-    desc: Install MetalLB (kind LB support), MinIO operator and tenant
+    desc: Install MetalLB (kind LB support) and RustFS (S3-compatible object storage)
     cmds:
       - task: setup:metallb
-      - task: setup:minio
+      - task: setup:rustfs
 
   setup:metallb:
     desc: Install MetalLB operator via Helm and configure an IP pool for LoadBalancer support on kind
+    internal: true
     cmds:
       - helm repo add metallb https://metallb.github.io/metallb
       - helm repo update
@@ -37,29 +44,32 @@ tasks:
           - kind-pool
         EOF
 
-  setup:minio:
-    desc: Install MinIO operator and tenant
+  setup:rustfs:
+    desc: Install RustFS and create the solo-streams and solo-backups buckets
+    internal: true
     cmds:
-      - helm repo add minio-operator https://operator.min.io/
+      - helm repo add rustfs https://charts.rustfs.com
       - helm repo update
-      - helm upgrade --install --namespace minio-operator --create-namespace minio-operator minio-operator/operator
-      - helm upgrade --install --namespace minio-tenant --create-namespace --values setup/minio-values.yaml minio-tenant minio-operator/tenant
-      - echo ">> Waiting for MinIO to be ready..."
+      - helm upgrade --install --namespace rustfs --create-namespace --values setup/rustfs-values.yaml --version 1.0.1 --wait --timeout 300s rustfs rustfs/rustfs
       - |
-        until kubectl get pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --no-headers 2>/dev/null | grep -q .; do
-          echo ">> Waiting for MinIO pods..."
-          sleep 5
-        done
-      - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=60s
+        kubectl run rustfs-buckets --rm -i --restart=Never -n rustfs --image=amazon/aws-cli:2.17.0 \
+          --env=AWS_ACCESS_KEY_ID=solo-operator --env=AWS_SECRET_ACCESS_KEY=changeme --env=AWS_DEFAULT_REGION=us-east-1 \
+          --command -- sh -c '
+            for b in solo-streams solo-backups; do
+              aws --endpoint-url http://rustfs-svc.rustfs.svc.cluster.local:9000 s3api head-bucket --bucket "$b" 2>/dev/null ||
+                aws --endpoint-url http://rustfs-svc.rustfs.svc.cluster.local:9000 s3 mb "s3://$b"
+            done'
 
   deploy:orbit:
     desc: Create the solo-orbit namespace and deploy Orbit
+    internal: true
     cmds:
       - kubectl create namespace solo-orbit --dry-run=client -o yaml | kubectl apply -f -
       - kubectl apply -f common/orbit.yaml
 
   deploy:common:
     desc: Deploy secrets, ConfigMaps, per-node block-node config, and per-node config CRs (templated from common/)
+    internal: true
     deps: [deploy:orbit]
     cmds:
       - kubectl apply -f common/secrets.yaml
@@ -85,6 +95,7 @@ tasks:
 
   deploy:nodes:
     desc: Deploy all node secrets and consensus capsules
+    internal: true
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node0/secrets.yaml
@@ -98,6 +109,7 @@ tasks:
 
   deploy:genesis:
     desc: Run network genesis (all nodes must be deployed first)
+    internal: true
     deps: [deploy:nodes]
     cmds:
       - kubectl apply -f network-genesis/network-genesis.yaml
@@ -115,6 +127,7 @@ tasks:
 
   deploy:single:
     desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
+    internal: true
     deps: [deploy:common]
     cmds:
       # Genesis derives the roster from whatever ConsensusCapsules exist
@@ -132,8 +145,25 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
       - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/haproxy-node0 50211 50211"
 
+  cluster:
+    desc: Create the kind cluster, MetalLB, and install the operator via Helm (skipped when the operator pod is ready)
+    status:
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=5s
+    cmds:
+      - task: root:dev:local:setup
+
   deploy:blocknode:
+    desc: Set up kind + operator + RustFS, deploy the 4-node network, then deploy the block node and point node0 at it
+    cmds:
+      - task: cluster
+      - task: setup
+      - task: deploy
+      - task: deploy:blocknode:capsule
+      - task: deploy:blocknode:config
+
+  deploy:blocknode:capsule:
     desc: Deploy the block node HelmCapsule and wait until Ready
+    internal: true
     deps: [deploy:orbit]
     cmds:
       - kubectl apply -f helmcapsule/block-node.yaml
@@ -142,6 +172,7 @@ tasks:
 
   deploy:blocknode:config:
     desc: Point node0 at the block node (overwrites node0-block-nodes; deploy:common resets it)
+    internal: true
     cmds:
       - kubectl apply -f helmcapsule/block-nodes-config.yaml
 
@@ -164,6 +195,7 @@ tasks:
 
   wait:
     desc: Wait for all consensus node pods to be ready
+    internal: true
     cmds:
       - echo ">> Waiting for all consensus node pods to be ready..."
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s || true
@@ -172,6 +204,7 @@ tasks:
 
   deploy:node0:
     desc: Deploy node0
+    internal: true
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node0/secrets.yaml
@@ -181,6 +214,7 @@ tasks:
 
   deploy:node1:
     desc: Deploy node1
+    internal: true
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node1/secrets.yaml
@@ -190,6 +224,7 @@ tasks:
 
   deploy:node2:
     desc: Deploy node2
+    internal: true
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node2/secrets.yaml
@@ -199,6 +234,7 @@ tasks:
 
   deploy:node3:
     desc: Deploy node3
+    internal: true
     deps: [deploy:common]
     cmds:
       - kubectl apply -f node3/secrets.yaml
@@ -208,6 +244,7 @@ tasks:
 
   destroy:node3:
     desc: Destroy node3
+    internal: true
     cmds:
       - kubectl delete -f node3/envoyproxycapsule.yaml || true
       - kubectl delete -f node3/haproxycapsule.yaml || true
@@ -216,6 +253,7 @@ tasks:
 
   destroy:node2:
     desc: Destroy node2
+    internal: true
     cmds:
       - kubectl delete -f node2/envoyproxycapsule.yaml || true
       - kubectl delete -f node2/haproxycapsule.yaml || true
@@ -224,6 +262,7 @@ tasks:
 
   destroy:node1:
     desc: Destroy node1
+    internal: true
     cmds:
       - kubectl delete -f node1/envoyproxycapsule.yaml || true
       - kubectl delete -f node1/haproxycapsule.yaml || true
@@ -232,6 +271,7 @@ tasks:
 
   destroy:node0:
     desc: Destroy node0
+    internal: true
     cmds:
       - kubectl delete -f node0/envoyproxycapsule.yaml || true
       - kubectl delete -f node0/haproxycapsule.yaml || true
@@ -240,6 +280,7 @@ tasks:
 
   destroy:common:
     desc: Destroy per-node config CRs, block-node config, ConfigMaps, and secrets
+    internal: true
     cmds:
       - |
         set -eu
@@ -271,6 +312,7 @@ tasks:
 
   destroy:orbit:
     desc: Destroy Orbit and namespace
+    internal: true
     cmds:
       - kubectl delete -f common/orbit.yaml || true
       - kubectl delete namespace solo-orbit --ignore-not-found
@@ -287,6 +329,7 @@ tasks:
 
   upgrade:prepare:
     desc: "Step 1 — apply a per-node NetworkUpgradePrepare and wait for the operator to validate images"
+    internal: true
     cmds:
       # Per-node operationId (node<N>-upgrade-0-74-2), as the UC mints per node in
       # the real HFS flow; yq stamps identity onto the shared images template.
@@ -312,6 +355,7 @@ tasks:
 
   upgrade:freeze:
     desc: "Step 2 — apply NetworkUpgradeFreeze (operator validates registries), then run hashfreeze to stop the nodes"
+    internal: true
     cmds:
       - |
         set -eu
@@ -368,6 +412,7 @@ tasks:
 
   upgrade:hashfreeze:
     desc: "Submit a FREEZE_ONLY transaction to stop all consensus nodes (uses hashfreeze image)"
+    internal: true
     vars:
       FREEZE_TIME:
         sh: date -u -v+10S '+%Y-%m-%d.%H:%M:%S' 2>/dev/null || date -u --date='10 seconds' '+%Y-%m-%d.%H:%M:%S'
@@ -399,6 +444,7 @@ tasks:
 
   upgrade:execute:
     desc: "Step 3 — apply NetworkUpgradeExecute for all 4 nodes and wait for each to reach ACTIVE"
+    internal: true
     cmds:
       - |
         set -eu
@@ -477,6 +523,7 @@ tasks:
 
   upgrade:status:
     desc: Show status of all per-node upgrade CRs (operationId node<N>-upgrade-0-74-2)
+    internal: true
     cmds:
       # No shared operationId label; list all upgrade CRs in the namespace.
       - echo ">> NetworkUpgradePrepare:"
@@ -500,6 +547,7 @@ tasks:
 
   upgrade:destroy:
     desc: Delete all per-node upgrade CRs (Prepare/Freeze/Execute) in the namespace
+    internal: true
     cmds:
       # No shared label; delete every upgrade CR of each kind (finalizers first).
       - |
@@ -512,11 +560,9 @@ tasks:
         done
 
   cleanup:
-    desc: Uninstall MetalLB, MinIO operator and tenant
+    desc: Uninstall MetalLB and RustFS
     cmds:
-      - helm uninstall minio-operator -n minio-operator || true
-      - helm uninstall minio-tenant -n minio-tenant || true
-      - kubectl delete namespace minio-tenant --ignore-not-found
-      - kubectl delete namespace minio-operator --ignore-not-found
+      - helm uninstall rustfs -n rustfs || true
+      - kubectl delete namespace rustfs --ignore-not-found
       - helm uninstall metallb -n metallb-system || true
       - kubectl delete namespace metallb-system --ignore-not-found

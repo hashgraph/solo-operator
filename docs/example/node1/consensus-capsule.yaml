@@ -37,7 +37,7 @@ spec:
         javaHeapMax: "3g"
         javaOpts: "-XX:+UseG1GC -XX:MaxDirectMemorySize=1500m --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED -Dio.netty.tryReflectionSetAccessible=true"
 
-      # Block streams uploader (cheetah with blob/MinIO storage)
+      # Block streams uploader (cheetah with blob/RustFS storage)
       blocksUploader:
         enabled: false
         name: "blockstream-uploader"
@@ -58,8 +58,8 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
-        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for RustFS
 
       # Record streams uploader (includes sidecar files)
       recordsUploader:
@@ -82,8 +82,8 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
-        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for RustFS
 
       # Events streams uploader
       eventsUploader:
@@ -106,8 +106,8 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
-        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for MinIO
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
+        envFromSecret: "uploader-mirror-secrets"  # provides AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for RustFS
 
       # Backup uploader (rclone-based)
       backupUploader:
@@ -129,7 +129,7 @@ spec:
           bucketName: "solo-backups"
           s3:
             enabled: true
-            url: "http://minio.minio-tenant.svc.cluster.local"
+            url: "http://rustfs-svc.rustfs.svc.cluster.local:9000"
           gcs:
             enabled: false
           envFromSecret: "backup-uploader-secrets"

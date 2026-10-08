@@ -10,63 +10,48 @@ Increase Docker Desktop memory allocation:
 
 ### Setup Cluster and Operator
 
-From the project root:
+From the `docs/example` directory:
 
 ```shell
-# Reset kind cluster with fresh CRDs
-task kind:reset
-
-# Start solo operator (in another terminal - MUST be running)
-task run
+# Create the kind cluster and install the operator via Helm (skipped when already running)
+task cluster
 ```
+
+Or run the operator locally from the project root: `task kind:reset`, then `task run` in another terminal.
 
 ## Workflow
 
 From the `docs/example` directory:
 
 ```shell
-# Install MinIO (object storage for stream uploaders)
+# Install MetalLB and RustFS (object storage for stream uploaders)
 task setup
 
-# Deploy full 4-node network (orbit + all nodes + genesis)
+# Deploy full 4-node network (orbit + all nodes + genesis), waits for pods ready
 task deploy
 
 # Check status
 task status
 
-# Wait for all pods to be ready
-task wait
-
 # Tail consensus node logs
 task logs
-```
-
-### Deploy individual nodes
-
-```shell
-# Deploy a single node (deploys orbit + common first)
-task deploy:node0
-task deploy:node1
-task deploy:node2
-task deploy:node3
 ```
 
 ## Block Node (optional)
 
 ```shell
-# Deploy a block node HelmCapsule and wait for Ready (prints status.outputs)
+# Set up kind + operator + RustFS, deploy the network, then the block node (prints status.outputs)
 task deploy:blocknode
-
-# Point node0 at it (needs blockStream properties, see helmcapsule/block-nodes-config.yaml)
-task deploy:blocknode:config
 
 # Remove the block node, its PVCs, and reset node0 block-nodes config
 task destroy:blocknode
 ```
 
+node0 only streams to the block node once its ApplicationProperties set the blockStream properties listed in `helmcapsule/block-nodes-config.yaml`.
+
 ## Proxy Sidecars (optional)
 
-Each node has its own `HAProxyCapsule` and `EnvoyProxy` deployed alongside its `ConsensusCapsule` via `task deploy:nodeX`. To deploy proxies manually:
+Each node has its own `HAProxyCapsule` and `EnvoyProxy`. To deploy proxies manually:
 
 ```shell
 # HAProxy â€” gRPC load balancer (ports 50211/50212), routes directly to consensus node
@@ -87,12 +72,9 @@ Both proxies auto-derive their upstream from the CR name (e.g. `haproxy-node1` â
 ## Cleanup
 
 ```shell
-# Destroy a specific node
-task destroy:node1
-
 # Destroy all nodes, configs, and orbit
 task destroy
 
-# Uninstall MinIO
+# Uninstall MetalLB and RustFS
 task cleanup
 ```
