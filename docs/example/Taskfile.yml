@@ -71,7 +71,7 @@ tasks:
       - kubectl apply -f common/orbit.yaml
 
   deploy:common:
-    desc: Deploy secrets, ConfigMaps, per-node block-node config, and per-node config CRs (templated from common/; BLOCKNODE=true configures node0 to stream to the block node)
+    desc: Deploy secrets, ConfigMaps, and per-node config CRs (BLOCKNODE=true adds block node streaming)
     internal: true
     deps: [deploy:orbit]
     cmds:
@@ -98,7 +98,11 @@ tasks:
       - |
         if [ "{{.BLOCKNODE}}" = "true" ]; then
           kubectl apply -f helmcapsule/block-nodes-config.yaml
-          sed "s/NODEID/node0/g" helmcapsule/applicationproperties.yaml | kubectl apply -f -
+          for NODE_ID in node0 node1 node2 node3; do
+            MODE=FILE
+            if [ "$NODE_ID" = "node0" ]; then MODE=FILE_AND_GRPC; fi
+            sed "s/NODEID/${NODE_ID}/g; s/WRITERMODE/${MODE}/g" helmcapsule/applicationproperties.yaml | kubectl apply -f -
+          done
         fi
 
   deploy:nodes:
@@ -161,12 +165,13 @@ tasks:
       - task: root:dev:local:setup
 
   deploy:blocknode:
-    desc: Set up kind + operator + RustFS, deploy the block node, then the 4-node network with node0 streaming to it
+    desc: Set up the cluster, deploy the block node, the network with node0 streaming to it, and the pinger
     cmds:
       - task: cluster
       - task: setup
       - task: deploy:blocknode:capsule
       - task deploy BLOCKNODE=true
+      - kubectl apply -f helmcapsule/mirror-pinger.yaml
 
   deploy:blocknode:capsule:
     desc: Deploy the block node HelmCapsule and wait until Ready
@@ -243,90 +248,18 @@ tasks:
       - kubectl apply -f node3/haproxycapsule.yaml
       - kubectl apply -f node3/envoyproxycapsule.yaml
 
-  destroy:node3:
-    desc: Destroy node3
-    internal: true
-    cmds:
-      - kubectl delete -f node3/envoyproxycapsule.yaml || true
-      - kubectl delete -f node3/haproxycapsule.yaml || true
-      - kubectl delete -f node3/consensus-capsule.yaml || true
-      - kubectl delete -f node3/secrets.yaml || true
-
-  destroy:node2:
-    desc: Destroy node2
-    internal: true
-    cmds:
-      - kubectl delete -f node2/envoyproxycapsule.yaml || true
-      - kubectl delete -f node2/haproxycapsule.yaml || true
-      - kubectl delete -f node2/consensus-capsule.yaml || true
-      - kubectl delete -f node2/secrets.yaml || true
-
-  destroy:node1:
-    desc: Destroy node1
-    internal: true
-    cmds:
-      - kubectl delete -f node1/envoyproxycapsule.yaml || true
-      - kubectl delete -f node1/haproxycapsule.yaml || true
-      - kubectl delete -f node1/consensus-capsule.yaml || true
-      - kubectl delete -f node1/secrets.yaml || true
-
-  destroy:node0:
-    desc: Destroy node0
-    internal: true
-    cmds:
-      - kubectl delete -f node0/envoyproxycapsule.yaml || true
-      - kubectl delete -f node0/haproxycapsule.yaml || true
-      - kubectl delete -f node0/consensus-capsule.yaml || true
-      - kubectl delete -f node0/secrets.yaml || true
-
-  destroy:common:
-    desc: Destroy per-node config CRs, block-node config, ConfigMaps, and secrets
-    internal: true
-    cmds:
-      - |
-        set -eu
-        TEMPLATES=$(ls common/apipermissionproperties.yaml \
-                       common/applicationoverrideproperties.yaml \
-                       common/applicationproperties.yaml \
-                       common/bootstrapproperties.yaml \
-                       common/feeschedules.yaml \
-                       common/log4j2config.yaml \
-                       common/nodeproperties.yaml \
-                       common/nodesettings.yaml \
-                       common/simplefeesschedules.yaml \
-                       common/throttlesconfig.yaml 2>/dev/null) || true
-        for NODE_ID in node0 node1 node2 node3; do
-          for TPL in $TEMPLATES; do
-            sed "s/NODEID/${NODE_ID}/g" "$TPL" | kubectl delete -f - || true
-          done
-        done
-      - kubectl delete -f common/blocknodesconfig.yaml || true
-      - kubectl delete -f common/configs.yaml || true
-      - kubectl delete -f common/secrets.yaml || true
-
   destroy:blocknode:
-    desc: Destroy the block node HelmCapsule and its PVCs, and reset node0's block-nodes config
+    desc: Destroy the pinger and block node HelmCapsules and the block node PVCs, and reset node0's block-nodes config
     cmds:
+      - kubectl delete -f helmcapsule/mirror-pinger.yaml || true
       - kubectl delete -f helmcapsule/block-node.yaml || true
       - kubectl delete pvc -n solo-orbit -l app.kubernetes.io/instance=block-node --ignore-not-found
       - kubectl apply -f common/blocknodesconfig.yaml
 
-  destroy:orbit:
-    desc: Destroy Orbit and namespace
-    internal: true
-    cmds:
-      - kubectl delete -f common/orbit.yaml || true
-      - kubectl delete namespace solo-orbit --ignore-not-found
-
   destroy:
-    desc: Destroy all nodes, configs, and orbit
+    desc: Delete the kind cluster
     cmds:
-      - task: destroy:node3
-      - task: destroy:node2
-      - task: destroy:node1
-      - task: destroy:node0
-      - task: destroy:common
-      - task: destroy:orbit
+      - task: root:kind:delete
 
   upgrade:prepare:
     desc: "Step 1 — apply a per-node NetworkUpgradePrepare and wait for the operator to validate images"

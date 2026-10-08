@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Mirror monitor (pinger) only: sends CRYPTO_TRANSFERs to node0 so blocks flow. Subscriptions are off, so no importer, database or REST.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: HelmCapsule
+metadata:
+  name: mirror-pinger
+  namespace: solo-orbit
+spec:
+  chart:
+    repo: https://hiero-ledger.github.io/hiero-mirror-node/charts
+    chart: hedera-mirror
+    version: "0.164.0"
+
+  orbitRef:
+    name: solo-orbit
+
+  timeout: 5m
+
+  values:
+    grpc:
+      enabled: false
+    graphql:
+      enabled: false
+    importer:
+      enabled: false
+    pinger:
+      enabled: false
+    postgresql:
+      enabled: false
+    redis:
+      enabled: false
+    rest:
+      enabled: false
+    restjava:
+      enabled: false
+    rosetta:
+      enabled: false
+    web3:
+      enabled: false
+    monitor:
+      enabled: true
+      ingress:
+        enabled: false
+      config:
+        hiero:
+          mirror:
+            monitor:
+              network: OTHER
+              nodes:
+                "0":
+                  nodeId: 0
+                  accountId: 0.0.3
+                  host: node0.solo-orbit.svc.cluster.local
+                  port: 50211
+              operator:
+                accountId: 0.0.2
+                # Test-only key — solo genesis account 0.0.2 (not a real secret) # gitleaks:allow # pragma: allowlist secret # noqa: S105
+                privateKey: "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"
+              publish:
+                scenarios:
+                  pinger:
+                    properties:
+                      amount: 1
+                      maxTransactionFee: 10000
+                      senderAccountId: 0.0.2
+                      recipientAccountId: 0.0.55
+                      topicId: null
+                      transferTypes:
+                        - CRYPTO
+                    receiptPercent: 1
+                    tps: 1
+                    type: CRYPTO_TRANSFER
+              subscribe:
+                grpc:
+                  hcs:
+                    enabled: false
+                rest:
+                  transactionId:
+                    enabled: false

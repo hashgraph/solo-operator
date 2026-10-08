@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# node0-only variant of common/applicationproperties.yaml (applied by `task deploy BLOCKNODE=true`).
-# Streams blocks to the block node (BOTH) with real TSS signatures (hinTS + history, no WRAPS so the
-# ~2GB proving key is not downloaded). The block node learns the ledger ID from block 0.
+# Variant of common/applicationproperties.yaml for all nodes (task deploy BLOCKNODE=true).
+# TSS needs a threshold of nodes streaming blocks, so every node uses BOTH; WRITERMODE is FILE_AND_GRPC on node0, FILE elsewhere.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: ApplicationProperties
 metadata:
@@ -26,7 +25,7 @@ spec:
     staking.periodMins=1
     nodes.updateAccountIdAllowed=true
     blockStream.streamMode=BOTH
-    blockStream.writerMode=FILE_AND_GRPC
+    blockStream.writerMode=WRITERMODE
     blockStream.streamWrappedRecordBlocks=false
     tss.hintsEnabled=true
     tss.historyEnabled=true

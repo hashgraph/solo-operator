@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
-#
-# RustFS (S3-compatible object storage) for the nightly kind cluster. Chart: https://charts.rustfs.com
 mode:
   standalone:
     enabled: true

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# node0-only variant of common/blocknodesconfig.yaml (applied by `task deploy BLOCKNODE=true`).
-# Ports must match the block node's in block-node.yaml.
+# node0 variant of common/blocknodesconfig.yaml (task deploy BLOCKNODE=true); ports must match block-node.yaml.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: BlockNodesConfig
 metadata:
