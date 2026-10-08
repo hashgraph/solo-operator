@@ -20,7 +20,7 @@ spec:
         softwareVersion:
           repository: "gcr.io/hedera-registry"
           imageName: "consensus-node"
-          imageTag: "0.76.4"
+          imageTag: "0.77.2"
           imagePullPolicy: IfNotPresent
         resources:
           limits:
