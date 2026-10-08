@@ -40,14 +40,14 @@ task logs
 ## Block Node (optional)
 
 ```shell
-# Set up kind + operator + RustFS, deploy the network, then the block node (prints status.outputs)
+# Set up kind + operator + RustFS, deploy the block node first, then the network streaming to it
 task deploy:blocknode
 
-# Remove the block node, its PVCs, and reset node0 block-nodes config
+# Remove the block node, its PVCs, and reset the per-node block-nodes config
 task destroy:blocknode
 ```
 
-node0 only streams to the block node once its ApplicationProperties set the blockStream properties listed in `helmcapsule/block-nodes-config.yaml`.
+The block node is deployed before the consensus nodes so they start with `block-nodes.json` and the stream properties already in place. Config changes on a running consensus node need a pod restart, because the files are `subPath` mounts. `deploy:blocknode` runs `task deploy BLOCKNODE=true`, which swaps in `helmcapsule/block-nodes-config.yaml` and `helmcapsule/applicationproperties.yaml`.
 
 ## Proxy Sidecars (optional)
 

@@ -1,11 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Points node0 at the block node in block-node.yaml; ports must match the block node's.
-# The ConsensusCapsule needs blockNodesConfigRef: node0-block-nodes and these ApplicationProperties:
-#   blockStream.streamMode=BOTH
-#   blockStream.writerMode=FILE_AND_GRPC
-#   blockStream.streamWrappedRecordBlocks=false
-#   tss.hintsEnabled=false, tss.historyEnabled=false, tss.wrapsEnabled=false
+# node0-only variant of common/blocknodesconfig.yaml (applied by `task deploy BLOCKNODE=true`).
+# Ports must match the block node's in block-node.yaml.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: BlockNodesConfig
 metadata:
