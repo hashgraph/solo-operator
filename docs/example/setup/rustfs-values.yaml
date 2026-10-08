@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# RustFS (S3-compatible object storage) for local kind. Chart: https://charts.rustfs.com
+mode:
+  standalone:
+    enabled: true
+  distributed:
+    enabled: false
+
+secret:
+  rustfs:
+    access_key: solo-operator
+    secret_key: changeme
+
+ingress:
+  enabled: false
+
+storageclass:
+  name: standard
+  dataStorageSize: 10Gi
+  logStorageSize: 1Gi

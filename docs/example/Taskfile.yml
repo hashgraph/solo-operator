@@ -71,25 +71,18 @@ tasks:
       - kubectl apply -f common/orbit.yaml
 
   deploy:common:
-    desc: Deploy secrets, ConfigMaps, per-node block-node config, and per-node config CRs (templated from common/; BLOCKNODE=true uses the helmcapsule/ variants)
+    desc: Deploy secrets, ConfigMaps, per-node block-node config, and per-node config CRs (templated from common/; BLOCKNODE=true configures node0 to stream to the block node)
     internal: true
     deps: [deploy:orbit]
     cmds:
       - kubectl apply -f common/secrets.yaml
       - kubectl apply -f common/configs.yaml
-      - |
-        if [ "{{.BLOCKNODE}}" = "true" ]; then
-          kubectl apply -f helmcapsule/block-nodes-config.yaml
-        else
-          kubectl apply -f common/blocknodesconfig.yaml
-        fi
+      - kubectl apply -f common/blocknodesconfig.yaml
       - |
         set -eu
-        APP_PROPS=common/applicationproperties.yaml
-        if [ "{{.BLOCKNODE}}" = "true" ]; then APP_PROPS=helmcapsule/applicationproperties.yaml; fi
         TEMPLATES=$(ls common/apipermissionproperties.yaml \
                        common/applicationoverrideproperties.yaml \
-                       ${APP_PROPS} \
+                       common/applicationproperties.yaml \
                        common/bootstrapproperties.yaml \
                        common/feeschedules.yaml \
                        common/log4j2config.yaml \
@@ -102,6 +95,11 @@ tasks:
             sed "s/NODEID/${NODE_ID}/g" "$TPL" | kubectl apply -f -
           done
         done
+      - |
+        if [ "{{.BLOCKNODE}}" = "true" ]; then
+          kubectl apply -f helmcapsule/block-nodes-config.yaml
+          sed "s/NODEID/node0/g" helmcapsule/applicationproperties.yaml | kubectl apply -f -
+        fi
 
   deploy:nodes:
     desc: Deploy all node secrets and consensus capsules
@@ -163,7 +161,7 @@ tasks:
       - task: root:dev:local:setup
 
   deploy:blocknode:
-    desc: Set up kind + operator + RustFS, deploy the block node, then the 4-node network configured to stream to it
+    desc: Set up kind + operator + RustFS, deploy the block node, then the 4-node network with node0 streaming to it
     cmds:
       - task: cluster
       - task: setup
@@ -307,7 +305,7 @@ tasks:
       - kubectl delete -f common/secrets.yaml || true
 
   destroy:blocknode:
-    desc: Destroy the block node HelmCapsule and its PVCs, and reset the per-node block-nodes config
+    desc: Destroy the block node HelmCapsule and its PVCs, and reset node0's block-nodes config
     cmds:
       - kubectl delete -f helmcapsule/block-node.yaml || true
       - kubectl delete pvc -n solo-orbit -l app.kubernetes.io/instance=block-node --ignore-not-found

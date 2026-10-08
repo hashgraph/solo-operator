@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# node0-only variant of common/applicationproperties.yaml (applied by `task deploy BLOCKNODE=true`).
+# Streams blocks to the block node (BOTH) with real TSS signatures (hinTS + history, no WRAPS so the
+# ~2GB proving key is not downloaded). The block node learns the ledger ID from block 0.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: ApplicationProperties
+metadata:
+  name: NODEID-application-properties
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  scope: NODEID
+  content: |
+    hedera.config.version=0
+    netty.mode=TEST
+    hedera.recordStream.logPeriod=1
+    balances.exportPeriodSecs=400
+    files.maxSizeKb=2048
+    hedera.recordStream.compressFilesOnCreation=true
+    balances.compressOnCreation=true
+    contracts.maxNumWithHapiSigsAccess=0
+    autoRenew.targetTypes=
+    nodes.gossipFqdnRestricted=false
+    hedera.profiles.active=TEST
+    staking.periodMins=1
+    nodes.updateAccountIdAllowed=true
+    blockStream.streamMode=BOTH
+    blockStream.writerMode=FILE_AND_GRPC
+    blockStream.streamWrappedRecordBlocks=false
+    tss.hintsEnabled=true
+    tss.historyEnabled=true
+    tss.wrapsEnabled=false
+    tss.forceMockSignatures=false
+    scheduling.longTermEnabled=false
+    bootstrap.throttleDefsJson.resource=data/config/genesis-throttles.json
+    cache.warmThreads=6
