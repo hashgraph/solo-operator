@@ -7,11 +7,11 @@ go 1.26.6
 require (
 	github.com/automa-saga/daemonkit v0.4.0
 	github.com/automa-saga/errx v1.0.0
-	github.com/automa-saga/logx v0.9.0
+	github.com/automa-saga/logx v0.10.0
 	github.com/automa-saga/version v1.0.1
 	github.com/go-logr/logr v1.4.4
 	github.com/google/go-containerregistry v0.22.1
-	github.com/hiero-ledger/hiero-sdk-go/v2 v2.85.0
+	github.com/hiero-ledger/hiero-sdk-go/v2 v2.85.1
 	github.com/joomcode/errorx v1.2.0
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.44.0
@@ -31,7 +31,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.37.1
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
-	sigs.k8s.io/controller-runtime v0.25.1
+	sigs.k8s.io/controller-runtime v0.25.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
