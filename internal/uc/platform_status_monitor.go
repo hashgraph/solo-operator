@@ -266,7 +266,7 @@ func (m *PlatformStatusMonitor) recordTransition(prev, name string, code int32) 
 	if prev == "" {
 		prev = nonePhase
 	}
-	msg := fmt.Sprintf("Changed platform status: %s → %s (code %d)", prev, name, code)
+	msg := fmt.Sprintf("Detected platform status change: %s → %s (code %d)", prev, name, code)
 	logx.As().Info().
 		Str("reason", ReasonPlatformStatusChanged.String()).
 		Str("capsule", m.cfg.CapsuleName()).

@@ -1,0 +1,267 @@
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3'
+
+includes:
+  mock:
+    taskfile: ../consensus-mock/Taskfile.yml
+    dir: ../consensus-mock
+    internal: true
+  example:
+    taskfile: ../../docs/example/Taskfile.yml
+    dir: ../../docs/example
+    internal: true
+
+vars:
+  CN_IMAGE: '{{.CN_IMAGE | default ""}}'
+  CN_DIR: '{{.CN_DIR | default (printf "%s/../../../../hiero-ledger/hiero-consensus-node" .TASKFILE_DIR)}}'
+  CN_REPO: '{{.CN_REPO | default "ghcr.io/hashgraph/solo-operator"}}'
+  CN_NAME: '{{.CN_NAME | default "consensus-node"}}'
+  CN_V1: "0.1.0"
+  CN_V2: "0.2.0"
+  CN_IMG_V1: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V1}}'
+  CN_IMG_V2: '{{.CN_REPO}}/{{.CN_NAME}}:{{.CN_V2}}'
+  CN_PLATFORM: '{{.CN_PLATFORM | default ""}}'
+  # Also selects the Debian apt snapshot date; must be after 2025-06-30.
+  CN_SOURCE_DATE_EPOCH: '{{.CN_SOURCE_DATE_EPOCH | default "1751328000"}}'
+  CN_CONTEXT: '{{.CN_DIR}}/hedera-node/infrastructure/docker/containers/production-next/consensus-node'
+  CLUSTER: '{{.CLUSTER | default "solo-operator"}}'
+  NS: solo-orbit
+  REGISTRY_HOST: "localhost:5001"
+  CN_REGISTRY_ADDR: "10.96.100.100:5000"
+  OVERLAY_DIR: ../dev/overlay
+  OUT_DIR: build
+  ZIP: '{{.OUT_DIR}}/softwareUpgrade.zip'
+  FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS | default "30"}}'
+  STEP_TIMEOUT_SECS: '{{.STEP_TIMEOUT_SECS | default "300"}}'
+  UPLOAD_TIMEOUT_SECS: '{{.UPLOAD_TIMEOUT_SECS | default "1800"}}'
+  ACTIVE_TIMEOUT: '{{.ACTIVE_TIMEOUT | default "600s"}}'
+
+silent: true
+tasks:
+  build:
+    desc: "Build the consensus-node image from CN_DIR, or reuse an already-built one (CN_IMAGE=repo/name:tag); tags {{.CN_V1}} and {{.CN_V2}}"
+    preconditions:
+      - sh: test -n '{{.CN_IMAGE}}' || test -f '{{.CN_DIR}}/gradlew'
+        msg: "CN_DIR={{.CN_DIR}} is not a hiero-consensus-node checkout; set CN_DIR=<path> or CN_IMAGE=<built image>"
+    cmds:
+      - task: build:source
+        if: 'test -z "{{.CN_IMAGE}}"'
+      - task: build:retag
+        if: 'test -n "{{.CN_IMAGE}}"'
+
+  build:source:
+    internal: true
+    cmds:
+      - cd '{{.CN_DIR}}' && bash gradlew :app:assemble
+      - defer: rm -rf '{{.CN_CONTEXT}}/sdk'
+      - rm -rf '{{.CN_CONTEXT}}/sdk' && mkdir -p '{{.CN_CONTEXT}}/sdk/data'
+      - cp -r '{{.CN_DIR}}/hedera-node/data/apps' '{{.CN_DIR}}/hedera-node/data/lib' '{{.CN_CONTEXT}}/sdk/data/'
+      - cp '{{.CN_DIR}}/version.txt' '{{.CN_CONTEXT}}/sdk/VERSION'
+      - >-
+        docker build
+        --build-arg SOURCE_DATE_EPOCH={{.CN_SOURCE_DATE_EPOCH}}
+        {{if .CN_PLATFORM}}--platform {{.CN_PLATFORM}}{{end}}
+        -t {{.CN_IMG_V1}} -t {{.CN_IMG_V2}}
+        '{{.CN_CONTEXT}}'
+
+  build:retag:
+    internal: true
+    cmds:
+      - docker image inspect {{.CN_IMAGE}} >/dev/null 2>&1 || docker pull {{.CN_IMAGE}}
+      - docker tag {{.CN_IMAGE}} {{.CN_IMG_V1}}
+      - docker tag {{.CN_IMAGE}} {{.CN_IMG_V2}}
+
+  e2e:
+    desc: "Full pipeline: build, kind cluster, deploy node0 on {{.CN_V1}}, wait ACTIVE, then upload/prepare/freeze to {{.CN_V2}} with beacon"
+    cmds:
+      - task: build
+      - task: cluster
+      - task: images:load
+      - task: mock:operator:deploy
+      - task: deploy
+      - task: wait:active
+      - task: upgrade
+
+  upgrade:
+    desc: "Run the beacon upgrade ({{.CN_V1}} -> {{.CN_V2}}) against a running node0: package, upload, prepare, freeze, wait for Execute"
+    cmds:
+      - task: package
+      - task: mock:beacon:config
+      - task: upload
+      - task: prepare
+      - task: freeze
+      - task: mock:wait:execute
+        vars:
+          FREEZE_DELAY_SECS: '{{.FREEZE_DELAY_SECS}}'
+          EXECUTE_EXTRA_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
+          ACTIVE_TIMEOUT_SECS: '{{.ACTIVE_TIMEOUT | trimSuffix "s"}}'
+
+  compute-downtime:
+    desc: Compute the upgrade downtime (now_frozen.mf -> ACTIVE) and event timestamps from the captured logs and the live node0 pod
+    cmds:
+      - |
+        NS={{.NS}} NODE={{.CLUSTER}}-control-plane bash <<'EOF'
+        set -uo pipefail
+        PREFIX=/tmp/consensus-mock-freeze-window
+        EV=$(mktemp)
+        trap 'rm -f "$EV"' EXIT
+        ESC=$(printf '\033')
+        strip() { sed "s/${ESC}\[[0-9;]*m//g"; }
+
+        epoch() {
+          awk -v t="${1:-}" 'BEGIN {
+            if (t !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ][0-9][0-9]:[0-9][0-9]:[0-9][0-9]/) exit
+            split(t, a, /[-T:Z ]/)
+            y = a[1]; m = a[2]; d = a[3]
+            if (m <= 2) y--
+            era = int(y / 400); yoe = y - era * 400
+            mp = (m > 2) ? m - 3 : m + 9
+            doy = int((153 * mp + 2) / 5) + d - 1
+            doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+            days = era * 146097 + doe - 719468
+            printf "%.6f", days * 86400 + a[4] * 3600 + a[5] * 60 + a[6]
+          }'
+        }
+        span() { awk -v a="${1:-}" -v b="${2:-}" 'BEGIN { if (a != "" && b != "") printf "%.3fs", b - a; else printf "n/a" }'; }
+        field1() { awk '{print $1}'; }
+        k() { kubectl --context "kind-{{.CLUSTER}}" "$@"; }
+        k config get-contexts "kind-{{.CLUSTER}}" >/dev/null 2>&1 || { echo "kubectl context kind-{{.CLUSTER}} not found; run: kind export kubeconfig --name {{.CLUSTER}}" >&2; exit 1; }
+        add() { [ -n "${1:-}" ] && printf '%s|%s\n' "$1" "$2" >> "$EV"; }
+
+        [ -s "$PREFIX-uc.log" ] || { echo "no captured logs in $PREFIX-*.log; run 'task upgrade' first" >&2; exit 1; }
+        UC_OLD=$(strip < "$PREFIX-uc.log")
+        CN_OLD=$(cat "$PREFIX-consensus-node.log" 2>/dev/null)
+        UC_NEW=$(k logs node0-0 -c uc -n "$NS" 2>/dev/null | strip)
+        CN_NEW=$(k logs node0-0 -c consensus-node -n "$NS" 2>/dev/null)
+
+        SCHED=$(printf '%s\n' "$UC_OLD" | grep -m1 -o 'scheduled_time=[^ ]*' | cut -d= -f2)
+        FROZEN_LINE=$(printf '%s\n' "$UC_OLD" | grep -m1 'Detected new marker file now_frozen.mf')
+        LATENCY=$(printf '%s' "$FROZEN_LINE" | sed -n 's/.*latency=\([0-9]*\).*/\1/p')
+        E_SCHED=$(epoch "$SCHED")
+        E_DETECTED=$(epoch "$(printf '%s' "$FROZEN_LINE" | field1)")
+        E_FROZEN=$(awk -v e="$E_DETECTED" -v l="$LATENCY" 'BEGIN { if (e != "" && l != "") printf "%.6f", e - l / 1000 }')
+        E_EXEC=$(epoch "$(printf '%s\n' "$UC_OLD" | grep -m1 'Created NetworkUpgradeExecute CR' | field1)")
+        E_FREEZE_COMPLETE=$(epoch "$(printf '%s\n' "$UC_OLD" | grep -m1 'Changed platform status:.*FREEZE_COMPLETE' | field1)")
+        E_TERM=$(epoch "$(printf '%s\n' "$CN_OLD" | grep -m1 's6-rc: info: service legacy-services: stopping' | field1)")
+        E_OLD_EXIT=$(epoch "$(printf '%s\n' "$CN_OLD" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ' | tail -1 | field1)")
+        E_JVM=$(epoch "$(printf '%s\n' "$CN_NEW" | grep -m1 -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+ ' | awk '{print $1 "T" $2}')")
+        E_ACTIVE=$(epoch "$(printf '%s\n' "$UC_NEW" | grep -m1 'Changed platform status:.*→ ACTIVE' | field1)")
+
+        CID=$(k get pod node0-0 -n "$NS" -o jsonpath='{.status.containerStatuses[?(@.name=="consensus-node")].containerID}' 2>/dev/null | sed 's#containerd://##')
+        INSPECT=$(docker exec "$NODE" crictl inspect "$CID" 2>/dev/null)
+        E_CN_START=$(epoch "$(printf '%s\n' "$INSPECT" | grep -m1 '"startedAt"' | sed 's/.*: "\(.*\)".*/\1/')")
+        SANDBOX=$(printf '%s\n' "$INSPECT" | grep -m1 '"sandboxID"' | sed 's/.*: "\(.*\)".*/\1/')
+        E_SANDBOX=$(epoch "$(docker exec "$NODE" crictl inspectp "$SANDBOX" 2>/dev/null | grep -m1 '"createdAt"' | sed 's/.*: "\(.*\)".*/\1/')")
+
+        add "$E_SCHED" "freeze scheduled time (beacon start-time)"
+        add "$E_FROZEN" "CN wrote now_frozen.mf (detect time - latency)"
+        add "$E_DETECTED" "UC detected now_frozen.mf"
+        add "$E_EXEC" "UC created NetworkUpgradeExecute CR"
+        add "$E_FREEZE_COMPLETE" "old pod platform status FREEZE_COMPLETE"
+        add "$E_TERM" "old pod stop begins (s6 stopping)"
+        add "$E_OLD_EXIT" "old consensus-node last output"
+        add "$E_SANDBOX" "new pod sandbox created"
+        add "$E_CN_START" "new consensus-node container started"
+        add "$E_JVM" "new JVM first log line"
+        add "$E_ACTIVE" "new pod platform status ACTIVE"
+
+        echo
+        echo "-- metadata --"
+        echo "  image: $(k get pod node0-0 -n "$NS" -o jsonpath='{.spec.containers[?(@.name=="consensus-node")].image}' 2>/dev/null)"
+        echo "  capsule: $(k get consensuscapsule node0 -n "$NS" -o jsonpath='{.status.phase} {.status.platformStatus}' 2>/dev/null)"
+        echo
+        echo "-- events (UTC; T+ relative to now_frozen.mf) --"
+        sort -n "$EV" | awk -F'|' -v base="$E_FROZEN" '
+          function tod(e, s) { s = e % 86400; return sprintf("%02d:%02d:%06.3f", s / 3600, (s % 3600) / 60, s % 60) }
+          { t = $1 + 0; if (NR == 1 && base == "") base = t
+            printf "  %s  T%+8.3fs  %s  %s\n", tod(t), t - base, (NR > 1 ? sprintf("+%6.3fs", t - prev) : "        "), $2
+            prev = t }'
+        echo
+        echo "-- summary --"
+        echo "  CN freeze (scheduled time -> now_frozen.mf):         $(span "$E_SCHED" "$E_FROZEN")"
+        echo "  old CN shutdown (SIGTERM -> last output):            $(span "$E_TERM" "$E_OLD_EXIT")"
+        echo "  operator/uc/k8s (now_frozen.mf -> new CN started):   $(span "$E_FROZEN" "$E_CN_START")"
+        echo "  CN startup (container started -> ACTIVE):            $(span "$E_CN_START" "$E_ACTIVE")"
+        echo "  TOTAL DOWNTIME (now_frozen.mf -> ACTIVE):            $(span "$E_FROZEN" "$E_ACTIVE")"
+        [ -n "$E_FROZEN" ] && [ -n "$E_ACTIVE" ] || { echo "ERROR: now_frozen.mf or ACTIVE event not found; is the upgrade complete?" >&2; exit 1; }
+        EOF
+
+  clean:
+    desc: Remove the generated upgrade package
+    cmds:
+      - rm -rf '{{.OUT_DIR}}'
+
+  cluster:
+    internal: true
+    cmds:
+      - task: mock:cluster
+
+  images:load:
+    internal: true
+    preconditions:
+      - sh: docker image inspect {{.CN_IMG_V1}} >/dev/null 2>&1
+        msg: "image {{.CN_IMG_V1}} not found locally; run `task build` first"
+    cmds:
+      - kind load docker-image {{.CN_IMG_V1}} --name {{.CLUSTER}}
+      - task: mock:kind:load:uc
+      - task: mock:kind:load:beacon
+      - task: mock:kind:load:genesis-init
+      # V2 goes via the in-cluster registry so the operator verifies its layer hashes
+      - docker tag {{.CN_IMG_V1}} {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
+      - docker push {{.REGISTRY_HOST}}/{{.CN_NAME}}:{{.CN_V2}}
+
+  deploy:
+    internal: true
+    cmds:
+      # mock orbit last so it wins over the example orbit
+      - task: example:deploy:common
+      - kubectl apply -f ../consensus-mock/kind/orbit.yaml
+      - >-
+        CN_REPO={{.CN_REPO}} CN_NAME={{.CN_NAME}} CN_TAG={{.CN_V1}}
+        envsubst '${CN_REPO} ${CN_NAME} ${CN_TAG}' < kind/consensus-capsule.yaml | kubectl apply -f -
+      - kubectl apply -f ../../docs/example/node0/secrets.yaml
+      - kubectl apply -f ../../docs/example/network-genesis/network-genesis.yaml
+      - echo ">> Waiting for genesis to complete..."
+      - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n {{.NS}} --timeout=300s
+      - echo ">> Waiting for node0 pod to be ready..."
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n {{.NS}} --timeout=600s
+      - echo ">> node0 ready on {{.CN_IMG_V1}}"
+
+  wait:active:
+    internal: true
+    cmds:
+      - kubectl wait --for=jsonpath='{.status.platformStatus}'=ACTIVE consensuscapsule/node0 -n {{.NS}} --timeout={{.ACTIVE_TIMEOUT}}
+
+  package:
+    internal: true
+    cmds:
+      - >-
+        CN_IMG={{.CN_IMG_V1}} CN_NAME={{.CN_NAME}} CN_V2={{.CN_V2}}
+        REGISTRY_CLUSTER_ADDR={{.CN_REGISTRY_ADDR}} OVERLAY_DIR='{{.OVERLAY_DIR}}' OUT_DIR='{{.OUT_DIR}}'
+        bash scripts/package.sh
+
+  upload:
+    internal: true
+    cmds:
+      - kubectl delete pod beacon-zip-loader -n {{.NS}} --ignore-not-found
+      - kubectl apply -f kind/beacon-artifacts.yaml
+      - kubectl wait --for=condition=Ready pod/beacon-zip-loader -n {{.NS}} --timeout=120s
+      - kubectl cp '{{.ZIP}}' {{.NS}}/beacon-zip-loader:/data/softwareUpgrade.zip
+      - kubectl delete pod beacon-zip-loader -n {{.NS}}
+      - ZIP_HASH=$(cat '{{.ZIP}}.sha384') bash scripts/beacon-step.sh beacon-upload kind/job-upload.yaml {{.UPLOAD_TIMEOUT_SECS}}
+
+  prepare:
+    internal: true
+    cmds:
+      - ZIP_HASH=$(cat '{{.ZIP}}.sha384') bash scripts/beacon-step.sh beacon-freeze-prepare kind/job-freeze-prepare.yaml {{.STEP_TIMEOUT_SECS}} networkupgradeprepares
+
+  freeze:
+    internal: true
+    cmds:
+      - bash scripts/capture-logs.sh
+      - |
+        START_TIME=$(date -u -v+{{.FREEZE_DELAY_SECS}}S "+%Y-%m-%d.%H:%M:%S" 2>/dev/null || date -u -d "+{{.FREEZE_DELAY_SECS}} sec" "+%Y-%m-%d.%H:%M:%S")
+        echo ">> freeze start-time (UTC): $START_TIME"
+        export START_TIME ZIP_HASH="$(cat '{{.ZIP}}.sha384')" LOG_COPY=/tmp/consensus-mock-freeze-window-beacon.log
+        bash scripts/beacon-step.sh beacon-freeze-upgrade kind/job-freeze-upgrade.yaml {{.STEP_TIMEOUT_SECS}} networkupgradefreezes

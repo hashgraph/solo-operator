@@ -407,6 +407,34 @@ func TestPrepareReconcile_EmitsSidecarDisabled(t *testing.T) {
 	}
 }
 
+func TestPrepareReconcile_NoEnabledComponents_Fails(t *testing.T) {
+	prepare := newPrepareForTest()
+	prepare.Spec.Images.ConsensusNode = operatorv1alpha1.ImageComponentSpec{
+		Version:    "0.62.0",
+		Enabled:    boolPtr(false),
+		Registries: registriesFor("gcr.io/a/cn:0.62.0"),
+	}
+
+	res := reconcilePrepare(t, prepare, newPrepareChecker(nil, nil))
+
+	if res.prepare.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected phase Failed when no components enabled, got %s", res.prepare.Status.Phase)
+	}
+	cond := findCondition(res.prepare.Status.Conditions, operatorv1alpha1.CondManifestValidated)
+	if cond == nil {
+		t.Fatal("ManifestValidated condition not set")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected ManifestValidated=False, got %s", cond.Status)
+	}
+	if cond.Reason != operatorv1alpha1.ReasonSchemaInvalid.String() {
+		t.Errorf("expected reason %s, got %s", operatorv1alpha1.ReasonSchemaInvalid.String(), cond.Reason)
+	}
+	if got := countContaining(res.events, operatorv1alpha1.EventManifestInvalid.String()); got != 1 {
+		t.Errorf("expected one ManifestInvalid event, got %d in %v", got, res.events)
+	}
+}
+
 func TestPrepareReconcile_OperationIDLabelMissing(t *testing.T) {
 	prepare := newPrepareForTest()
 	prepare.Labels = nil
@@ -663,10 +691,15 @@ func TestAllSourcesPinned(t *testing.T) {
 func TestReconcilePrefetch_NoCapsules_SkipsPrefetch(t *testing.T) {
 	scheme := newControllerTestScheme()
 	prepare := newPrepareForTest()
-	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
 	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
 		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+	prepare.Status.Conditions = []operatorv1alpha1.Condition{{
+		Type:   operatorv1alpha1.CondRegistrySelected,
+		Status: metav1.ConditionTrue,
+		Reason: operatorv1alpha1.ReasonSelectionComplete.String(),
+	}}
 
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
@@ -728,18 +761,25 @@ func TestCheckPrefetchJobs_EmptyListInconclusive(t *testing.T) {
 	// Pre-set the finalizer so a single Reconcile proceeds past ensureFinalizer
 	// straight into the prefetch check.
 	prepare.Finalizers = []string{FinalizerNetworkUpgradePrepare}
-	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
 	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
 		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
 	// created=True set well beyond the 30s cache-lag grace window, with no Jobs
 	// present in the cluster.
-	prepare.Status.Conditions = []operatorv1alpha1.Condition{{
-		Type:               operatorv1alpha1.CondImagePrefetchCreated,
-		Status:             metav1.ConditionTrue,
-		Reason:             operatorv1alpha1.ReasonPrefetchCreated.String(),
-		LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute)),
-	}}
+	prepare.Status.Conditions = []operatorv1alpha1.Condition{
+		{
+			Type:   operatorv1alpha1.CondRegistrySelected,
+			Status: metav1.ConditionTrue,
+			Reason: operatorv1alpha1.ReasonSelectionComplete.String(),
+		},
+		{
+			Type:               operatorv1alpha1.CondImagePrefetchCreated,
+			Status:             metav1.ConditionTrue,
+			Reason:             operatorv1alpha1.ReasonPrefetchCreated.String(),
+			LastTransitionTime: metav1.NewTime(time.Now().Add(-time.Minute)),
+		},
+	}
 
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
@@ -1035,6 +1075,67 @@ func TestCheckPrefetchJobs_TerminalDetection(t *testing.T) {
 	}
 }
 
+func TestReconcilePrefetch_PendingJobsKeepsPhaseRunning(t *testing.T) {
+	scheme := newControllerTestScheme()
+	prepare := newPrepareForTest()
+	prepare.Finalizers = []string{FinalizerNetworkUpgradePrepare}
+	prepare.Status.Phase = operatorv1alpha1.PhaseRunning
+	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
+	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
+		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+	prepare.Status.Conditions = []operatorv1alpha1.Condition{
+		{
+			Type:   operatorv1alpha1.CondRegistrySelected,
+			Status: metav1.ConditionTrue,
+			Reason: operatorv1alpha1.ReasonSelectionComplete.String(),
+		},
+		{
+			Type:   operatorv1alpha1.CondImagePrefetchCreated,
+			Status: metav1.ConditionTrue,
+			Reason: operatorv1alpha1.ReasonPrefetchCreated.String(),
+		},
+	}
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "prefetch-running",
+			Namespace: prepare.Namespace,
+			Labels: map[string]string{
+				operatorv1alpha1.LabelOperationID:  prepare.Spec.OperationID,
+				operatorv1alpha1.LabelPrefetchRole: operatorv1alpha1.RolePrefetch,
+			},
+		},
+	}
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(prepare, job).
+		WithStatusSubresource(prepare).
+		WithIndex(&operatorv1alpha1.NetworkUpgradePrepare{}, fieldOperationID, prepareIndexFunc).
+		Build()
+
+	r := NewNetworkUpgradePrepareReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(64)
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKeyFromObject(prepare),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.RequeueAfter == 0 {
+		t.Fatalf("expected requeue while prefetch Job is still running, got %+v", res)
+	}
+
+	var got operatorv1alpha1.NetworkUpgradePrepare
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(prepare), &got); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Status.Phase != operatorv1alpha1.PhaseRunning {
+		t.Fatalf("expected phase Running while prefetch is incomplete, got %s", got.Status.Phase)
+	}
+}
+
 // When prefetch is disabled via orbit config, createPrefetchJobs must create no
 // Jobs and mark the outcome disabled (not succeeded) so Freeze/Execute fall
 // through to normal registry validation.
@@ -1042,10 +1143,15 @@ func TestReconcilePrefetch_Disabled(t *testing.T) {
 	scheme := newControllerTestScheme()
 	prepare := newPrepareForTest()
 	prepare.Finalizers = []string{FinalizerNetworkUpgradePrepare}
-	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 	prepare.Status.SelectedSources = &operatorv1alpha1.SelectedSources{}
 	prepare.Status.SelectedSources.Set(operatorv1alpha1.ComponentConsensusNode,
 		&operatorv1alpha1.SelectedSource{Image: "gcr.io/cn:v1", Digest: "sha256:abc"})
+	prepare.Status.Conditions = []operatorv1alpha1.Condition{{
+		Type:   operatorv1alpha1.CondRegistrySelected,
+		Status: metav1.ConditionTrue,
+		Reason: operatorv1alpha1.ReasonSelectionComplete.String(),
+	}}
 
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},

@@ -57,10 +57,7 @@ Flags (each with a `MOCK_`-prefixed env var default):
 ## Building
 
 ```bash
-task -d test/consensus-mock build          # local binary -> bin/consensus-mock
-task -d test/consensus-mock build:all      # cross-compile linux/amd64+arm64
-task -d test/consensus-mock docker:build   # -> MOCK_IMG (default ghcr.io/hashgraph/solo-operator/consensus-mock:dev)
-task -d test/consensus-mock docker:push
+task -d test/consensus-mock build   # consensus-mock:0.1.0 + :0.2.0 (ghcr.io/hashgraph/solo-operator/consensus-mock), cross-compiled linux/amd64+arm64
 ```
 
 ## Wiring into a `ConsensusCapsule`
@@ -110,8 +107,7 @@ way `docs/beacon/Taskfile.yml`'s `operator` task does:
 ```bash
 task -d docs/beacon build && go run ./cmd/main.go --log-level=debug
 ```
-or deploy it into the kind cluster via this harness (`task operator:deploy`,
-or the full `task e2e`, which calls it for you) — note that mode allow-lists
+or deploy it into the kind cluster via this harness (`task e2e` does it for you) — note that mode allow-lists
 the in-cluster registry's ClusterIP via `--allowed-registry-hosts` (the
 operator's registry client denies private-IP hosts by default as an SSRF
 guard); running the operator on the host instead needs the same flag set
@@ -119,22 +115,13 @@ manually, pointed at the registry's ClusterIP (`REGISTRY_CLUSTER_IP` in the
 Taskfile, currently `10.96.100.100`).
 
 ```bash
-task -d test/consensus-mock cluster                 # kind reset + CRDs + in-cluster registry (destroys any existing "solo-operator" kind cluster)
-task -d test/consensus-mock docker:build:versions   # consensus-mock:0.1.0 + :0.2.0 (ghcr.io/hashgraph/solo-operator/consensus-mock)
-task -d test/consensus-mock images:load:versions    # 0.1.0 -> kind load; 0.2.0 -> pushed to the in-cluster registry
-task -d test/consensus-mock kind:load:beacon
-# also needed once per cluster: task docker:build:uc && task kind:load:uc  (root Taskfile)
-task -d test/consensus-mock deploy                  # orbit+common+node0(mock:0.1.0)+genesis, ready in seconds
-task -d test/consensus-mock beacon:config
-task -d test/consensus-mock beacon:prepare          # generates a real layerHashes manifest against the in-cluster registry, then PREPARE_UPGRADE
-task -d test/consensus-mock beacon:freeze           # FREEZE_UPGRADE Job (10s out by default; FREEZE_DELAY_SECS=30 to override)
-task -d test/consensus-mock beacon:abort            # FREEZE_ABORT Job — alternate path
-task -d test/consensus-mock beacon:watch            # poll NetworkUpgrade* CRs (leave running in its own terminal)
-task -d test/consensus-mock uc:logs                 # tail the UC sidecar
+task -d test/consensus-mock e2e       # build images, kind reset + CRDs + in-cluster registry (destroys any existing "solo-operator" kind cluster),
+                                      # load images, deploy operator + node0 (mock:0.1.0) + genesis, then run `upgrade`
+task -d test/consensus-mock upgrade   # beacon prepare (real layerHashes manifest vs. the in-cluster registry) -> freeze (FREEZE_DELAY_SECS=30 to override the 10s default)
+                                      # -> wait for NetworkUpgradeExecute and print the timing report
 ```
 
-`deploy` accepts `MOCK_TAG=0.2.0` to redeploy node0 straight onto the
-"upgraded" tag without going through the Job flow, as a quick sanity check.
+`upgrade` can be re-run against an already deployed node0. Every other step is an internal task that `e2e`/`upgrade` call.
 
 The manifest `beacon:prepare` generates (`manifests/consensus-node-components.yaml`,
 via `build:manifest`) is also a useful verification fixture on its own — e.g.
@@ -150,6 +137,6 @@ follow, and eventually `NetworkUpgradeExecute` reaches
 `:0.2.0`, and the new pod reaches `Active` again with the Execute CR
 `Succeeded`. Time each `beacon` submit (the Job's log line) against its
 corresponding UC `CRDelivered`/`PhaseChanged` log line
-(`docs/uc/testing-guide.md` §6, or `task -d test/consensus-mock uc:logs`) —
+(`docs/uc/testing-guide.md` §6, or `kubectl -n solo-orbit logs -f node0-0 -c uc`) —
 this per-phase latency is what consensus-mock exists to make cheap to
 iterate on.

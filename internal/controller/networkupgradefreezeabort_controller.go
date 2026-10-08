@@ -40,11 +40,6 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradefreezeabort", "NetworkUpgradeFreezeAbort", &abort)
-	common.Info(ctx, ReasonReconcileStart).
-		Str("phase", string(abort.Status.Phase)).
-		Int64("generation", abort.Generation).
-		Int64("observedGeneration", abort.Status.ObservedGeneration).
-		Msg("Reconciling NetworkUpgradeFreezeAbort")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &abort, FinalizerNetworkUpgradeFreezeAbort); res != nil {
 		return *res, err
@@ -92,6 +87,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if abort.Status.Phase == "" || abort.Status.Phase == operatorv1alpha1.PhasePending {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradeFreezeAbort: starting abort")
 		now := metav1.Now()
 		abort.Status.StartTime = &now
 		abort.Status.Phase = operatorv1alpha1.PhaseRunning
@@ -101,6 +97,7 @@ func (r *NetworkUpgradeFreezeAbortReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradeFreezeAbort: checking whether execute has started")
 	executeExists, err := r.anyExecuteExists(ctx, abort.Namespace, abort.Spec.OperationID)
 	if err != nil {
 		return ctrl.Result{}, err

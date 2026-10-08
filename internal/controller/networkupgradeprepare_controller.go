@@ -78,22 +78,14 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradeprepare", "NetworkUpgradePrepare", &prepare)
-	common.Info(ctx, ReasonReconcileStart).
-		Str("phase", string(prepare.Status.Phase)).
-		Int64("generation", prepare.Generation).
-		Int64("observedGeneration", prepare.Status.ObservedGeneration).
-		Msg("Reconciling NetworkUpgradePrepare")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &prepare, FinalizerNetworkUpgradePrepare); res != nil {
 		return *res, err
 	}
 
-	if prepare.Status.Phase == operatorv1alpha1.PhaseFailed {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseFailed ||
+		prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
 		return ctrl.Result{}, nil
-	}
-
-	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
-		return r.reconcilePrefetch(ctx, &prepare)
 	}
 
 	if ok, msg := validateOperationIDLabel(prepare.Labels, prepare.Spec.OperationID); !ok {
@@ -111,6 +103,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	if prepare.Status.Phase == "" || prepare.Status.Phase == operatorv1alpha1.PhasePending {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: starting prepare")
 		now := metav1.Now()
 		prepare.Status.StartTime = &now
 		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
@@ -119,6 +112,12 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
+
+	if prepare.Status.Phase == operatorv1alpha1.PhaseRunning && prepareReadyForPrefetch(&prepare) {
+		return r.reconcilePrefetch(ctx, &prepare)
+	}
+
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: selecting registries for upgrade components")
 
 	sibling, err := prepareSiblingExists(ctx, r.Client, prepare.Namespace, string(prepare.UID), prepare.Spec.OperationID)
 	if err != nil {
@@ -155,12 +154,13 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 	selected := &operatorv1alpha1.SelectedSources{}
 	succeeded := true
 	allHashesValid := true
+	enabledCount := 0
 
 	for _, name := range operatorv1alpha1.AllUpgradeComponents {
 		comp, present := prepare.Spec.Images.Component(name)
 		if !present {
 			r.eventf(ctx, &prepare, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
-				"%s: omitted from manifest; current image left unchanged", name)
+				"%s: not specified in upgrade images; keeping current image", name)
 			continue
 		}
 		if comp.Enabled != nil && !*comp.Enabled {
@@ -168,6 +168,7 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 				"%s: enabled=false; sidecar will be removed on execute", name)
 			continue
 		}
+		enabledCount++
 
 		results, winner, ok := registry.SelectComponent(ctx, checker, comp, checkTimeout, rng, r.StrategyName)
 
@@ -219,12 +220,30 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 			"%s: selected %s (digest: %s, layerHashesVerified: %v)", name, winner.Image, winner.Digest, winner.LayerHashesVerified)
 	}
 
+	if enabledCount == 0 {
+		msg := "No upgrade components selected; every component is either omitted or disabled"
+		r.eventf(ctx, &prepare, corev1.EventTypeWarning, operatorv1alpha1.EventManifestInvalid, "%s", msg)
+		prepare.Status.Phase = operatorv1alpha1.PhaseFailed
+		prepare.Status.ObservedGeneration = prepare.Generation
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:               operatorv1alpha1.CondManifestValidated,
+			Status:             metav1.ConditionFalse,
+			Reason:             operatorv1alpha1.ReasonSchemaInvalid.String(),
+			Message:            msg,
+			ObservedGeneration: prepare.Generation,
+		})
+		if err := r.Status().Update(ctx, &prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating status")
+		}
+		return ctrl.Result{}, errx.WithReason(errReconcile.New("%s", msg), ReasonManifestInvalid)
+	}
+
 	prepare.Status.ObservedGeneration = prepare.Generation
 
 	if succeeded {
-		now := metav1.Now()
-		prepare.Status.CompletionTime = &now
-		prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+		// Keep Prepare in Running while prefetch work is pending. We only mark
+		// Succeeded once prefetch reaches a terminal condition.
+		prepare.Status.Phase = operatorv1alpha1.PhaseRunning
 		prepare.Status.SelectedSources = selected
 		setCondition(&prepare.Status.Conditions, metav1.Condition{
 			Type:               operatorv1alpha1.CondManifestValidated,
@@ -281,15 +300,54 @@ func (r *NetworkUpgradePrepareReconciler) Reconcile(ctx context.Context, req ctr
 func (r *NetworkUpgradePrepareReconciler) reconcilePrefetch(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
 	completed := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted)
 	if completed != nil {
-		return ctrl.Result{}, nil
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: prefetch complete, marking succeeded")
+		return r.markPrepareSucceeded(ctx, prepare)
 	}
 
 	created := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCreated)
 	if created == nil {
-		return r.createPrefetchJobs(ctx, prepare)
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: creating prefetch jobs for selected images")
+		res, err := r.createPrefetchJobs(ctx, prepare)
+		if err != nil || res.Requeue || res.RequeueAfter > 0 {
+			return res, err
+		}
+		if findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted) != nil {
+			return r.markPrepareSucceeded(ctx, prepare)
+		}
+		return res, nil
 	}
 
-	return r.checkPrefetchJobs(ctx, prepare)
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradePrepare: waiting for prefetch jobs to complete")
+	res, err := r.checkPrefetchJobs(ctx, prepare)
+	if err != nil || res.Requeue || res.RequeueAfter > 0 {
+		return res, err
+	}
+	if findCondition(prepare.Status.Conditions, operatorv1alpha1.CondImagePrefetchCompleted) != nil {
+		return r.markPrepareSucceeded(ctx, prepare)
+	}
+	return res, nil
+}
+
+func prepareReadyForPrefetch(prepare *operatorv1alpha1.NetworkUpgradePrepare) bool {
+	if prepare.Status.SelectedSources == nil {
+		return false
+	}
+	cond := findCondition(prepare.Status.Conditions, operatorv1alpha1.CondRegistrySelected)
+	return cond != nil && cond.Status == metav1.ConditionTrue
+}
+
+func (r *NetworkUpgradePrepareReconciler) markPrepareSucceeded(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
+	if prepare.Status.Phase == operatorv1alpha1.PhaseSucceeded {
+		return ctrl.Result{}, nil
+	}
+	now := metav1.Now()
+	prepare.Status.CompletionTime = &now
+	prepare.Status.Phase = operatorv1alpha1.PhaseSucceeded
+	prepare.Status.ObservedGeneration = prepare.Generation
+	if err := r.Status().Update(ctx, prepare); err != nil {
+		return ctrl.Result{}, wrapStatusUpdate(err, "updating final prepare status")
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context, prepare *operatorv1alpha1.NetworkUpgradePrepare) (ctrl.Result, error) {
@@ -357,6 +415,21 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 
 	images := collectUniqueImages(prepare.Status.SelectedSources)
 	if len(images) == 0 {
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCreated,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no images to prefetch; all components skipped or disabled",
+		})
+		setCondition(&prepare.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondImagePrefetchCompleted,
+			Status:  metav1.ConditionFalse,
+			Reason:  operatorv1alpha1.ReasonPrefetchSkipped.String(),
+			Message: "no images to prefetch; prefetch skipped",
+		})
+		if err := r.Status().Update(ctx, prepare); err != nil {
+			return ctrl.Result{}, wrapStatusUpdate(err, "updating prefetch status")
+		}
 		return ctrl.Result{}, nil
 	}
 

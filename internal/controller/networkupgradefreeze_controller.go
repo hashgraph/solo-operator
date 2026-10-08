@@ -70,11 +70,6 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	ctx = common.ReconcileContext(ctx, "networkupgradefreeze", "NetworkUpgradeFreeze", &freeze)
-	common.Info(ctx, ReasonReconcileStart).
-		Str("phase", string(freeze.Status.Phase)).
-		Int64("generation", freeze.Generation).
-		Int64("observedGeneration", freeze.Status.ObservedGeneration).
-		Msg("Reconciling NetworkUpgradeFreeze")
 
 	if res, err := ensureFinalizer(ctx, r.Client, &freeze, FinalizerNetworkUpgradeFreeze); res != nil {
 		return *res, err
@@ -126,11 +121,12 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 	if prepare == nil || prepare.Status.Phase != operatorv1alpha1.PhaseSucceeded {
-		common.Info(ctx, ReasonWaitingForPrepare).Msg("Waiting for NetworkUpgradePrepare to succeed")
+		common.Info(ctx, ReasonWaitingForPrepare).Msg("NetworkUpgradeFreeze: waiting for prepare to succeed")
 		return ctrl.Result{RequeueAfter: freezePrereqRequeueAfter}, nil
 	}
 
 	if freeze.Status.Phase == "" || freeze.Status.Phase == operatorv1alpha1.PhasePending {
+		common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradeFreeze: starting freeze")
 		now := metav1.Now()
 		freeze.Status.StartTime = &now
 		freeze.Status.Phase = operatorv1alpha1.PhaseRunning
@@ -148,7 +144,7 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		// content — so skipping the registry health check here is sound, not
 		// trust-by-tag. If any digest is missing (should not happen for a selected
 		// source), we fall through to RevalidateComponents rather than skip.
-		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("Prefetched images by digest; skipping registry health check")
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("NetworkUpgradeFreeze: images prefetched by digest, skipping registry health check")
 		now := metav1.Now()
 		freeze.Status.CompletionTime = &now
 		freeze.Status.Phase = operatorv1alpha1.PhaseSucceeded
@@ -174,6 +170,8 @@ func (r *NetworkUpgradeFreezeReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 		return ctrl.Result{}, nil
 	}
+
+	common.Info(ctx, ReasonReconcileStart).Msg("NetworkUpgradeFreeze: revalidating registries before freeze")
 
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
 
