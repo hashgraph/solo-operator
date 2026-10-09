@@ -141,6 +141,83 @@ func TestResolveImageSources_MissingHashesIsTerminal(t *testing.T) {
 	}
 }
 
+func TestResolveImageSources_MismatchedCandidateTagsIsTerminal(t *testing.T) {
+	capsule := capsuleWithConsensusSource()
+	// Add a second candidate registry carrying a different version tag. A deterministic
+	// source must publish one version to every registry, so this is a terminal config error.
+	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	src.ImageRepositories = append(src.ImageRepositories, operatorv1alpha1.ImageRepository{
+		Repository: "docker.io/hashgraph", ImageName: "consensus-node", ImageTag: "0.76.0",
+	})
+	r := newResolveReconciler(&fakeImageChecker{}, capsule)
+
+	res, err := r.resolveImageSources(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected a stop result for a source with differing candidate tags")
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("phase = %q, want Failed", capsule.Status.Phase)
+	}
+}
+
+func TestResolveImageSources_SidecarMismatchedCandidateTagsIsTerminal(t *testing.T) {
+	// The intra-source tag check runs for every sourced container, not just the
+	// consensus node. A UC sidecar whose candidate tags disagree is terminal.
+	capsule := capsuleWithConsensusSource() // valid consensus-node source
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
+		Enabled: true,
+		SoftwareVersionSource: &operatorv1alpha1.SoftwareVersionSource{
+			ImageRepositories: []operatorv1alpha1.ImageRepository{
+				{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"},
+				{Repository: "docker.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.1.0"},
+			},
+			ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{
+				{OS: "linux", Architecture: "amd64", LayerHashes: []string{"sha256:bbb"}},
+			},
+		},
+	}
+	r := newResolveReconciler(&fakeImageChecker{}, capsule)
+
+	res, err := r.resolveImageSources(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected a stop result for a sidecar source with differing candidate tags")
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("phase = %q, want Failed", capsule.Status.Phase)
+	}
+}
+
+func TestMismatchedSourceTag(t *testing.T) {
+	repo := func(tag string) operatorv1alpha1.ImageRepository {
+		return operatorv1alpha1.ImageRepository{Repository: "r", ImageName: "n", ImageTag: tag}
+	}
+	tests := []struct {
+		name string
+		src  *operatorv1alpha1.SoftwareVersionSource
+		want string
+	}{
+		{"nil source", nil, ""},
+		{"empty list", &operatorv1alpha1.SoftwareVersionSource{}, ""},
+		{"single candidate", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0")}}, ""},
+		{"all match", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.75.0")}}, ""},
+		{"second differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.76.0")}}, "0.76.0"},
+		{"last differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.77.0")}}, "0.77.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mismatchedSourceTag(tt.src); got != tt.want {
+				t.Errorf("mismatchedSourceTag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveImageSources_NoValidRegistryRequeues(t *testing.T) {
 	capsule := capsuleWithConsensusSource()
 	checker := &fakeImageChecker{fn: func(spec operatorv1alpha1.ImageRegistrySpec) registry.RegistryResult {
@@ -183,8 +260,10 @@ func TestResolveImageSources_PrunesRemovedSource(t *testing.T) {
 }
 
 func TestResolveImageSources_SourceWinsOverSoftwareVersion(t *testing.T) {
+	// Defense-in-depth: the CRD makes softwareVersion/softwareVersionSource mutually
+	// exclusive, but if both ever reach the controller the resolved source still wins
+	// (the operator deploys the verified, digest-pinned source image).
 	capsule := capsuleWithConsensusSource()
-	// A pre-existing single SoftwareVersion should be replaced by the resolved source.
 	capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion = &operatorv1alpha1.SoftwareVersion{
 		Repository: "old", ImageName: "old", ImageTag: "old",
 	}

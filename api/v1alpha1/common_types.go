@@ -408,6 +408,9 @@ type GCSConfig struct {
 }
 
 // CheetahUploader is the Cheetah uploader configuration
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled uploader may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type CheetahUploader struct {
 	// Enabled enables the uploader
 	// +kubebuilder:default=false
@@ -650,6 +653,9 @@ type CheetahBlobConfig struct {
 }
 
 // StreamUploader defines a stream uploader sidecar
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled uploader may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type StreamUploader struct {
 	// Name is the container name
 	// +optional

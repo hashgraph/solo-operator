@@ -65,6 +65,24 @@ func sourcedContainers(capsule *operatorv1alpha1.ConsensusCapsule) []sourcedCont
 	return out
 }
 
+// mismatchedSourceTag checks that every candidate registry in a source lists the
+// same image tag. A deterministic source publishes one version to every registry,
+// so the tags must match. It returns the first tag that differs from the first
+// candidate's, or "" when they all match (an empty list also returns "" — the
+// "at least one registry" check is done separately).
+func mismatchedSourceTag(src *operatorv1alpha1.SoftwareVersionSource) string {
+	if src == nil || len(src.ImageRepositories) == 0 {
+		return ""
+	}
+	want := src.ImageRepositories[0].ImageTag
+	for i := 1; i < len(src.ImageRepositories); i++ {
+		if got := src.ImageRepositories[i].ImageTag; got != want {
+			return got
+		}
+	}
+	return ""
+}
+
 // resolveImageSources resolves each container's SoftwareVersionSource to a verified,
 // digest-pinned SoftwareVersion, writing it back into the spec in memory so the resource
 // builders deploy the pinned image unchanged. It returns a non-nil *ctrl.Result when the
@@ -102,6 +120,26 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 					"container %q softwareVersionSource is invalid: needs at least one imageRepository and per-platform layer hashes (os + architecture)", sc.name),
 					ReasonImageSourceInvalid),
 				"Set imageRepositories and imageVerificationSpec (os, architecture, layerHashes) on the source, or use a single softwareVersion instead.",
+			))
+		}
+
+		// A source must list the same version in every candidate registry. The shared
+		// layer hashes verify the image content, but a mismatched tag means the
+		// candidates are not the same version, so registry selection could deploy a
+		// different version depending on which registry it picks. Fail closed on that.
+		//
+		// This runs in Go, not as a CRD rule: a CRD rule that loops over the registry
+		// list would exceed the API server's cost limit once the list is large.
+		//
+		// softwareVersion and softwareVersionSource are mutually exclusive (the CRD's
+		// exactly-one / at-most-one rule enforces that), so there is no cross-field tag
+		// to check here — only that the source is internally consistent.
+		if bad := mismatchedSourceTag(sc.source); bad != "" {
+			return r.failImageSourceInvalid(ctx, capsule, errx.WithHints(
+				errx.WithReason(errImageSourceInvalid.New(
+					"container %q softwareVersionSource lists differing image tags across its candidate registries (e.g. %q); a deterministic source must publish the same version in every registry", sc.name, bad),
+					ReasonImageSourceInvalid),
+				"Make every imageRepositories[*].imageTag identical (the same version in each registry).",
 			))
 		}
 

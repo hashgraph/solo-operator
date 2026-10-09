@@ -3331,8 +3331,10 @@ spec:
                       the StatefulSet.
                     properties:
                       alloy:
-                        description: AlloyConfig is the Grafana Alloy telemetry sidecar
-                          config.
+                        description: |-
+                          AlloyConfig is the Grafana Alloy telemetry sidecar config.
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled sidecar may declare neither).
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -3777,8 +3779,14 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       backupUploader:
-                        description: StreamUploader defines a stream uploader sidecar
+                        description: |-
+                          StreamUploader defines a stream uploader sidecar
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           additionalVolumeMounts:
                             description: AdditionalVolumeMounts for the uploader
@@ -4227,8 +4235,14 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       blocksUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -4592,9 +4606,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       consensusNode:
-                        description: ConsensusNodeContainer configures the main consensus
-                          node container.
+                        description: |-
+                          ConsensusNodeContainer configures the main consensus node container.
+                          The consensus node always runs, so it must declare exactly one image source:
+                          softwareVersion (single registry) or softwareVersionSource (multi-registry), never both.
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -5134,11 +5153,13 @@ spec:
                             type: object
                         type: object
                         x-kubernetes-validations:
-                        - message: one of softwareVersion or softwareVersionSource
-                            is required
-                          rule: has(self.softwareVersion) || has(self.softwareVersionSource)
+                        - message: set exactly one of softwareVersion or softwareVersionSource
+                          rule: has(self.softwareVersion) != has(self.softwareVersionSource)
                       eventsUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -5502,8 +5523,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       recordsUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -5867,9 +5894,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       uc:
-                        description: UcSidecar configures the Update Coordinator sidecar
-                          container.
+                        description: |-
+                          UcSidecar configures the Update Coordinator sidecar container.
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled sidecar may declare neither).
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -6232,6 +6264,9 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                     required:
                     - consensusNode
                     type: object
