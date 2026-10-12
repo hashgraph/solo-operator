@@ -106,7 +106,7 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 
 		It("Accepts a disabled uploader that sets neither", func() {
 			c := capsule("uploader-neither", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: sv("0.65.1")})
-			c.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: false}
+			c.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{Enabled: false, MaxProcessors: 1}
 			Expect(k8sClient.Create(ctx, c)).Should(Succeed())
 		})
 	})
