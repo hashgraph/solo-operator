@@ -193,6 +193,55 @@ func TestResolveImageSources_SidecarMismatchedCandidateTagsIsTerminal(t *testing
 	}
 }
 
+func TestResolveImageSources_LatestCandidateTagIsTerminal(t *testing.T) {
+	capsule := capsuleWithConsensusSource()
+	// Pin every candidate to the mutable "latest" tag. The tags agree (no mismatch), but
+	// "latest" is a mutable reference, so it is a terminal config error.
+	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	for i := range src.ImageRepositories {
+		src.ImageRepositories[i].ImageTag = "latest"
+	}
+	r := newResolveReconciler(&fakeImageChecker{}, capsule)
+
+	res, err := r.resolveImageSources(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res == nil {
+		t.Fatal("expected a stop result for a source pinned to latest")
+	}
+	if capsule.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("phase = %q, want Failed", capsule.Status.Phase)
+	}
+}
+
+func TestLatestTagInSource(t *testing.T) {
+	repo := func(tag string) operatorv1alpha1.ImageRepository {
+		return operatorv1alpha1.ImageRepository{Repository: "r", ImageName: "n", ImageTag: tag}
+	}
+	tests := []struct {
+		name       string
+		src        *operatorv1alpha1.SoftwareVersionSource
+		want       string
+		wantLatest bool
+	}{
+		{"nil source", nil, "", false},
+		{"no latest", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0")}}, "", false},
+		{"first is latest", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("latest"), repo("0.75.0")}}, "latest", true},
+		{"later is latest", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("latest")}}, "latest", true},
+		// Case-insensitive: the mutable tag is rejected regardless of casing.
+		{"mixed case latest", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("Latest")}}, "Latest", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, latest := latestTagInSource(tt.src)
+			if got != tt.want || latest != tt.wantLatest {
+				t.Errorf("latestTagInSource() = (%q, %v), want (%q, %v)", got, latest, tt.want, tt.wantLatest)
+			}
+		})
+	}
+}
+
 func TestMismatchedSourceTag(t *testing.T) {
 	repo := func(tag string) operatorv1alpha1.ImageRepository {
 		return operatorv1alpha1.ImageRepository{Repository: "r", ImageName: "n", ImageTag: tag}

@@ -59,7 +59,7 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 						ConsensusNode: node,
 						UC: &operatorv1alpha1.UcSidecar{
 							Enabled:         true,
-							SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"},
+							SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"},
 						},
 					},
 				},
@@ -98,6 +98,16 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("imageTag"))
 		})
+
+		It("Rejects a softwareVersion pinned to the mutable latest tag", func() {
+			// The single-registry field is a cheap CEL rule. A source candidate's "latest"
+			// is rejected in the reconciler instead (unbounded list, CEL cost budget) — see
+			// TestLatestTagInSource.
+			c := capsule("node-sv-latest", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: sv("latest")})
+			err := k8sClient.Create(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must not be 'latest'"))
+		})
 	})
 
 	Context("Sidecar — at most one image source", func() {
@@ -105,8 +115,8 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 			c := capsule("uc-both", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: sv("0.65.1")})
 			c.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
 				Enabled:               true,
-				SoftwareVersion:       &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"},
-				SoftwareVersionSource: source("latest"),
+				SoftwareVersion:       &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"},
+				SoftwareVersionSource: source("1.0.0"),
 			}
 			err := k8sClient.Create(ctx, c)
 			Expect(err).To(HaveOccurred())

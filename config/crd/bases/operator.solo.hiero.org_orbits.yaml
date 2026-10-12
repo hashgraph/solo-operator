@@ -452,8 +452,15 @@ spec:
                               x-kubernetes-map-type: atomic
                             type: array
                           imageTag:
-                            description: ImageTag is the tag of the image (e.g., focal)
+                            description: |-
+                              ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                              it can silently upgrade or downgrade the running image. Pin a specific version.
+                            maxLength: 128
                             type: string
+                            x-kubernetes-validations:
+                            - message: 'imageTag must not be ''latest'': pin a specific
+                                version so the image cannot silently change'
+                              rule: self.lowerAscii() != 'latest'
                           imageVerificationSpec:
                             description: ImageVerificationSpec contains hash verification
                               details
@@ -494,6 +501,10 @@ spec:
                         - imageTag
                         - repository
                         type: object
+                        x-kubernetes-validations:
+                        - message: set a non-empty imageTag or a digest so the image
+                            is not resolved to :latest
+                          rule: size(self.imageTag) > 0 || has(self.digest)
                     type: object
                 type: object
               upgrade:

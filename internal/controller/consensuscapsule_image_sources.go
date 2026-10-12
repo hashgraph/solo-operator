@@ -85,6 +85,24 @@ func mismatchedSourceTag(src *operatorv1alpha1.SoftwareVersionSource) (string, b
 	return "", false
 }
 
+// latestTagInSource reports the first candidate registry whose tag is the mutable
+// "latest" (matched case-insensitively). A deterministic source must pin a specific
+// version, so "latest" — which can silently upgrade or downgrade the running image — is
+// rejected. This runs in Go rather than as a CRD CEL rule: a per-candidate rule over the
+// unbounded imageRepositories list would exceed the API server's cost budget (the same
+// reason mismatchedSourceTag is not a CEL rule).
+func latestTagInSource(src *operatorv1alpha1.SoftwareVersionSource) (string, bool) {
+	if src == nil {
+		return "", false
+	}
+	for _, r := range src.ImageRepositories {
+		if strings.EqualFold(r.ImageTag, "latest") {
+			return r.ImageTag, true
+		}
+	}
+	return "", false
+}
+
 // resolveImageSources resolves each container's SoftwareVersionSource to a verified,
 // digest-pinned SoftwareVersion, writing it back into the spec in memory so the resource
 // builders deploy the pinned image unchanged. It returns a non-nil *ctrl.Result when the
@@ -142,6 +160,17 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 					"container %q softwareVersionSource lists differing image tags across its candidate registries (e.g. %q); a deterministic source must publish the same version in every registry", sc.name, bad),
 					ReasonImageSourceInvalid),
 				"Make every imageRepositories[*].imageTag identical (the same version in each registry).",
+			))
+		}
+
+		// Reject the mutable "latest" tag: it can silently upgrade or downgrade the running
+		// image. Enforced here, not as a CRD rule, for the same cost-budget reason as above.
+		if bad, isLatest := latestTagInSource(sc.source); isLatest {
+			return r.failImageSourceInvalid(ctx, capsule, errx.WithHints(
+				errx.WithReason(errImageSourceInvalid.New(
+					"container %q softwareVersionSource pins the mutable tag %q; a deterministic source must pin a specific version", sc.name, bad),
+					ReasonImageSourceInvalid),
+				"Replace 'latest' with a specific version tag in every imageRepositories[*].imageTag.",
 			))
 		}
 

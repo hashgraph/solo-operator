@@ -3585,8 +3585,11 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion defines the container image
-                              version
+                            description: |-
+                              SoftwareVersion defines the container image version.
+                              The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+                              no digest would resolve to :latest — a mutable reference that could silently upgrade or
+                              downgrade the running image — so it is rejected.
                             properties:
                               digest:
                                 description: |-
@@ -3630,9 +3633,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -3673,6 +3683,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -3721,9 +3735,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -4091,9 +4106,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -4134,6 +4156,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -4182,9 +4208,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -4461,9 +4488,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -4504,6 +4538,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -4552,9 +4590,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -5018,9 +5057,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5061,6 +5107,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -5109,9 +5159,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -5388,9 +5439,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5431,6 +5489,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -5479,9 +5541,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -5764,9 +5827,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5807,6 +5877,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -5855,9 +5929,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:
@@ -6100,8 +6175,11 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion defines the container image
-                              version
+                            description: |-
+                              SoftwareVersion defines the container image version.
+                              The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+                              no digest would resolve to :latest — a mutable reference that could silently upgrade or
+                              downgrade the running image — so it is rejected.
                             properties:
                               digest:
                                 description: |-
@@ -6145,9 +6223,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+                                  it can silently upgrade or downgrade the running image. Pin a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -6188,6 +6273,10 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
@@ -6236,9 +6325,10 @@ spec:
                                     imageTag:
                                       description: |-
                                         ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-                                        carry an explicit tag: a deterministic source publishes the same version to every
-                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
-                                        is rejected.
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
                                       minLength: 1
                                       type: string
                                     repository:

@@ -73,7 +73,11 @@ const (
 	ImagePullPolicyIfNotPresent ImagePullPolicy = "IfNotPresent"
 )
 
-// SoftwareVersion defines the container image version
+// SoftwareVersion defines the container image version.
+// The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+// no digest would resolve to :latest — a mutable reference that could silently upgrade or
+// downgrade the running image — so it is rejected.
+// +kubebuilder:validation:XValidation:rule="size(self.imageTag) > 0 || has(self.digest)",message="set a non-empty imageTag or a digest so the image is not resolved to :latest"
 type SoftwareVersion struct {
 	// Repository is the container registry (e.g., docker.io/library)
 	Repository string `json:"repository"`
@@ -81,7 +85,10 @@ type SoftwareVersion struct {
 	// ImageName is the name of the image (e.g., ubuntu)
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the tag of the image (e.g., focal)
+	// ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
+	// it can silently upgrade or downgrade the running image. Pin a specific version.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'latest'",message="imageTag must not be 'latest': pin a specific version so the image cannot silently change"
 	ImageTag string `json:"imageTag"`
 
 	// Digest, when set, pins the image to an immutable content digest ("sha256:...").
@@ -135,9 +142,10 @@ type ImageRepository struct {
 	ImageName string `json:"imageName"`
 
 	// ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
-	// carry an explicit tag: a deterministic source publishes the same version to every
-	// registry, so an empty tag (which would resolve to :latest and differ per registry)
-	// is rejected.
+	// carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+	// per registry. The mutable "latest" tag is also rejected, but in the reconciler
+	// (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+	// imageRepositories list would exceed the API server's cost budget.
 	// +kubebuilder:validation:MinLength=1
 	ImageTag string `json:"imageTag"`
 
