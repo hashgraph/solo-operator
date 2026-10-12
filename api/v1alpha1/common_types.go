@@ -134,7 +134,11 @@ type ImageRepository struct {
 	// ImageName is the image name
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the image tag
+	// ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+	// carry an explicit tag: a deterministic source publishes the same version to every
+	// registry, so an empty tag (which would resolve to :latest and differ per registry)
+	// is rejected.
+	// +kubebuilder:validation:MinLength=1
 	ImageTag string `json:"imageTag"`
 
 	// ImagePullSecrets for accessing private registries

@@ -89,6 +89,15 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 		It("Accepts softwareVersionSource only", func() {
 			Expect(k8sClient.Create(ctx, capsule("node-src-only", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersionSource: source("0.65.1")}))).Should(Succeed())
 		})
+
+		It("Rejects a source candidate with an empty imageTag", func() {
+			// An empty tag would resolve to :latest and differ per registry, defeating the
+			// "same version everywhere" guarantee, so the CRD requires a non-empty tag.
+			c := capsule("node-src-empty-tag", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersionSource: source("")})
+			err := k8sClient.Create(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("imageTag"))
+		})
 	})
 
 	Context("Sidecar — at most one image source", func() {

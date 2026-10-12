@@ -3719,7 +3719,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -4175,7 +4180,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -4540,7 +4550,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5092,7 +5107,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5457,7 +5477,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5828,7 +5853,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -6204,7 +6234,12 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit tag: a deterministic source publishes the same version to every
+                                        registry, so an empty tag (which would resolve to :latest and differ per registry)
+                                        is rejected.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
