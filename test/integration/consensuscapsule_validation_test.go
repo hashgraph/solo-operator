@@ -90,6 +90,21 @@ var _ = Describe("ConsensusCapsule Image Source Validation", func() {
 			Expect(k8sClient.Create(ctx, capsule("node-src-only", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersionSource: source("0.65.1")}))).Should(Succeed())
 		})
 
+		It("Rejects a softwareVersion with an empty imageTag and no digest", func() {
+			// An empty tag with no digest resolves to :latest, so the image must be pinned
+			// by a non-empty tag or a digest.
+			c := capsule("node-sv-empty-tag", operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: sv("")})
+			err := k8sClient.Create(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("non-empty imageTag or a digest"))
+		})
+
+		It("Accepts a softwareVersion with an empty imageTag when a digest is set", func() {
+			node := operatorv1alpha1.ConsensusNodeContainer{SoftwareVersion: sv("")}
+			node.SoftwareVersion.Digest = operatorv1alpha1.Sha256Digest("sha256:" + "a1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809")
+			Expect(k8sClient.Create(ctx, capsule("node-sv-digest-only", node))).Should(Succeed())
+		})
+
 		It("Rejects a source candidate with an empty imageTag", func() {
 			// An empty tag would resolve to :latest and differ per registry, defeating the
 			// "same version everywhere" guarantee, so the CRD requires a non-empty tag.
