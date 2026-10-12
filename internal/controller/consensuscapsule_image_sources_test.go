@@ -198,21 +198,26 @@ func TestMismatchedSourceTag(t *testing.T) {
 		return operatorv1alpha1.ImageRepository{Repository: "r", ImageName: "n", ImageTag: tag}
 	}
 	tests := []struct {
-		name string
-		src  *operatorv1alpha1.SoftwareVersionSource
-		want string
+		name         string
+		src          *operatorv1alpha1.SoftwareVersionSource
+		want         string
+		wantMismatch bool
 	}{
-		{"nil source", nil, ""},
-		{"empty list", &operatorv1alpha1.SoftwareVersionSource{}, ""},
-		{"single candidate", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0")}}, ""},
-		{"all match", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.75.0")}}, ""},
-		{"second differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.76.0")}}, "0.76.0"},
-		{"last differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.77.0")}}, "0.77.0"},
+		{"nil source", nil, "", false},
+		{"empty list", &operatorv1alpha1.SoftwareVersionSource{}, "", false},
+		{"single candidate", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0")}}, "", false},
+		{"all match", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.75.0")}}, "", false},
+		{"second differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.76.0")}}, "0.76.0", true},
+		{"last differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("0.75.0"), repo("0.77.0")}}, "0.77.0", true},
+		// A later candidate with an empty tag differs from a non-empty first tag: the
+		// returned string is "" but it must still be flagged as a mismatch.
+		{"empty tag differs", &operatorv1alpha1.SoftwareVersionSource{ImageRepositories: []operatorv1alpha1.ImageRepository{repo("0.75.0"), repo("")}}, "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := mismatchedSourceTag(tt.src); got != tt.want {
-				t.Errorf("mismatchedSourceTag() = %q, want %q", got, tt.want)
+			got, mismatch := mismatchedSourceTag(tt.src)
+			if got != tt.want || mismatch != tt.wantMismatch {
+				t.Errorf("mismatchedSourceTag() = (%q, %v), want (%q, %v)", got, mismatch, tt.want, tt.wantMismatch)
 			}
 		})
 	}

@@ -68,19 +68,21 @@ func sourcedContainers(capsule *operatorv1alpha1.ConsensusCapsule) []sourcedCont
 // mismatchedSourceTag checks that every candidate registry in a source lists the
 // same image tag. A deterministic source publishes one version to every registry,
 // so the tags must match. It returns the first tag that differs from the first
-// candidate's, or "" when they all match (an empty list also returns "" — the
-// "at least one registry" check is done separately).
-func mismatchedSourceTag(src *operatorv1alpha1.SoftwareVersionSource) string {
+// candidate's and mismatch=true, or mismatch=false when they all match. An empty
+// tag is a legitimate value, not a sentinel, so a candidate with an empty tag that
+// differs from the first is still reported as a mismatch (the returned string is
+// then ""); the "at least one registry" check is done separately.
+func mismatchedSourceTag(src *operatorv1alpha1.SoftwareVersionSource) (string, bool) {
 	if src == nil || len(src.ImageRepositories) == 0 {
-		return ""
+		return "", false
 	}
 	want := src.ImageRepositories[0].ImageTag
 	for i := 1; i < len(src.ImageRepositories); i++ {
 		if got := src.ImageRepositories[i].ImageTag; got != want {
-			return got
+			return got, true
 		}
 	}
-	return ""
+	return "", false
 }
 
 // resolveImageSources resolves each container's SoftwareVersionSource to a verified,
@@ -134,7 +136,7 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 		// softwareVersion and softwareVersionSource are mutually exclusive (the CRD's
 		// exactly-one / at-most-one rule enforces that), so there is no cross-field tag
 		// to check here — only that the source is internally consistent.
-		if bad := mismatchedSourceTag(sc.source); bad != "" {
+		if bad, mismatch := mismatchedSourceTag(sc.source); mismatch {
 			return r.failImageSourceInvalid(ctx, capsule, errx.WithHints(
 				errx.WithReason(errImageSourceInvalid.New(
 					"container %q softwareVersionSource lists differing image tags across its candidate registries (e.g. %q); a deterministic source must publish the same version in every registry", sc.name, bad),
