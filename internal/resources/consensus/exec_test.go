@@ -8,9 +8,12 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/automa-saga/errx"
 	"github.com/joomcode/errorx"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -123,6 +126,36 @@ func TestS6Controller_TransportError_Retryable(t *testing.T) {
 	}
 	if !errorx.HasTrait(err, errorx.Temporary()) {
 		t.Error("transport error must be temporary (retryable)")
+	}
+}
+
+func TestS6Controller_PodNotReady_DistinctType(t *testing.T) {
+	cases := map[string]error{
+		"container_not_created": errors.New(`Internal error occurred: error executing command in container: container is not created or running`),
+		"container_not_found":   errors.New(`unable to upgrade connection: container not found ("consensus-node")`),
+		"pod_not_found_typed":   apierrors.NewNotFound(corev1.Resource("pods"), "node0-0"),
+		// The WebSocket exec transport surfaces the 404 as a plain, untyped error
+		// (same as the forbidden case), so apierrors.IsNotFound misses it and the
+		// string fallback must catch it.
+		"pod_not_found_wrapped": errors.New(`unable to upgrade connection: pods "node0-0" not found`),
+	}
+	for name, streamErr := range cases {
+		t.Run(name, func(t *testing.T) {
+			c := newTestController(t, &fakeExecutor{streamErr: streamErr})
+			_, err := c.exec(context.Background(), testCapsule(), s6QueryCmd)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !errorx.IsOfType(err, errExecPodNotReady) {
+				t.Errorf("expected errExecPodNotReady, got %v", err)
+			}
+			if !errorx.HasTrait(err, errorx.Temporary()) {
+				t.Error("pod-not-ready error must be temporary (retryable)")
+			}
+			if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonExecPodNotReady {
+				t.Errorf("expected reason %s, got %q (ok=%v)", ReasonExecPodNotReady, reason, ok)
+			}
+		})
 	}
 }
 
@@ -239,6 +272,22 @@ func TestActuationSubReconciler_SetsStatusRunState(t *testing.T) {
 		}
 		if capsule.Status.RunState != operatorv1alpha1.RunStateStopped {
 			t.Errorf("expected RunStateStopped after Stop, got %v", capsule.Status.RunState)
+		}
+	})
+
+	t.Run("pod_not_ready_requeues_quietly", func(t *testing.T) {
+		podNotReadyErr := errExecPodNotReady.New("container not found")
+		runner := &fakeS6Runner{err: podNotReadyErr}
+		rec := NewActuationSubReconciler(client, scheme, runner, nil)
+		capsule := testCapsule()
+		capsule.Spec.DesiredRunState = operatorv1alpha1.RunStateRunning
+
+		result, err := rec.Reconcile(context.Background(), capsule)
+		if err != nil {
+			t.Fatalf("expected no error (quiet requeue), got: %v", err)
+		}
+		if result.RequeueAfter != 2*time.Second {
+			t.Errorf("expected RequeueAfter=2s, got %v", result.RequeueAfter)
 		}
 	})
 }
