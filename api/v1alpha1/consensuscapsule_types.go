@@ -284,8 +284,8 @@ type UcSidecar struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -326,14 +326,13 @@ type ConsensusNodeContainer struct {
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// container image spec; mutually optional with softwareVersionSource — at least one must be set.
-	// When softwareVersionSource is also set it takes precedence and this field is ignored.
+	// container image spec; mutually exclusive with softwareVersionSource — set exactly one.
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -372,8 +371,8 @@ type AlloyConfig struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 

@@ -85,8 +85,10 @@ type SoftwareVersion struct {
 	// ImageName is the name of the image (e.g., ubuntu)
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
-	// it can silently upgrade or downgrade the running image. Pin a specific version.
+	// ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
+	// even when a digest is set: it is a misleading, mutable-by-convention tag with no need
+	// here. Pin a specific version (optionally with a digest) so the image cannot silently
+	// upgrade or downgrade.
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'latest'",message="imageTag must not be 'latest': pin a specific version so the image cannot silently change"
 	ImageTag string `json:"imageTag"`
@@ -155,8 +157,8 @@ type ImageRepository struct {
 }
 
 // SoftwareVersionSource defines multiple candidate registries for a container image,
-// together with the layer hashes used to verify them. When set on a container it
-// replaces the single SoftwareVersion: the operator probes the registries, verifies
+// together with the layer hashes used to verify them. It is mutually exclusive with the
+// single SoftwareVersion: when set, the operator probes the registries, verifies
 // each candidate's layer hashes, and deploys the resolved image pinned to its content
 // digest. Layer hashes are mandatory (ImageVerificationSpec is required and non-empty)
 // so a source is never deployed unverified — a container that needs no verification
@@ -438,8 +440,8 @@ type CheetahUploader struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -678,8 +680,8 @@ type StreamUploader struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 

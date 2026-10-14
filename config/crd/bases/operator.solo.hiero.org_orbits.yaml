@@ -453,8 +453,10 @@ spec:
                             type: array
                           imageTag:
                             description: |-
-                              ImageTag is the tag of the image (e.g., focal). The mutable "latest" tag is rejected:
-                              it can silently upgrade or downgrade the running image. Pin a specific version.
+                              ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
+                              even when a digest is set: it is a misleading, mutable-by-convention tag with no need
+                              here. Pin a specific version (optionally with a digest) so the image cannot silently
+                              upgrade or downgrade.
                             maxLength: 128
                             type: string
                             x-kubernetes-validations:
