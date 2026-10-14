@@ -3634,10 +3634,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -4109,10 +4107,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -4493,10 +4489,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -5063,10 +5057,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -5447,10 +5439,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -5837,10 +5827,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:
@@ -6235,10 +6223,8 @@ spec:
                                 type: array
                               imageTag:
                                 description: |-
-                                  ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-                                  even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-                                  here. Pin a specific version (optionally with a digest) so the image cannot silently
-                                  upgrade or downgrade.
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
                                 maxLength: 128
                                 type: string
                                 x-kubernetes-validations:

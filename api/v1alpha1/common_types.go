@@ -85,10 +85,8 @@ type SoftwareVersion struct {
 	// ImageName is the name of the image (e.g., ubuntu)
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the tag of the image (e.g., focal). The "latest" tag is rejected outright,
-	// even when a digest is set: it is a misleading, mutable-by-convention tag with no need
-	// here. Pin a specific version (optionally with a digest) so the image cannot silently
-	// upgrade or downgrade.
+	// ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+	// (rejected even with a digest) so the image is pinned to a specific version.
 	// +kubebuilder:validation:MaxLength=128
 	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'latest'",message="imageTag must not be 'latest': pin a specific version so the image cannot silently change"
 	ImageTag string `json:"imageTag"`
