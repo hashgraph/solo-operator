@@ -160,7 +160,7 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 								ImageTag:   "0.74.0",
 							},
 						},
-						UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"}},
+						UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"}},
 					},
 				},
 			},
