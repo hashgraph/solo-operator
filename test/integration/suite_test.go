@@ -152,6 +152,7 @@ var _ = BeforeSuite(func() {
 
 	Expect(controller.RegisterCapsuleOrbitIndex(k8sManager)).To(Succeed())
 	Expect(controller.RegisterPrepareIndex(k8sManager)).To(Succeed())
+	Expect(controller.RegisterCapsuleOrbitIndex(k8sManager)).To(Succeed())
 
 	prepareReconciler := controller.NewNetworkUpgradePrepareReconciler(
 		k8sManager.GetClient(),
