@@ -111,7 +111,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 	}, nil
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/finalizers,verbs=update
@@ -123,8 +123,8 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=get;create
 // +kubebuilder:rbac:groups="",resources=pods/status,verbs=patch
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch,roleName=manager-role
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch,roleName=manager-role
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 

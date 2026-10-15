@@ -122,6 +122,9 @@ rbac:
   # Create RBAC resources
   create: true
 
+# Namespaces the operator manages (must exist). Empty = all namespaces.
+allowedNamespaces: []
+
 # ValidatingAdmissionPolicy enforcing the NetworkUpgrade* CR label invariants
 # (operation-id and step labels). Rejects malformed NetworkUpgrade* writes at
 # admission. Requires Kubernetes >= 1.32 (VAP is GA), which the chart already

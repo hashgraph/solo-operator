@@ -62,6 +62,23 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+Allowed namespaces, or "_all_namespaces_placeholder" when empty.
+*/}}
+{{- define "solo-operator.allowedNamespaces" -}}
+{{- if .Values.allowedNamespaces }}
+{{- $online := lookup "v1" "Namespace" "" "kube-system" }}
+{{- range .Values.allowedNamespaces }}
+{{- if and $online (not (lookup "v1" "Namespace" "" .)) }}
+{{- fail (printf "allowedNamespaces: namespace %q not found; create it before adding it to allowedNamespaces" .) }}
+{{- end }}
+{{- end }}
+{{- join " " (uniq .Values.allowedNamespaces) }}
+{{- else -}}
+_all_namespaces_placeholder
+{{- end }}
+{{- end }}
+
+{{/*
 Controller manager name
 */}}
 {{- define "solo-operator.controllerManagerName" -}}

@@ -58,6 +58,9 @@ spec:
             {{- with .Values.controller.nodeActiveAlertInterval }}
             - --node-active-alert-interval={{ . }}
             {{- end }}
+            {{- if .Values.allowedNamespaces }}
+            - --allowed-namespaces={{ include "solo-operator.allowedNamespaces" . | replace " " "," }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:

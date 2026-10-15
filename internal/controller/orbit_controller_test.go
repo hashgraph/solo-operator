@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -41,5 +42,41 @@ func TestDeleteOwnedCapsules_CascadesNetworkGenesis(t *testing.T) {
 	err = c.Get(context.Background(), types.NamespacedName{Name: genesis.Name, Namespace: genesis.Namespace}, &operatorv1alpha1.NetworkGenesis{})
 	if err == nil {
 		t.Fatalf("expected NetworkGenesis to be deleted, but it still exists")
+	}
+}
+
+func TestSetNamespaceAllowed(t *testing.T) {
+	tests := []struct {
+		name       string
+		allowed    []string
+		wantStatus metav1.ConditionStatus
+		wantReason string
+	}{
+		{name: "all namespaces", allowed: nil},
+		{name: "allowed", allowed: []string{"other", "solo"}, wantStatus: metav1.ConditionTrue, wantReason: ReasonNamespaceAllowed.String()},
+		{name: "not allowed", allowed: []string{"other"}, wantStatus: metav1.ConditionFalse, wantReason: ReasonNamespaceNotAllowed.String()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "solo"}}
+			orbit.Status.Conditions = []metav1.Condition{{Type: operatorv1alpha1.OrbitConditionTypeNamespaceAllowed, Status: metav1.ConditionUnknown}}
+			r := &OrbitReconciler{AllowedNamespaces: tt.allowed}
+
+			r.setNamespaceAllowed(context.Background(), orbit)
+
+			cond := apimeta.FindStatusCondition(orbit.Status.Conditions, operatorv1alpha1.OrbitConditionTypeNamespaceAllowed)
+			if tt.wantStatus == "" {
+				if cond != nil {
+					t.Fatalf("expected condition removed, got %+v", cond)
+				}
+				return
+			}
+			if cond == nil {
+				t.Fatal("expected NamespaceAllowed condition")
+			}
+			if cond.Status != tt.wantStatus || cond.Reason != tt.wantReason {
+				t.Fatalf("got status=%s reason=%s, want status=%s reason=%s", cond.Status, cond.Reason, tt.wantStatus, tt.wantReason)
+			}
+		})
 	}
 }
