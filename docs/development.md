@@ -6,7 +6,7 @@ Guide for building, testing, and running the Solo Operator locally. For usage
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.27+
 - Kubernetes 1.32+ (CRD `selectableFields` is used for upgrade-controller dedup; GA in 1.32)
 - [Task](https://taskfile.dev/) (optional, for build automation)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
