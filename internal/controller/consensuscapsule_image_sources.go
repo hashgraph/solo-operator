@@ -65,6 +65,44 @@ func sourcedContainers(capsule *operatorv1alpha1.ConsensusCapsule) []sourcedCont
 	return out
 }
 
+// mismatchedSourceTag checks that every candidate registry in a source lists the
+// same image tag. A deterministic source publishes one version to every registry,
+// so the tags must match. It returns the first tag that differs from the first
+// candidate's and mismatch=true, or mismatch=false when they all match. An empty
+// tag is a legitimate value, not a sentinel, so a candidate with an empty tag that
+// differs from the first is still reported as a mismatch (the returned string is
+// then ""); the "at least one registry" check is done separately.
+func mismatchedSourceTag(src *operatorv1alpha1.SoftwareVersionSource) (string, bool) {
+	if src == nil || len(src.ImageRepositories) == 0 {
+		return "", false
+	}
+	want := src.ImageRepositories[0].ImageTag
+	for i := 1; i < len(src.ImageRepositories); i++ {
+		if got := src.ImageRepositories[i].ImageTag; got != want {
+			return got, true
+		}
+	}
+	return "", false
+}
+
+// latestTagInSource reports the first candidate registry whose tag is the mutable
+// "latest" (matched case-insensitively). A deterministic source must pin a specific
+// version, so "latest" — which can silently upgrade or downgrade the running image — is
+// rejected. This runs in Go rather than as a CRD CEL rule: a per-candidate rule over the
+// unbounded imageRepositories list would exceed the API server's cost budget (the same
+// reason mismatchedSourceTag is not a CEL rule).
+func latestTagInSource(src *operatorv1alpha1.SoftwareVersionSource) (string, bool) {
+	if src == nil {
+		return "", false
+	}
+	for _, r := range src.ImageRepositories {
+		if strings.EqualFold(r.ImageTag, "latest") {
+			return r.ImageTag, true
+		}
+	}
+	return "", false
+}
+
 // resolveImageSources resolves each container's SoftwareVersionSource to a verified,
 // digest-pinned SoftwareVersion, writing it back into the spec in memory so the resource
 // builders deploy the pinned image unchanged. It returns a non-nil *ctrl.Result when the
@@ -102,6 +140,37 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 					"container %q softwareVersionSource is invalid: needs at least one imageRepository and per-platform layer hashes (os + architecture)", sc.name),
 					ReasonImageSourceInvalid),
 				"Set imageRepositories and imageVerificationSpec (os, architecture, layerHashes) on the source, or use a single softwareVersion instead.",
+			))
+		}
+
+		// A source must list the same version in every candidate registry. The shared
+		// layer hashes verify the image content, but a mismatched tag means the
+		// candidates are not the same version, so registry selection could deploy a
+		// different version depending on which registry it picks. Fail closed on that.
+		//
+		// This runs in Go, not as a CRD rule: a CRD rule that loops over the registry
+		// list would exceed the API server's cost limit once the list is large.
+		//
+		// softwareVersion and softwareVersionSource are mutually exclusive (the CRD's
+		// exactly-one / at-most-one rule enforces that), so there is no cross-field tag
+		// to check here — only that the source is internally consistent.
+		if bad, mismatch := mismatchedSourceTag(sc.source); mismatch {
+			return r.failImageSourceInvalid(ctx, capsule, errx.WithHints(
+				errx.WithReason(errImageSourceInvalid.New(
+					"container %q softwareVersionSource lists differing image tags across its candidate registries (e.g. %q); a deterministic source must publish the same version in every registry", sc.name, bad),
+					ReasonImageSourceInvalid),
+				"Make every imageRepositories[*].imageTag identical (the same version in each registry).",
+			))
+		}
+
+		// Reject the mutable "latest" tag: it can silently upgrade or downgrade the running
+		// image. Enforced here, not as a CRD rule, for the same cost-budget reason as above.
+		if bad, isLatest := latestTagInSource(sc.source); isLatest {
+			return r.failImageSourceInvalid(ctx, capsule, errx.WithHints(
+				errx.WithReason(errImageSourceInvalid.New(
+					"container %q softwareVersionSource pins the mutable tag %q; a deterministic source must pin a specific version", sc.name, bad),
+					ReasonImageSourceInvalid),
+				"Replace 'latest' with a specific version tag in every imageRepositories[*].imageTag.",
 			))
 		}
 
