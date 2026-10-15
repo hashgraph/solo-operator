@@ -73,7 +73,11 @@ const (
 	ImagePullPolicyIfNotPresent ImagePullPolicy = "IfNotPresent"
 )
 
-// SoftwareVersion defines the container image version
+// SoftwareVersion defines the container image version.
+// The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+// no digest would resolve to :latest — a mutable reference that could silently upgrade or
+// downgrade the running image — so it is rejected.
+// +kubebuilder:validation:XValidation:rule="size(self.imageTag) > 0 || has(self.digest)",message="set a non-empty imageTag or a digest so the image is not resolved to :latest"
 type SoftwareVersion struct {
 	// Repository is the container registry (e.g., docker.io/library)
 	Repository string `json:"repository"`
@@ -81,7 +85,10 @@ type SoftwareVersion struct {
 	// ImageName is the name of the image (e.g., ubuntu)
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the tag of the image (e.g., focal)
+	// ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+	// (rejected even with a digest) so the image is pinned to a specific version.
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:XValidation:rule="self.lowerAscii() != 'latest'",message="imageTag must not be 'latest': pin a specific version so the image cannot silently change"
 	ImageTag string `json:"imageTag"`
 
 	// Digest, when set, pins the image to an immutable content digest ("sha256:...").
@@ -134,7 +141,12 @@ type ImageRepository struct {
 	// ImageName is the image name
 	ImageName string `json:"imageName"`
 
-	// ImageTag is the image tag
+	// ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+	// carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+	// per registry. The mutable "latest" tag is also rejected, but in the reconciler
+	// (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+	// imageRepositories list would exceed the API server's cost budget.
+	// +kubebuilder:validation:MinLength=1
 	ImageTag string `json:"imageTag"`
 
 	// ImagePullSecrets for accessing private registries
@@ -143,8 +155,8 @@ type ImageRepository struct {
 }
 
 // SoftwareVersionSource defines multiple candidate registries for a container image,
-// together with the layer hashes used to verify them. When set on a container it
-// replaces the single SoftwareVersion: the operator probes the registries, verifies
+// together with the layer hashes used to verify them. It is mutually exclusive with the
+// single SoftwareVersion: when set, the operator probes the registries, verifies
 // each candidate's layer hashes, and deploys the resolved image pinned to its content
 // digest. Layer hashes are mandatory (ImageVerificationSpec is required and non-empty)
 // so a source is never deployed unverified — a container that needs no verification
@@ -408,6 +420,9 @@ type GCSConfig struct {
 }
 
 // CheetahUploader is the Cheetah uploader configuration
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled uploader may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type CheetahUploader struct {
 	// Enabled enables the uploader
 	// +kubebuilder:default=false
@@ -423,8 +438,8 @@ type CheetahUploader struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -650,6 +665,9 @@ type CheetahBlobConfig struct {
 }
 
 // StreamUploader defines a stream uploader sidecar
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled uploader may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type StreamUploader struct {
 	// Name is the container name
 	// +optional
@@ -660,8 +678,8 @@ type StreamUploader struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
