@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
@@ -116,7 +117,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
-							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"}},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"}},
 						},
 					},
 				},
@@ -265,7 +266,7 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 									ImageTag:   "0.65.1",
 								},
 							},
-							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "latest"}},
+							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"}},
 						},
 					},
 					PersistentVolumeClaims: &operatorv1alpha1.ConsensusPVCConfig{
@@ -939,13 +940,15 @@ var _ = Describe("ConsensusCapsule Controller", func() {
 			Expect(k8sClient.Status().Update(ctx, pod)).Should(Succeed())
 
 			// Trigger a reconcile manually on the Capsule since pod condition patch by itself in the envtest is flaking mapping
+			// A merge patch avoids a resourceVersion conflict with the controller's own writes.
 			got := &operatorv1alpha1.ConsensusCapsule{}
 			Expect(k8sClient.Get(ctx, capsuleKey, got)).Should(Succeed())
+			base := got.DeepCopy()
 			if got.Annotations == nil {
 				got.Annotations = make(map[string]string)
 			}
 			got.Annotations["test-trigger"] = "true"
-			Expect(k8sClient.Update(ctx, got)).Should(Succeed())
+			Expect(k8sClient.Patch(ctx, got, client.MergeFrom(base))).Should(Succeed())
 
 			By("Verifying RunState transitions to Stopped")
 
