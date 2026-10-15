@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -271,10 +272,14 @@ func newRunningCapsule(name string) *operatorv1alpha1.ConsensusCapsule {
 }
 
 // newExecuteSTS builds a StatefulSet whose status carries the given current/update
-// revisions and ready/updated replica counts, for exercising the revision guard.
+// revisions and ready/updated replica counts, for exercising the revision guard. Its
+// template runs the consensus-node image selected by newExecuteInBringOnline.
 func newExecuteSTS(name, currentRevision, updateRevision string, ready, updated int32) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "consensus-node", Image: "reg-a/cn:0.75.0@" + string(executeDigest)}},
+		}}},
 		Status: appsv1.StatefulSetStatus{
 			CurrentRevision: currentRevision,
 			UpdateRevision:  updateRevision,
@@ -1820,6 +1825,104 @@ func TestApplyImagePatch_ConsensusNodeUpgrade(t *testing.T) {
 	}
 }
 
+func sourcedFor(repo string) *operatorv1alpha1.SoftwareVersionSource {
+	return &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories: []operatorv1alpha1.ImageRepository{
+			{Repository: repo, ImageName: "cn", ImageTag: "0.74.0", ImagePullSecrets: []corev1.LocalObjectReference{{Name: "sec-" + repo}}},
+			{Repository: "other", ImageName: "cn", ImageTag: "0.74.0", ImagePullSecrets: []corev1.LocalObjectReference{{Name: "sec-other"}}},
+		},
+		ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{{OS: "linux", Architecture: "amd64", LayerHashes: []string{"aa"}}},
+		ImagePullPolicy:       "Always",
+	}
+}
+
+// A capsule installed with softwareVersionSource must have the source cleared and the
+// upgrade image pinned on softwareVersion; otherwise the capsule controller keeps
+// resolving the old source and the node never upgrades.
+func TestApplyImagePatch_SourcedConsensusNodeClearsSource(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("reg-a/cn:0.74.2")},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.74.2", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+	cn.SoftwareVersionSource = sourcedFor("reg-a")
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+
+	if cn.SoftwareVersionSource != nil {
+		t.Error("expected softwareVersionSource cleared")
+	}
+	sv := cn.SoftwareVersion
+	if sv == nil {
+		t.Fatal("expected SoftwareVersion set")
+	}
+	if got, want := common.BuildImage(sv), "reg-a/cn:0.74.2@"+string(executeDigest); got != want {
+		t.Errorf("image = %q, want %q", got, want)
+	}
+	if sv.ImagePullPolicy != "Always" {
+		t.Errorf("pull policy = %q, want Always", sv.ImagePullPolicy)
+	}
+	if len(sv.ImagePullSecrets) != 1 || sv.ImagePullSecrets[0].Name != "sec-reg-a" {
+		t.Errorf("pull secrets = %+v, want only the matching repo's", sv.ImagePullSecrets)
+	}
+}
+
+// When the upgrade image's registry is not a candidate of the old source, all of the
+// source's pull secrets are kept.
+func TestApplyImagePatch_SourcedUnknownRegistryKeepsAllSecrets(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("new-reg/cn:0.74.2")},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "new-reg/cn:0.74.2", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+	cn.SoftwareVersionSource = sourcedFor("reg-a")
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if cn.SoftwareVersionSource != nil || len(cn.SoftwareVersion.ImagePullSecrets) != 2 {
+		t.Errorf("source=%v secrets=%+v", cn.SoftwareVersionSource, cn.SoftwareVersion.ImagePullSecrets)
+	}
+}
+
+func TestApplyImagePatch_SourcedUploaderClearsSource(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{Version: "1", Registries: registriesFor("reg-a/up:1")},
+		},
+		operatorv1alpha1.SelectedSources{
+			RecordStreamUploader: &operatorv1alpha1.SelectedSource{Image: "reg-a/up:1", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	capsule.Spec.PodProperties.Containers.RecordsUploader = &operatorv1alpha1.CheetahUploader{
+		SoftwareVersionSource: sourcedFor("reg-a"),
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	u := capsule.Spec.PodProperties.Containers.RecordsUploader
+	if u.SoftwareVersionSource != nil || u.SoftwareVersion == nil || u.SoftwareVersion.ImageTag != "1" {
+		t.Errorf("uploader not migrated: %+v", u)
+	}
+}
+
 func TestApplyImagePatch_UnpinnedSourceErrors(t *testing.T) {
 	// A selected source with no digest must abort the execute — the operator must never
 	// deploy an unpinned (mutable-tag) image. This is the operator-layer digest check.
@@ -2025,5 +2128,149 @@ func TestApplyImagePatch_OmittedSidecar_NoChange(t *testing.T) {
 
 	if capsule.Spec.PodProperties.Containers.RecordsUploader != existing {
 		t.Error("expected RecordsUploader unchanged when component omitted from spec")
+	}
+}
+
+// reconcilePendingGate runs one reconcile of an execute waiting in PendingNodeUpgrade
+// against the given capsule and StatefulSet, and returns the updated execute.
+func reconcilePendingGate(t *testing.T, capsule *operatorv1alpha1.ConsensusCapsule, sts *appsv1.StatefulSet) operatorv1alpha1.NetworkUpgradeExecute {
+	t.Helper()
+	execute := newExecuteInBringOnline()
+
+	scheme := newControllerTestScheme()
+	c := withExecuteIndexes(fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(execute, capsule, sts, newTestOrbit()).
+		WithStatusSubresource(execute, capsule, sts)).Build()
+	for _, o := range []client.Object{execute, capsule, sts} {
+		if err := c.Status().Update(context.Background(), o); err != nil {
+			t.Fatalf("pre-set status: %v", err)
+		}
+	}
+
+	r := NewNetworkUpgradeExecuteReconciler(c, scheme)
+	r.Recorder = events.NewFakeRecorder(8)
+	r.Checker = newExecuteChecker(nil, nil)
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(execute)}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var updated operatorv1alpha1.NetworkUpgradeExecute
+	_ = c.Get(context.Background(), client.ObjectKeyFromObject(execute), &updated)
+	return updated
+}
+
+// A patch that changed nothing leaves the pre-upgrade revision "rolled". The gate must
+// not report Succeeded while the template still runs the old consensus-node digest.
+func TestExecuteReconcile_PendingNodeUpgrade_NotFooledByUnchangedTemplate(t *testing.T) {
+	sts := newExecuteSTS("node0", "rev-old", "rev-old", 1, 1)
+	sts.Spec.Template.Spec.Containers[0].Image = "reg-a/cn:0.74.0@" + string(altExecuteDigest)
+
+	updated := reconcilePendingGate(t, newActiveCapsule("node0"), sts)
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded {
+		t.Error("must not succeed while the template runs the pre-upgrade image")
+	}
+}
+
+// phase==Active alone is not proof the node is ACTIVE: a frozen node reported
+// phase Active with platformStatus FREEZE_COMPLETE.
+func TestExecuteReconcile_PendingNodeUpgrade_RequiresPlatformActive(t *testing.T) {
+	capsule := newActiveCapsule("node0")
+	capsule.Status.PlatformStatus = operatorv1alpha1.PlatformStatusFreezeComplete
+
+	updated := reconcilePendingGate(t, capsule, newExecuteSTS("node0", "rev-new", "rev-new", 1, 1))
+	if updated.Status.Phase == operatorv1alpha1.ExecutePhaseSucceeded {
+		t.Error("must not succeed while platformStatus is FREEZE_COMPLETE")
+	}
+}
+
+func TestTemplateRunsSelectedConsensusNode(t *testing.T) {
+	image := func(d operatorv1alpha1.Sha256Digest) string { return "reg-a/cn:0.75.0@" + string(d) }
+	tests := []struct {
+		name          string
+		containerName string // capsule spec override; "" uses the default
+		containers    []corev1.Container
+		selected      *operatorv1alpha1.SelectedSource
+		want          bool
+	}{
+		{"selected digest", "", []corev1.Container{{Name: "consensus-node", Image: image(executeDigest)}}, &operatorv1alpha1.SelectedSource{Digest: executeDigest}, true},
+		{"old digest", "", []corev1.Container{{Name: "consensus-node", Image: image(altExecuteDigest)}}, &operatorv1alpha1.SelectedSource{Digest: executeDigest}, false},
+		{"digest on another container", "", []corev1.Container{{Name: "consensus-node", Image: image(altExecuteDigest)}, {Name: "uc", Image: image(executeDigest)}}, &operatorv1alpha1.SelectedSource{Digest: executeDigest}, false},
+		{"container missing", "", nil, &operatorv1alpha1.SelectedSource{Digest: executeDigest}, false},
+		{"custom container name", "cn", []corev1.Container{{Name: "cn", Image: image(executeDigest)}}, &operatorv1alpha1.SelectedSource{Digest: executeDigest}, true},
+		{"consensus node not upgraded", "", nil, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sts := &appsv1.StatefulSet{Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: tt.containers}}}}
+			execute := &operatorv1alpha1.NetworkUpgradeExecute{}
+			execute.Status.SelectedSources = &operatorv1alpha1.SelectedSources{ConsensusNode: tt.selected}
+			capsule := &operatorv1alpha1.ConsensusCapsule{}
+			capsule.Spec.PodProperties.Containers.ConsensusNode.Name = tt.containerName
+
+			if got := templateRunsSelectedConsensusNode(sts, execute, capsule); got != tt.want {
+				t.Errorf("templateRunsSelectedConsensusNode = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyImagePatch_SourcedUCAndBackupClearSource(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			UC:             &operatorv1alpha1.ImageComponentSpec{Version: "2", Registries: registriesFor("reg-a/uc:2")},
+			BackupUploader: &operatorv1alpha1.ImageComponentSpec{Version: "3", Registries: registriesFor("reg-a/bk:3")},
+		},
+		operatorv1alpha1.SelectedSources{
+			UC:             &operatorv1alpha1.SelectedSource{Image: "reg-a/uc:2", Digest: executeDigest},
+			BackupUploader: &operatorv1alpha1.SelectedSource{Image: "reg-a/bk:3", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	ct := &capsule.Spec.PodProperties.Containers
+	ct.UC = &operatorv1alpha1.UcSidecar{SoftwareVersionSource: sourcedFor("reg-a")}
+	ct.BackupUploader = &operatorv1alpha1.StreamUploader{SoftwareVersionSource: sourcedFor("reg-a")}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if ct.UC.SoftwareVersionSource != nil || ct.UC.SoftwareVersion == nil || ct.UC.SoftwareVersion.ImageTag != "2" {
+		t.Errorf("uc not migrated: %+v", ct.UC)
+	}
+	if ct.BackupUploader.SoftwareVersionSource != nil || ct.BackupUploader.SoftwareVersion == nil || ct.BackupUploader.SoftwareVersion.ImageTag != "3" {
+		t.Errorf("backup uploader not migrated: %+v", ct.BackupUploader)
+	}
+}
+
+// A container installed with a single softwareVersion keeps its pull policy and
+// secrets: only the image and digest change.
+func TestApplyImagePatch_UnsourcedKeepsPullSettings(t *testing.T) {
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{
+			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("reg-a/cn:0.74.2")},
+		},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.74.2", Digest: executeDigest},
+		},
+	)
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+	cn.SoftwareVersion = &operatorv1alpha1.SoftwareVersion{
+		Repository: "reg-a", ImageName: "cn", ImageTag: "0.74.0",
+		ImagePullPolicy:  "IfNotPresent",
+		ImagePullSecrets: []corev1.LocalObjectReference{{Name: "keep-me"}},
+	}
+
+	r := &NetworkUpgradeExecuteReconciler{}
+	if err := r.applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	sv := cn.SoftwareVersion
+	if sv.ImageTag != "0.74.2" || sv.Digest != executeDigest {
+		t.Errorf("image not upgraded: %+v", sv)
+	}
+	if sv.ImagePullPolicy != "IfNotPresent" || len(sv.ImagePullSecrets) != 1 || sv.ImagePullSecrets[0].Name != "keep-me" {
+		t.Errorf("pull settings changed: policy=%q secrets=%+v", sv.ImagePullPolicy, sv.ImagePullSecrets)
 	}
 }
