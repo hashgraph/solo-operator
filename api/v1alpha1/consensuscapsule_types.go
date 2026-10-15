@@ -273,6 +273,9 @@ type ConsensusContainers struct {
 }
 
 // UcSidecar configures the Update Coordinator sidecar container.
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled sidecar may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type UcSidecar struct {
 	// +optional
 	Name string `json:"name,omitempty"`
@@ -281,8 +284,8 @@ type UcSidecar struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -315,20 +318,21 @@ type UcSidecar struct {
 }
 
 // ConsensusNodeContainer configures the main consensus node container.
-// +kubebuilder:validation:XValidation:rule="has(self.softwareVersion) || has(self.softwareVersionSource)",message="one of softwareVersion or softwareVersionSource is required"
+// The consensus node always runs, so it must declare exactly one image source:
+// softwareVersion (single registry) or softwareVersionSource (multi-registry), never both.
+// +kubebuilder:validation:XValidation:rule="has(self.softwareVersion) != has(self.softwareVersionSource)",message="set exactly one of softwareVersion or softwareVersionSource"
 type ConsensusNodeContainer struct {
 	// +kubebuilder:default="consensus-node"
 	// +optional
 	Name string `json:"name,omitempty"`
 
-	// container image spec; mutually optional with softwareVersionSource — at least one must be set.
-	// When softwareVersionSource is also set it takes precedence and this field is ignored.
+	// container image spec; mutually exclusive with softwareVersionSource — set exactly one.
 	// +optional
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
@@ -355,6 +359,9 @@ type ConsensusNodeContainer struct {
 }
 
 // AlloyConfig is the Grafana Alloy telemetry sidecar config.
+// An optional sidecar may declare at most one image source — softwareVersion or
+// softwareVersionSource, never both (a disabled sidecar may declare neither).
+// +kubebuilder:validation:XValidation:rule="!has(self.softwareVersion) || !has(self.softwareVersionSource)",message="set at most one of softwareVersion or softwareVersionSource"
 type AlloyConfig struct {
 	// +kubebuilder:default="alloy"
 	// +optional
@@ -364,8 +371,8 @@ type AlloyConfig struct {
 	SoftwareVersion *SoftwareVersion `json:"softwareVersion,omitempty"`
 
 	// SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-	// for this container's image; when set it takes precedence over SoftwareVersion and
-	// the operator selects, verifies, and digest-pins the deployed image.
+	// for this container's image; mutually exclusive with SoftwareVersion. When set, the
+	// operator selects, verifies, and digest-pins the deployed image.
 	// +optional
 	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
 
