@@ -3331,8 +3331,10 @@ spec:
                       the StatefulSet.
                     properties:
                       alloy:
-                        description: AlloyConfig is the Grafana Alloy telemetry sidecar
-                          config.
+                        description: |-
+                          AlloyConfig is the Grafana Alloy telemetry sidecar config.
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled sidecar may declare neither).
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -3583,8 +3585,11 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion defines the container image
-                              version
+                            description: |-
+                              SoftwareVersion defines the container image version.
+                              The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+                              no digest would resolve to :latest — a mutable reference that could silently upgrade or
+                              downgrade the running image — so it is rejected.
                             properties:
                               digest:
                                 description: |-
@@ -3628,9 +3633,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -3671,11 +3683,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -3717,7 +3733,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -3777,8 +3799,14 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       backupUploader:
-                        description: StreamUploader defines a stream uploader sidecar
+                        description: |-
+                          StreamUploader defines a stream uploader sidecar
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           additionalVolumeMounts:
                             description: AdditionalVolumeMounts for the uploader
@@ -4078,9 +4106,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -4121,11 +4156,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -4167,7 +4206,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -4227,8 +4272,14 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       blocksUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -4437,9 +4488,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -4480,11 +4538,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -4526,7 +4588,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -4592,9 +4660,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       consensusNode:
-                        description: ConsensusNodeContainer configures the main consensus
-                          node container.
+                        description: |-
+                          ConsensusNodeContainer configures the main consensus node container.
+                          The consensus node always runs, so it must declare exactly one image source:
+                          softwareVersion (single registry) or softwareVersionSource (multi-registry), never both.
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -4938,9 +5011,8 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: |-
-                              container image spec; mutually optional with softwareVersionSource — at least one must be set.
-                              When softwareVersionSource is also set it takes precedence and this field is ignored.
+                            description: container image spec; mutually exclusive
+                              with softwareVersionSource — set exactly one.
                             properties:
                               digest:
                                 description: |-
@@ -4984,9 +5056,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5027,11 +5106,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -5073,7 +5156,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5134,11 +5223,13 @@ spec:
                             type: object
                         type: object
                         x-kubernetes-validations:
-                        - message: one of softwareVersion or softwareVersionSource
-                            is required
-                          rule: has(self.softwareVersion) || has(self.softwareVersionSource)
+                        - message: set exactly one of softwareVersion or softwareVersionSource
+                          rule: has(self.softwareVersion) != has(self.softwareVersionSource)
                       eventsUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -5347,9 +5438,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5390,11 +5488,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -5436,7 +5538,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5502,8 +5610,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       recordsUploader:
-                        description: CheetahUploader is the Cheetah uploader configuration
+                        description: |-
+                          CheetahUploader is the Cheetah uploader configuration
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           blob:
                             description: |-
@@ -5712,9 +5826,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -5755,11 +5876,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -5801,7 +5926,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -5867,9 +5998,14 @@ spec:
                               If false, the pipeline continues with the expectation that the error resolves on retry.
                             type: boolean
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                       uc:
-                        description: UcSidecar configures the Update Coordinator sidecar
-                          container.
+                        description: |-
+                          UcSidecar configures the Update Coordinator sidecar container.
+                          An optional sidecar may declare at most one image source — softwareVersion or
+                          softwareVersionSource, never both (a disabled sidecar may declare neither).
                         properties:
                           additionalVolumeMounts:
                             items:
@@ -6038,8 +6174,11 @@ spec:
                                 type: object
                             type: object
                           softwareVersion:
-                            description: SoftwareVersion defines the container image
-                              version
+                            description: |-
+                              SoftwareVersion defines the container image version.
+                              The image must be pinned: either a non-empty imageTag or a digest. An empty tag with
+                              no digest would resolve to :latest — a mutable reference that could silently upgrade or
+                              downgrade the running image — so it is rejected.
                             properties:
                               digest:
                                 description: |-
@@ -6083,9 +6222,16 @@ spec:
                                   x-kubernetes-map-type: atomic
                                 type: array
                               imageTag:
-                                description: ImageTag is the tag of the image (e.g.,
-                                  focal)
+                                description: |-
+                                  ImageTag is the image tag (e.g. "0.65.1"). Must be at most 128 chars and not "latest"
+                                  (rejected even with a digest) so the image is pinned to a specific version.
+                                maxLength: 128
                                 type: string
+                                x-kubernetes-validations:
+                                - message: 'imageTag must not be ''latest'': pin a
+                                    specific version so the image cannot silently
+                                    change'
+                                  rule: self.lowerAscii() != 'latest'
                               imageVerificationSpec:
                                 description: ImageVerificationSpec contains hash verification
                                   details
@@ -6126,11 +6272,15 @@ spec:
                             - imageTag
                             - repository
                             type: object
+                            x-kubernetes-validations:
+                            - message: set a non-empty imageTag or a digest so the
+                                image is not resolved to :latest
+                              rule: size(self.imageTag) > 0 || has(self.digest)
                           softwareVersionSource:
                             description: |-
                               SoftwareVersionSource declares multiple candidate registries (with layer hashes)
-                              for this container's image; when set it takes precedence over SoftwareVersion and
-                              the operator selects, verifies, and digest-pins the deployed image.
+                              for this container's image; mutually exclusive with SoftwareVersion. When set, the
+                              operator selects, verifies, and digest-pins the deployed image.
                             properties:
                               imagePullPolicy:
                                 default: IfNotPresent
@@ -6172,7 +6322,13 @@ spec:
                                         x-kubernetes-map-type: atomic
                                       type: array
                                     imageTag:
-                                      description: ImageTag is the image tag
+                                      description: |-
+                                        ImageTag is the image tag. A candidate registry in a SoftwareVersionSource must
+                                        carry an explicit, non-empty tag: an empty tag would resolve to :latest and differ
+                                        per registry. The mutable "latest" tag is also rejected, but in the reconciler
+                                        (latestTagInSource) rather than here — a per-candidate CEL rule over the unbounded
+                                        imageRepositories list would exceed the API server's cost budget.
+                                      minLength: 1
                                       type: string
                                     repository:
                                       description: Repository is the registry URL
@@ -6232,6 +6388,9 @@ spec:
                             - imageVerificationSpec
                             type: object
                         type: object
+                        x-kubernetes-validations:
+                        - message: set at most one of softwareVersion or softwareVersionSource
+                          rule: '!has(self.softwareVersion) || !has(self.softwareVersionSource)'
                     required:
                     - consensusNode
                     type: object

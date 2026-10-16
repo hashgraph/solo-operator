@@ -511,5 +511,5 @@ tasks:
       # and runs on Go 1.26.x. Bump deliberately, then re-run `task generate`.
       - go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
       - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.24.1
-      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
       - go install github.com/mikefarah/yq/v4@v4.53.6
