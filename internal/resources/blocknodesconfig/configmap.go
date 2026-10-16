@@ -38,6 +38,9 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, obj *operatorv1a
 	if err := common.ValidateJSON(obj.Spec.Content, ConfigFileName); err != nil {
 		return r.reject(ctx, obj, "InvalidContent", err.Error())
 	}
+	if err := validateTLS(obj.Spec.Content); err != nil {
+		return r.reject(ctx, obj, "InvalidContent", err.Error())
+	}
 
 	apimeta.SetStatusCondition(&obj.Status.Conditions, metav1.Condition{
 		Type:               operatorv1alpha1.BlockNodesConfigConditionTypeValid,

@@ -10,50 +10,52 @@ Increase Docker Desktop memory allocation:
 
 ### Setup Cluster and Operator
 
-From the project root:
+From the `docs/example` directory:
 
 ```shell
-# Reset kind cluster with fresh CRDs
-task kind:reset
-
-# Start solo operator (in another terminal - MUST be running)
-task run
+# Create the kind cluster and install the operator via Helm (skipped when already running)
+task cluster
 ```
+
+Or run the operator locally from the project root: `task kind:reset`, then `task run` in another terminal.
 
 ## Workflow
 
 From the `docs/example` directory:
 
 ```shell
-# Install MinIO (object storage for stream uploaders)
+# Install MetalLB and RustFS (object storage for stream uploaders)
 task setup
 
-# Deploy full 4-node network (orbit + all nodes + genesis)
+# Deploy full 4-node network (orbit + all nodes + genesis), waits for pods ready
 task deploy
+
+# Or deploy node0 only + genesis (lightweight, e.g. for beacon testing)
+task deploy:single
 
 # Check status
 task status
-
-# Wait for all pods to be ready
-task wait
 
 # Tail consensus node logs
 task logs
 ```
 
-### Deploy individual nodes
+## Block Node (optional)
 
 ```shell
-# Deploy a single node (deploys orbit + common first)
-task deploy:node0
-task deploy:node1
-task deploy:node2
-task deploy:node3
+# Set up kind + operator + RustFS, deploy the block node first, then the network with node0 streaming to it,
+# then a mirror monitor (pinger) that sends transfers to node0 so blocks flow
+task deploy:blocknode
+
+# Remove the pinger, the block node, its PVCs, and reset node0's block-nodes config
+task destroy:blocknode
 ```
+
+The block node is deployed before the consensus nodes so node0 starts with `block-nodes.json` and the stream properties already in place. TSS needs a threshold of nodes streaming blocks (`BOTH`), so all four nodes get the block-node properties. Only node0 is connected to the block node (`FILE_AND_GRPC`); node1 to node3 write block files only (`FILE`). Config changes on a running consensus node need a pod restart, because the files are `subPath` mounts. `deploy:blocknode` runs `task deploy BLOCKNODE=true`, which also applies `helmcapsule/block-nodes-config.yaml` and `helmcapsule/applicationproperties.yaml` for every node.
 
 ## Proxy Sidecars (optional)
 
-Each node has its own `HAProxyCapsule` and `EnvoyProxy` deployed alongside its `ConsensusCapsule` via `task deploy:nodeX`. To deploy proxies manually:
+Each node has its own `HAProxyCapsule` and `EnvoyProxy`. To deploy proxies manually:
 
 ```shell
 # HAProxy â€” gRPC load balancer (ports 50211/50212), routes directly to consensus node
@@ -74,12 +76,9 @@ Both proxies auto-derive their upstream from the CR name (e.g. `haproxy-node1` â
 ## Cleanup
 
 ```shell
-# Destroy a specific node
-task destroy:node1
-
-# Destroy all nodes, configs, and orbit
+# Delete the kind cluster
 task destroy
 
-# Uninstall MinIO
+# Uninstall MetalLB and RustFS
 task cleanup
 ```

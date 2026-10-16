@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+mode:
+  standalone:
+    enabled: true
+  distributed:
+    enabled: false
+
+secret:
+  rustfs:
+    access_key: solo-operator
+    secret_key: changeme
+
+ingress:
+  enabled: false
+
+storageclass:
+  name: standard
+  dataStorageSize: 10Gi
+  logStorageSize: 1Gi

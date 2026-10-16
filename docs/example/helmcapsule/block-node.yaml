@@ -1,17 +1,6 @@
-# HelmCapsule — Hiero Block Node Server
+# SPDX-License-Identifier: Apache-2.0
 #
-# Component: block-node
-# Chart:     block-node-server (https://github.com/hiero-ledger/hiero-block-node)
-#
-# Auto-injected values (from OrbitRef + ConsensusCapsules in the namespace):
-#   blockNode.config.BLOCK_NODE_ENDPOINTS  — comma-separated "host:port" list
-#       derived from ConsensusCapsule.status.addressBookEntry entries
-#   blockNode.config.CONSENSUS_NODE_COUNT  — number of ConsensusCapsules in the
-#       namespace that belong to the referenced Orbit
-#
-# The block-node chart uses a flexible blockNode.config map to pass environment
-# variables; any additional config keys can be added via the Values field.
-#
+# Block node (block-node-server chart); its address is in status.outputs once Ready, for the BlockNodesConfig.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: HelmCapsule
 metadata:
@@ -19,33 +8,48 @@ metadata:
   namespace: solo-orbit
 spec:
   chart:
-    repo: oci://ghcr.io/hiero-ledger/charts
+    repo: oci://ghcr.io/hiero-ledger/hiero-block-node
     chart: block-node-server
-    version: "0.31.0"
+    version: "0.44.2"
 
   component: block-node
 
   orbitRef:
     name: solo-orbit
 
-  # Timeout for install/upgrade. Block-node may take longer due to StatefulSet startup.
+  wait: true
   timeout: 15m
 
-  # Optional: load sensitive config (operator keys, etc.) from a Secret.
-  # valuesFrom:
-  #   - kind: Secret
-  #     name: block-node-secrets
-  #     valuesKey: values.yaml
-
-  # Inline overrides for non-injected blockNode.config entries.
   values:
+    image:
+      # includes prebuilt plugins - adhoc downloading is not supported by operator
+      repository: ghcr.io/hiero-ledger/hiero-block-node-solo-dev
+    plugins:
+      names: ""
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
     blockNode:
       config:
-        PROMETHEUS_ENDPOINT_ENABLED: "true"
-        PROMETHEUS_ENDPOINT_PORT_NUMBER: "16007"
-        PERSISTENCE_STORAGE_LIVE_GB: "256"
-        PERSISTENCE_STORAGE_ARCHIVE_GB: "512"
-      service:
-        port: 40840
-    serviceMonitor:
-      enabled: true
+        JAVA_OPTS: '-Xms1G -Xmx1G -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="/tmp/dump.hprof"'
+        MESSAGING_BLOCK_ITEM_QUEUE_SIZE: "128"
+        MESSAGING_BLOCK_NOTIFICATION_QUEUE_SIZE: "16"
+        # ROSTER_BOOTSTRAP_RSA_MIRROR_NODE_BASE_URL: "http://<mirror-release>-restjava"
+      persistence:
+        live:
+          size: 5Gi
+        archive:
+          size: 5Gi
+        logging:
+          size: 2Gi
+        applicationState:
+          size: 1Gi
+      # backfill:
+      #   sources:
+      #     - address: "<peer-release>-block-node-server.solo-orbit.svc.cluster.local"
+      #       port: 40840
+      #       priority: 1

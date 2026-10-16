@@ -1,19 +1,14 @@
 #!/bin/sh
 function setup() {
-    helm repo add minio-operator https://operator.min.io/
+    helm repo add rustfs https://charts.rustfs.com
     helm repo add telemetry https://grafana.github.io/helm-charts
     helm repo update
 
     helm upgrade --install \
-      --namespace minio-operator \
-      --create-namespace \
-      minio-operator minio-operator/operator
-
-    helm upgrade --install \
-        --namespace minio-tenant \
+        --namespace rustfs \
         --create-namespace \
-        --values setup/minio-values.yaml \
-        minio-tenant minio-operator/tenant
+        --values setup/rustfs-values.yaml \
+        rustfs rustfs/rustfs
 
     helm upgrade --install loki grafana/loki-stack \
       --namespace telemetry\
@@ -23,8 +18,8 @@ function setup() {
     echo ">> Waiting 180s for Loki to be ready..."
     kubectl wait --for=condition=ready pod -l app=loki -n telemetry --timeout 180s || return $?
 
-    echo ">> Waiting 180s for MinIO to be ready..."
-    kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout 180s || return $?
+    echo ">> Waiting 180s for RustFS to be ready..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=rustfs -n rustfs --timeout 180s || return $?
 }
 
 function deploy() {
@@ -74,10 +69,8 @@ function destroy() {
 }
 
 function cleanup() {
-    helm uninstall minio-operator -n minio-operator
-    helm uninstall minio-tenant -n minio-tenant
+    helm uninstall rustfs -n rustfs
     helm uninstall loki -n telemetry
-    kubectl delete namespace minio-tenant
-    kubectl delete namespace minio-operator
+    kubectl delete namespace rustfs
     kubectl delete namespace telemetry
 }

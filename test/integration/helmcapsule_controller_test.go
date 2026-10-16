@@ -619,9 +619,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 		})
 	})
 
-	// ─── Block-node component — auto-injection ───────────────────────────────
+	// ─── Block-node component ────────────────────────────────────────────────
 
-	Context("When creating a block-node HelmCapsule with an Orbit and ConsensusCapsules", func() {
+	Context("When creating a block-node HelmCapsule with an Orbit", func() {
 		const (
 			hcNS   = "helmcapsule-block-node"
 			hcName = "block-node"
@@ -651,59 +651,9 @@ var _ = Describe("HelmCapsule Controller", func() {
 			if err != nil {
 				Expect(err.Error()).To(ContainSubstring("already exists"))
 			}
-
-			nsSettingsBN := &operatorv1alpha1.NodeSettings{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0-settings", Namespace: hcNS},
-				Spec:       operatorv1alpha1.NodeSettingsSpec{Orbit: orbitName, Scope: "node0", Content: "checkSignedStateFromDisk,              1"},
-			}
-			err = k8sClient.Create(ctx, nsSettingsBN)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-
-			appPropsBN := &operatorv1alpha1.ApplicationProperties{
-				ObjectMeta: metav1.ObjectMeta{Name: "node0-application-properties", Namespace: hcNS},
-				Spec: operatorv1alpha1.ApplicationPropertiesSpec{
-					Orbit: orbitName,
-					Scope: "node0", Content: "hedera.config.version=0\nnetty.mode=TEST",
-				},
-			}
-			err = k8sClient.Create(ctx, appPropsBN)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
-
-			cap := &operatorv1alpha1.ConsensusCapsule{
-				ObjectMeta: metav1.ObjectMeta{Name: "node1", Namespace: hcNS},
-				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
-					Orbit:                    orbitName,
-					NodeId:                   1,
-					AccountId:                "0.0.3",
-					Weight:                   1,
-					Log4j2ConfigRef:          "node0-log4j2",
-					SettingsConfigRef:        "node0-settings",
-					ApplicationPropertiesRef: "node0-application-properties",
-					PodProperties: operatorv1alpha1.ConsensusPodProperties{
-						Containers: operatorv1alpha1.ConsensusContainers{
-							ConsensusNode: operatorv1alpha1.ConsensusNodeContainer{
-								SoftwareVersion: &operatorv1alpha1.SoftwareVersion{
-									Repository: "docker.io/hashgraph",
-									ImageName:  "hedera-services",
-									ImageTag:   "0.58.0",
-								},
-							},
-							UC: &operatorv1alpha1.UcSidecar{Enabled: true, SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "solo-operator-uc", ImageTag: "1.0.0"}},
-						},
-					},
-				},
-			}
-			err = k8sClient.Create(ctx, cap)
-			if err != nil {
-				Expect(err.Error()).To(ContainSubstring("already exists"))
-			}
 		})
 
-		It("Should reconcile successfully with auto-injected block-node values", func() {
+		It("Should reconcile successfully with values supplied inline", func() {
 			comp := operatorv1alpha1.HelmComponentBlockNode
 			hc := &operatorv1alpha1.HelmCapsule{
 				ObjectMeta: metav1.ObjectMeta{Name: hcName, Namespace: hcNS},
@@ -725,6 +675,17 @@ var _ = Describe("HelmCapsule Controller", func() {
 				_ = k8sClient.Get(ctx, key, got)
 				return got.Status.Phase
 			}, timeout, interval).Should(Equal(operatorv1alpha1.PhaseSucceeded))
+
+			By("Publishing the block node endpoint in status.outputs")
+			Eventually(func() map[string]string {
+				got := &operatorv1alpha1.HelmCapsule{}
+				_ = k8sClient.Get(ctx, key, got)
+				return got.Status.Outputs
+			}, timeout, interval).Should(Equal(map[string]string{
+				"address":       "block-node-block-node-server." + hcNS + ".svc.cluster.local",
+				"streamingPort": "40840",
+				"servicePort":   "40840",
+			}))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, hc)).Should(Succeed())
