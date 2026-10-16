@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Variant of common/applicationproperties.yaml (task deploy BLOCKNODE=true): all nodes run TSS, only node0 streams; tssKeysPath avoids the read-only data/keys mount.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: ApplicationProperties
+metadata:
+  name: NODEID-application-properties
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  scope: NODEID
+  content: |
+    hedera.config.version=0
+    netty.mode=TEST
+    hedera.recordStream.logPeriod=1
+    balances.exportPeriodSecs=400
+    files.maxSizeKb=2048
+    hedera.recordStream.compressFilesOnCreation=true
+    balances.compressOnCreation=true
+    contracts.maxNumWithHapiSigsAccess=0
+    autoRenew.targetTypes=
+    nodes.gossipFqdnRestricted=false
+    hedera.profiles.active=TEST
+    staking.periodMins=1
+    nodes.updateAccountIdAllowed=true
+    blockStream.streamMode=BOTH
+    blockStream.writerMode=WRITERMODE
+    blockStream.streamWrappedRecordBlocks=false
+    tss.hintsEnabled=true
+    tss.historyEnabled=true
+    tss.wrapsEnabled=false
+    tss.forceMockSignatures=false
+    tss.tssKeysPath=data/config/tss
+    scheduling.longTermEnabled=false
+    bootstrap.throttleDefsJson.resource=data/config/genesis-throttles.json
+    cache.warmThreads=6

@@ -350,36 +350,6 @@ tasks:
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=solo-operator -n solo-operator --timeout=120s
       - echo ">> All done"
 
-  dev:local:deploy:
-    desc: Deploy 4-node cluster using docs/example manifests (orbit + nodes + genesis)
-    cmds:
-      - task -d docs/example deploy
-
-  dev:local:teardown:
-    desc: Tear down the 4-node cluster (CRs + namespace)
-    cmds:
-      - task -d docs/example destroy
-
-  dev:local:status:
-    desc: Show status of all CRs in the local dev cluster
-    cmds:
-      - task -d docs/example status
-
-  dev:local:upgrade:
-    desc: Run the full upgrade flow against the local dev cluster (prepare → freeze → execute)
-    cmds:
-      - task -d docs/example upgrade
-
-  dev:local:upgrade:status:
-    desc: Show status of all upgrade CRs in the local dev cluster
-    cmds:
-      - task -d docs/example upgrade:status
-
-  dev:local:upgrade:destroy:
-    desc: Delete all upgrade CRs from the local dev cluster
-    cmds:
-      - task -d docs/example upgrade:destroy
-
   kind:reset:
     desc: Reset kind cluster with fresh CRDs (delete+generate run in parallel)
     vars:

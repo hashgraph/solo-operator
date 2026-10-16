@@ -21,7 +21,7 @@ spec:
   chart:
     repo: https://hiero-ledger.github.io/hiero-mirror-node/charts
     chart: hedera-mirror
-    version: "0.151.0"
+    version: "0.164.0"
 
   # Identifies this as a mirror node — enables topology value injection.
   component: mirror

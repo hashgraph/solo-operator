@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# node0 variant of common/blocknodesconfig.yaml (task deploy BLOCKNODE=true); values must match `kubectl -n solo-orbit get helmcapsule block-node -o jsonpath='{.status.outputs}'`.
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: BlockNodesConfig
+metadata:
+  name: node0-block-nodes
+  namespace: solo-orbit
+spec:
+  orbit: solo-orbit
+  scope: node0
+  content: |
+    {
+      "nodes": [
+        {
+          "address": "block-node-block-node-server.solo-orbit.svc.cluster.local",
+          "streamingPort": 40840,
+          "servicePort": 40840,
+          "priority": 0
+        }
+      ]
+    }

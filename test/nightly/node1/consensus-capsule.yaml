@@ -49,7 +49,7 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
         envFromSecret: "uploader-mirror-secrets"
 
       recordsUploader:
@@ -72,7 +72,7 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
         envFromSecret: "uploader-mirror-secrets"
 
       eventsUploader:
@@ -95,7 +95,7 @@ spec:
             memory: 200Mi
         blob:
           enabled: true
-          url: "s3://solo-streams?region=us-east-1&endpoint=http://minio.minio-tenant.svc.cluster.local&use_path_style=true&disable_https=true"
+          url: "s3://solo-streams?region=us-east-1&endpoint=http://rustfs-svc.rustfs.svc.cluster.local:9000&use_path_style=true&disable_https=true"
         envFromSecret: "uploader-mirror-secrets"
 
       backupUploader:
@@ -117,7 +117,7 @@ spec:
           bucketName: "solo-backups"
           s3:
             enabled: true
-            url: "http://minio.minio-tenant.svc.cluster.local"
+            url: "http://rustfs-svc.rustfs.svc.cluster.local:9000"
           gcs:
             enabled: false
           envFromSecret: "backup-uploader-secrets"

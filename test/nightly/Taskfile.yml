@@ -3,19 +3,20 @@
 version: '3'
 
 tasks:
-  setup:minio:
-    desc: Install MinIO operator and tenant
+  setup:rustfs:
+    desc: Install RustFS and create the solo-streams and solo-backups buckets
     cmds:
-      - helm repo add minio-operator https://operator.min.io/
+      - helm repo add rustfs https://charts.rustfs.com
       - helm repo update
-      - helm upgrade --install --namespace minio-operator --create-namespace minio-operator minio-operator/operator --wait --timeout 120s
-      - helm upgrade --install --namespace minio-tenant --create-namespace --values setup/minio-values.yaml minio-tenant minio-operator/tenant
+      - helm upgrade --install --namespace rustfs --create-namespace --values setup/rustfs-values.yaml --version 1.0.1 --wait --timeout 300s rustfs rustfs/rustfs
       - |
-        until kubectl get pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --no-headers 2>/dev/null | grep -q .; do
-          echo ">> Waiting for MinIO pods..."
-          sleep 5
-        done
-      - kubectl wait --for=condition=ready pod -l v1.min.io/tenant=minio-tenant -n minio-tenant --timeout=120s
+        kubectl run rustfs-buckets --rm -i --restart=Never -n rustfs --image=amazon/aws-cli:2.17.0 \
+          --env=AWS_ACCESS_KEY_ID=solo-operator --env=AWS_SECRET_ACCESS_KEY=changeme --env=AWS_DEFAULT_REGION=us-east-1 \
+          --command -- sh -c '
+            for b in solo-streams solo-backups; do
+              aws --endpoint-url http://rustfs-svc.rustfs.svc.cluster.local:9000 s3api head-bucket --bucket "$b" 2>/dev/null ||
+                aws --endpoint-url http://rustfs-svc.rustfs.svc.cluster.local:9000 s3 mb "s3://$b"
+            done'
 
   deploy:orbit:
     desc: Create the solo-orbit namespace and deploy Orbit
@@ -52,9 +53,9 @@ tasks:
       - echo ">> Genesis completed successfully"
 
   deploy:
-    desc: Full deploy — minio + orbit + nodes + genesis + wait for pods ready
+    desc: Full deploy — rustfs + orbit + nodes + genesis + wait for pods ready
     cmds:
-      - task: setup:minio
+      - task: setup:rustfs
       - task: deploy:genesis
       - echo ">> Waiting for all consensus node pods to be ready..."
       - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s

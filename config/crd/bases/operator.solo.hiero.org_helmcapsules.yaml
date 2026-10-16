@@ -314,6 +314,12 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              outputs:
+                additionalProperties:
+                  type: string
+                description: Outputs are component-specific key-values for consumers
+                  (see HelmComponent).
+                type: object
               phase:
                 description: Phase is the current lifecycle phase of the Helm release.
                 enum:

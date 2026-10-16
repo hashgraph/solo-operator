@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
@@ -109,11 +107,7 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 	case operatorv1alpha1.HelmComponentExplorer:
 		return explorerValues(orbit, ledgerID)
 	case operatorv1alpha1.HelmComponentBlockNode:
-		capsules, err := listConsensusCapsules(ctx, c, namespace, spec.OrbitRef.Name)
-		if err != nil {
-			return nil, err
-		}
-		return blockNodeValues(capsules), nil
+		return blockNodeValues(), nil
 	default:
 		return map[string]interface{}{}, nil
 	}
@@ -178,15 +172,9 @@ func explorerValues(orbit *operatorv1alpha1.Orbit, ledgerID string) (map[string]
 	return map[string]interface{}{"config": string(configBytes)}, nil
 }
 
-func blockNodeValues(capsules []operatorv1alpha1.ConsensusCapsule) map[string]interface{} {
-	return map[string]interface{}{
-		"blockNode": map[string]interface{}{
-			"config": map[string]interface{}{
-				"BLOCK_NODE_ENDPOINTS": strings.Join(consensusEndpoints(capsules), ","),
-				"CONSENSUS_NODE_COUNT": strconv.Itoa(len(capsules)),
-			},
-		},
-	}
+// blockNodeValues injects nothing; topology comes from spec.values.
+func blockNodeValues() map[string]interface{} {
+	return map[string]interface{}{}
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

@@ -391,22 +391,22 @@ func TestExplorerValues_configJSON(t *testing.T) {
 	}
 }
 
-func TestBlockNodeValues_endpointsAndCount(t *testing.T) {
+func TestBlockNodeValues_noInjection(t *testing.T) {
 	scheme := newTestScheme()
 	orbit := makeOrbit("test-orbit", "")
 	cap1 := makeCapsule("node1", "test-ns", "test-orbit", "node1.svc", 50211)
-	cap2 := makeCapsule("node2", "test-ns", "test-orbit", "node2.svc", 50211)
 
 	comp := operatorv1alpha1.HelmComponentBlockNode
 	spec := &operatorv1alpha1.HelmCapsuleSpec{
-		Chart:     operatorv1alpha1.HelmChartSpec{Repo: "oci://example.com", Chart: "block-node-server", Version: "0.31.0"},
+		Chart:     operatorv1alpha1.HelmChartSpec{Repo: "oci://example.com", Chart: "block-node-server", Version: "0.41.0"},
 		Component: &comp,
 		OrbitRef:  &corev1.LocalObjectReference{Name: "test-orbit"},
+		Values:    &apiextv1.JSON{Raw: []byte(`{"plugins":{"names":""}}`)},
 	}
 
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(orbit, cap1, cap2).
-		WithStatusSubresource(cap1, cap2).
+		WithObjects(orbit, cap1).
+		WithStatusSubresource(cap1).
 		Build()
 
 	result, err := MergeValues(context.Background(), c, "test-ns", spec)
@@ -414,14 +414,11 @@ func TestBlockNodeValues_endpointsAndCount(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	blockNode, _ := result["blockNode"].(map[string]interface{})
-	config, _ := blockNode["config"].(map[string]interface{})
-
-	if config["CONSENSUS_NODE_COUNT"] != "2" {
-		t.Errorf("expected CONSENSUS_NODE_COUNT=2, got %v", config["CONSENSUS_NODE_COUNT"])
+	if len(result) != 1 {
+		t.Errorf("expected only the inline values, got %v", result)
 	}
-	if config["BLOCK_NODE_ENDPOINTS"] == "" {
-		t.Error("expected BLOCK_NODE_ENDPOINTS to be non-empty")
+	if _, ok := result["blockNode"]; ok {
+		t.Errorf("expected no blockNode injection, got %v", result["blockNode"])
 	}
 }
 
