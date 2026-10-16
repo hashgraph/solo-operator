@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/automa-saga/logx"
@@ -24,11 +23,13 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
+	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/controller"
 	"github.com/hashgraph/solo-operator/internal/registry"
 	"github.com/hashgraph/solo-operator/internal/resources/helm"
@@ -67,6 +68,7 @@ func main() {
 	var enableHTTP2 bool
 	var registryOrder string
 	var allowedRegistryHosts string
+	var allowedNamespaces string
 	var nodeActiveTimeout time.Duration
 	var nodeActiveAlertInterval time.Duration
 	var showVersion bool
@@ -95,6 +97,8 @@ func main() {
 	flag.StringVar(&allowedRegistryHosts, "allowed-registry-hosts", "",
 		"Comma-separated allow-list of registry hosts (or parent domains) permitted for image checks. "+
 			"Empty (default) permits any host except loopback/link-local/private-network addresses.")
+	flag.StringVar(&allowedNamespaces, "allowed-namespaces", "",
+		"Comma-separated namespaces the operator watches and manages. Empty (default) watches all namespaces.")
 	flag.DurationVar(&nodeActiveTimeout, "node-active-timeout", 10*time.Minute,
 		"Backstop deadline for a consensus node to reach platform status ACTIVE after an upgrade "+
 			"(anchored to nodeUpgradeStartTime) before a NodeActiveDeadlineExceeded warning is emitted. "+
@@ -105,12 +109,8 @@ func main() {
 
 	flag.Parse()
 
-	var allowedRegistryHostsList []string
-	for _, h := range strings.Split(allowedRegistryHosts, ",") {
-		if h = strings.TrimSpace(h); h != "" {
-			allowedRegistryHostsList = append(allowedRegistryHostsList, h)
-		}
-	}
+	allowedRegistryHostsList := common.SplitCSV(allowedRegistryHosts)
+	allowedNamespacesList := common.SplitCSV(allowedNamespaces)
 
 	if showVersion {
 		fmt.Println(version.Get().Text())
@@ -170,8 +170,18 @@ func main() {
 		metricsServerOptions.FilterProvider = filters.WithAuthenticationAndAuthorization
 	}
 
+	var cacheOptions cache.Options
+	if len(allowedNamespacesList) > 0 {
+		cacheOptions.DefaultNamespaces = make(map[string]cache.Config, len(allowedNamespacesList))
+		for _, ns := range allowedNamespacesList {
+			cacheOptions.DefaultNamespaces[ns] = cache.Config{}
+		}
+		setupLog.Info("Restricting operator to allowed namespaces", "namespaces", allowedNamespacesList)
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
+		Cache:                  cacheOptions,
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
@@ -185,10 +195,9 @@ func main() {
 	}
 
 	// Setup controllers
-	if err = controller.NewOrbitReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	orbitReconciler := controller.NewOrbitReconciler(mgr.GetClient(), mgr.GetScheme())
+	orbitReconciler.AllowedNamespaces = allowedNamespacesList
+	if err = orbitReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Orbit")
 		os.Exit(1)
 	}

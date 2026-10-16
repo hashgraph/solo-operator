@@ -4,9 +4,12 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,15 +30,17 @@ const OrbitFinalizer = "operator.solo.hiero.org/orbit-finalizer"
 type OrbitReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// AllowedNamespaces mirrors --allowed-namespaces; empty means all namespaces.
+	AllowedNamespaces []string
 }
 
 func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconciler {
 	return &OrbitReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/finalizers,verbs=update
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch;create;update;patch;delete,roleName=manager-role
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/status,verbs=get;update;patch,roleName=manager-role
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/finalizers,verbs=update,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;delete
@@ -364,8 +369,31 @@ func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1
 	if !found {
 		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, ready)
 	}
+	r.setNamespaceAllowed(ctx, orbitObj)
 	orbitObj.Status.ObservedGeneration = orbitObj.Generation
 	return common.WarnOnConflict(ctx, r.Status().Update(ctx, orbitObj))
+}
+
+// setNamespaceAllowed relies on the admission-enforced invariant that an Orbit's CRs live in the namespace named after it.
+func (r *OrbitReconciler) setNamespaceAllowed(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) {
+	if len(r.AllowedNamespaces) == 0 {
+		apimeta.RemoveStatusCondition(&orbitObj.Status.Conditions, operatorv1alpha1.OrbitConditionTypeNamespaceAllowed)
+		return
+	}
+	cond := metav1.Condition{
+		Type:    operatorv1alpha1.OrbitConditionTypeNamespaceAllowed,
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonNamespaceAllowed.String(),
+		Message: fmt.Sprintf("Namespace %q is in the operator's allowedNamespaces", orbitObj.Name),
+	}
+	if !slices.Contains(r.AllowedNamespaces, orbitObj.Name) {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = ReasonNamespaceNotAllowed.String()
+		cond.Message = fmt.Sprintf("Namespace %q is not in the operator's allowedNamespaces; its resources are not reconciled. "+
+			"Create the namespace and add it to the chart's allowedNamespaces (helm upgrade).", orbitObj.Name)
+		common.Warn(ctx, ReasonNamespaceNotAllowed).Strs("allowed_namespaces", r.AllowedNamespaces).Msg(cond.Message)
+	}
+	apimeta.SetStatusCondition(&orbitObj.Status.Conditions, cond)
 }
 
 func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {

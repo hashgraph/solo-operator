@@ -45,4 +45,6 @@ const (
 	// Orbit.
 	ReasonOrbitLookupFailed         errx.Reason = "OrbitLookupFailed"
 	ReasonWaitingForCapsuleDeletion errx.Reason = "WaitingForCapsuleDeletion"
+	ReasonNamespaceAllowed          errx.Reason = "NamespaceAllowed"
+	ReasonNamespaceNotAllowed       errx.Reason = "NamespaceNotAllowed"
 )

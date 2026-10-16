@@ -27,11 +27,7 @@ const managedAnnotationsAnnotation = "operator.solo.hiero.org/managed-annotation
 
 // managedAnnotationsKeys extracts the sorted annotation keys stored in the marker annotation.
 func managedAnnotationsKeys(svc *corev1.Service) []string {
-	val := svc.Annotations[managedAnnotationsAnnotation]
-	if val == "" {
-		return nil
-	}
-	return strings.Split(val, ",")
+	return common.SplitCSV(svc.Annotations[managedAnnotationsAnnotation])
 }
 
 // setManagedAnnotations writes desired annotations into existing and removes any previously

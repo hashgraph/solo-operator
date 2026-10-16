@@ -304,6 +304,9 @@ type OrbitAddressBook struct {
 	ExternalAddresses []AddressBookEntry `json:"externalAddresses,omitempty"`
 }
 
+// OrbitConditionTypeNamespaceAllowed reports whether the Orbit's namespace is in the operator's allowedNamespaces.
+const OrbitConditionTypeNamespaceAllowed = "NamespaceAllowed"
+
 // OrbitStatus defines the observed state of Orbit
 type OrbitStatus struct {
 	// Phase is the current phase of the Orbit

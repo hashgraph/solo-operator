@@ -1,0 +1,168 @@
+suite: rbac allowedNamespaces
+templates:
+  - templates/rbac.yaml
+release:
+  name: so
+  namespace: solo-operator
+tests:
+  - it: grants all rules cluster-wide when allowedNamespaces is empty
+    asserts:
+      - hasDocuments:
+          count: 4
+      - containsDocument:
+          kind: ClusterRole
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          any: true
+      - containsDocument:
+          kind: ClusterRoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-rolebinding
+          any: true
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["configmaps", "endpoints", "persistentvolumeclaims", "secrets", "serviceaccounts", "services"]
+            verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+        documentSelector:
+          path: kind
+          value: ClusterRole
+
+  - it: renders a Role and RoleBinding per allowed namespace
+    set:
+      allowedNamespaces: [ns-a, ns-b, ns-a]
+    asserts:
+      - hasDocuments:
+          count: 8
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          namespace: ns-a
+          any: true
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          namespace: ns-b
+          any: true
+      - containsDocument:
+          kind: RoleBinding
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-rolebinding
+          namespace: ns-b
+          any: true
+      - equal:
+          path: roleRef.name
+          value: so-solo-operator-manager-role
+        documentSelector:
+          path: metadata.name
+          value: so-solo-operator-manager-rolebinding
+          matchMany: true
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: so-solo-operator
+            namespace: solo-operator
+        documentSelector:
+          path: kind
+          value: ClusterRoleBinding
+
+  - it: treats blank-only allowedNamespaces as all namespaces
+    set:
+      allowedNamespaces: ["", "  "]
+    asserts:
+      - hasDocuments:
+          count: 4
+      - notExists:
+          path: metadata.namespace
+        documentSelector:
+          path: metadata.name
+          value: so-solo-operator-manager-role
+          matchMany: true
+
+  - it: drops blank and whitespace entries from allowedNamespaces
+    set:
+      allowedNamespaces: [ns-a, "", " ns-a "]
+    asserts:
+      - hasDocuments:
+          count: 6
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          namespace: ns-a
+          any: true
+
+  - it: keeps only cluster-scoped rules in the ClusterRole when namespaces are listed
+    set:
+      allowedNamespaces: [ns-a]
+    documentSelector:
+      path: kind
+      value: ClusterRole
+    asserts:
+      - lengthEqual:
+          path: rules
+          count: 5
+      - notContains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["configmaps", "endpoints", "persistentvolumeclaims", "secrets", "serviceaccounts", "services"]
+            verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+
+  - it: fails when an allowed namespace does not exist
+    set:
+      allowedNamespaces: [missing]
+    kubernetesProvider:
+      scheme:
+        "v1/Namespace":
+          gvr:
+            version: v1
+            resource: namespaces
+          namespaced: false
+      objects:
+        - kind: Namespace
+          apiVersion: v1
+          metadata:
+            name: kube-system
+    asserts:
+      - failedTemplate:
+          errorPattern: 'allowedNamespaces: namespace "missing" not found'
+
+  - it: accepts allowed namespaces that exist
+    set:
+      allowedNamespaces: [solo]
+    kubernetesProvider:
+      scheme:
+        "v1/Namespace":
+          gvr:
+            version: v1
+            resource: namespaces
+          namespaced: false
+      objects:
+        - kind: Namespace
+          apiVersion: v1
+          metadata:
+            name: kube-system
+        - kind: Namespace
+          apiVersion: v1
+          metadata:
+            name: solo
+    asserts:
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          namespace: solo
+          any: true
+
+  - it: renders nothing when rbac.create is false
+    set:
+      rbac.create: false
+      allowedNamespaces: [ns-a]
+    asserts:
+      - hasDocuments:
+          count: 0

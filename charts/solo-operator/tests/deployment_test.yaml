@@ -1,0 +1,35 @@
+suite: deployment allowedNamespaces
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: omits --allowed-namespaces by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces
+          any: true
+
+  - it: passes deduplicated allowed namespaces to the operator
+    set:
+      allowedNamespaces: [ns-a, ns-b, ns-a]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces=ns-a,ns-b
+
+  - it: omits --allowed-namespaces when entries are blank
+    set:
+      allowedNamespaces: ["", "  "]
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces
+          any: true
+
+  - it: trims entries and drops blanks
+    set:
+      allowedNamespaces: [" ns-a ", "", ns-b]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces=ns-a,ns-b

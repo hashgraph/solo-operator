@@ -14,3 +14,19 @@ subjects:
 - kind: ServiceAccount
   name: controller-manager
   namespace: system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: manager-namespaced-rolebinding
+  labels:
+    app.kubernetes.io/name: solo-operator
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: manager-namespaced-role
+subjects:
+- kind: ServiceAccount
+  name: controller-manager
+  namespace: system
