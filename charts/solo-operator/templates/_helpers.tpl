@@ -63,16 +63,24 @@ Create the name of the service account to use
 
 {{/*
 Allowed namespaces, or "_all_namespaces_placeholder" when empty.
+Entries are trimmed and blanks dropped to match the operator's SplitCSV.
 */}}
 {{- define "solo-operator.allowedNamespaces" -}}
-{{- if .Values.allowedNamespaces }}
-{{- $online := lookup "v1" "Namespace" "" "kube-system" }}
+{{- $clean := list }}
 {{- range .Values.allowedNamespaces }}
+{{- $ns := trim . }}
+{{- if $ns }}
+{{- $clean = append $clean $ns }}
+{{- end }}
+{{- end }}
+{{- if $clean }}
+{{- $online := lookup "v1" "Namespace" "" "kube-system" }}
+{{- range $clean }}
 {{- if and $online (not (lookup "v1" "Namespace" "" .)) }}
 {{- fail (printf "allowedNamespaces: namespace %q not found; create it before adding it to allowedNamespaces" .) }}
 {{- end }}
 {{- end }}
-{{- join " " (uniq .Values.allowedNamespaces) }}
+{{- join " " (uniq $clean) }}
 {{- else -}}
 _all_namespaces_placeholder
 {{- end }}

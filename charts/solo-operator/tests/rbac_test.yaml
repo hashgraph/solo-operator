@@ -70,6 +70,32 @@ tests:
           path: kind
           value: ClusterRoleBinding
 
+  - it: treats blank-only allowedNamespaces as all namespaces
+    set:
+      allowedNamespaces: ["", "  "]
+    asserts:
+      - hasDocuments:
+          count: 4
+      - notExists:
+          path: metadata.namespace
+        documentSelector:
+          path: metadata.name
+          value: so-solo-operator-manager-role
+          matchMany: true
+
+  - it: drops blank and whitespace entries from allowedNamespaces
+    set:
+      allowedNamespaces: [ns-a, "", " ns-a "]
+    asserts:
+      - hasDocuments:
+          count: 6
+      - containsDocument:
+          kind: Role
+          apiVersion: rbac.authorization.k8s.io/v1
+          name: so-solo-operator-manager-role
+          namespace: ns-a
+          any: true
+
   - it: keeps only cluster-scoped rules in the ClusterRole when namespaces are listed
     set:
       allowedNamespaces: [ns-a]

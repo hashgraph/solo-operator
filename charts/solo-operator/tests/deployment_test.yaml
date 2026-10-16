@@ -16,3 +16,20 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --allowed-namespaces=ns-a,ns-b
+
+  - it: omits --allowed-namespaces when entries are blank
+    set:
+      allowedNamespaces: ["", "  "]
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces
+          any: true
+
+  - it: trims entries and drops blanks
+    set:
+      allowedNamespaces: [" ns-a ", "", ns-b]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-namespaces=ns-a,ns-b
