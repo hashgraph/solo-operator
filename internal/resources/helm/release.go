@@ -135,9 +135,9 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		hc.Status.ReleaseVersion = info.Version
 		hc.Status.InstalledChart = info.ChartString
 		hc.Status.ReleaseStatus = info.Status
-		hc.Status.Outputs = componentOutputs(hc, releaseName, values)
 		if info.Status == "deployed" {
 			hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
+			hc.Status.Outputs = componentOutputs(hc, releaseName, values)
 		}
 		return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
 	}); err != nil {

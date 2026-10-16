@@ -26,7 +26,7 @@ type tlsBlock struct {
 	CertificateSha384 string `json:"certificateSha384"`
 }
 
-// validateTLS checks only streamingTls/serviceTls; the rest of the document passes through.
+// validateTLS checks only streamingTls/serviceTls; malformed JSON or a non-array nodes passes through for the CN to reject.
 func validateTLS(content string) error {
 	var doc blockNodesDoc
 	if err := json.Unmarshal([]byte(content), &doc); err != nil {

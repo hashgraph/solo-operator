@@ -4,6 +4,7 @@ package helm
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -74,6 +75,9 @@ func portValue(v interface{}, fallback int32) int32 {
 	var n int64
 	switch p := v.(type) {
 	case float64:
+		if p != math.Trunc(p) {
+			return fallback
+		}
 		n = int64(p)
 	case int:
 		n = int64(p)

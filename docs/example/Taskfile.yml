@@ -139,7 +139,6 @@ tasks:
 
   deploy:single:
     desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
-    internal: true
     deps: [deploy:common]
     cmds:
       # Genesis derives the roster from whatever ConsensusCapsules exist

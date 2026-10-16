@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# node0 variant of common/blocknodesconfig.yaml (task deploy BLOCKNODE=true); ports must match block-node.yaml.
+# node0 variant of common/blocknodesconfig.yaml (task deploy BLOCKNODE=true); values must match `kubectl -n solo-orbit get helmcapsule block-node -o jsonpath='{.status.outputs}'`.
 apiVersion: operator.solo.hiero.org/v1alpha1
 kind: BlockNodesConfig
 metadata:

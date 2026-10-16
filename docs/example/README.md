@@ -30,6 +30,9 @@ task setup
 # Deploy full 4-node network (orbit + all nodes + genesis), waits for pods ready
 task deploy
 
+# Or deploy node0 only + genesis (lightweight, e.g. for beacon testing)
+task deploy:single
+
 # Check status
 task status
 
@@ -48,7 +51,7 @@ task deploy:blocknode
 task destroy:blocknode
 ```
 
-The block node is deployed before the consensus nodes so node0 starts with `block-nodes.json` and the stream properties already in place. TSS needs a threshold of nodes streaming blocks (`BOTH`), so all four nodes get the block-node properties. Only node0 is connected to the block node (`FILE_AND_GRPC`); node1 to node3 write block files only (`FILE`). Config changes on a running consensus node need a pod restart, because the files are `subPath` mounts. `deploy:blocknode` runs `task deploy BLOCKNODE=true`, which also applies `helmcapsule/block-nodes-config.yaml` and `helmcapsule/applicationproperties.yaml` for node0.
+The block node is deployed before the consensus nodes so node0 starts with `block-nodes.json` and the stream properties already in place. TSS needs a threshold of nodes streaming blocks (`BOTH`), so all four nodes get the block-node properties. Only node0 is connected to the block node (`FILE_AND_GRPC`); node1 to node3 write block files only (`FILE`). Config changes on a running consensus node need a pod restart, because the files are `subPath` mounts. `deploy:blocknode` runs `task deploy BLOCKNODE=true`, which also applies `helmcapsule/block-nodes-config.yaml` and `helmcapsule/applicationproperties.yaml` for every node.
 
 ## Proxy Sidecars (optional)
 

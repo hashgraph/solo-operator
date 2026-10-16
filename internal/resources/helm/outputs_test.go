@@ -92,6 +92,18 @@ func TestComponentOutputs_blockNode(t *testing.T) {
 			},
 		},
 		{
+			name:    "fractional ports fall back",
+			release: "block-node",
+			values: map[string]interface{}{
+				"blockNode": map[string]interface{}{"ports": map[string]interface{}{"publisher": 40840.9}},
+			},
+			want: map[string]string{
+				"address":       "block-node-block-node-server.test-ns.svc.cluster.local",
+				"streamingPort": "40840",
+				"servicePort":   "40840",
+			},
+		},
+		{
 			name:    "null and zero plugin ports fall back",
 			release: "block-node",
 			values: map[string]interface{}{
@@ -182,6 +194,47 @@ func TestReleaseSubReconciler_backfillsOutputsWhenUpToDate(t *testing.T) {
 	}
 	if hc.Status.Outputs["address"] == "" {
 		t.Error("expected outputs to be backfilled on an up-to-date release")
+	}
+}
+
+func TestReleaseSubReconciler_noOutputsUntilDeployed(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "pending-install", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+	hc := blockNodeCapsule("block-node", "test-ns")
+	hc.Spec.OrbitRef = &corev1.LocalObjectReference{Name: "test-orbit"}
+	r := newTestReleaseSubReconciler(scheme, mock, hc, makeOrbit("test-orbit", ""))
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hc.Status.Outputs) != 0 {
+		t.Errorf("expected no outputs before deployed, got %v", hc.Status.Outputs)
+	}
+}
+
+func TestReleaseSubReconciler_clearsOutputsWhenComponentRemoved(t *testing.T) {
+	scheme := newTestScheme()
+	mock := NewMockClient()
+	hc := blockNodeCapsule("block-node", "test-ns")
+	hc.Spec.OrbitRef = &corev1.LocalObjectReference{Name: "test-orbit"}
+	r := newTestReleaseSubReconciler(scheme, mock, hc, makeOrbit("test-orbit", ""))
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("first reconcile error: %v", err)
+	}
+	if len(hc.Status.Outputs) == 0 {
+		t.Fatal("expected outputs after first reconcile")
+	}
+
+	hc.Spec.Component = nil
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("second reconcile error: %v", err)
+	}
+	if len(hc.Status.Outputs) != 0 {
+		t.Errorf("expected outputs cleared, got %v", hc.Status.Outputs)
 	}
 }
 
