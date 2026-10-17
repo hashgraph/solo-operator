@@ -55,6 +55,44 @@ spec:
               NetworkUpgradePrepareSpec is immutable after creation; the CEL rule below
               rejects any spec mutation at admission time.
             properties:
+              artifacts:
+                description: |-
+                  Artifacts are opaque files the UC read from the node's upgrade state, such as
+                  the candidate roster exported at PREPARE_UPGRADE. The UC does not interpret
+                  them; the operator does. Absent when the node exported nothing.
+                items:
+                  description: |-
+                    UpgradeArtifact is an opaque file the UC read from the node's upgrade state and
+                    forwarded verbatim in the Prepare CR. The UC never interprets Content; the
+                    operator decides what each named artifact means and what to do with it, so a new
+                    artifact is a new Name, not a new CR kind or a new UC permission.
+                  properties:
+                    content:
+                      description: Content is the file's text, unmodified (UTF-8;
+                        the UC rejects binary files).
+                      maxLength: 524288
+                      minLength: 1
+                      type: string
+                    name:
+                      description: Name identifies the artifact (for example "candidate-roster.json").
+                      pattern: ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$
+                      type: string
+                    sha256:
+                      description: |-
+                        Sha256 is the digest of Content's bytes, computed by the UC when it read the
+                        file. The operator verifies it before using the content.
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
+                  required:
+                  - content
+                  - name
+                  - sha256
+                  type: object
+                maxItems: 8
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               consensusCapsule:
                 description: |-
                   ConsensusCapsule is the name of the ConsensusCapsule (this node) whose UC created

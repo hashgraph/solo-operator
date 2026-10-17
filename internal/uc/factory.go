@@ -132,7 +132,7 @@ func (f *Factory) RecoverOnStartup(ctx context.Context) error {
 // The UC copies spec.images verbatim and does NOT do registry selection or
 // layer-hash verification — that is the operator's PrepareReconciler.
 func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
-	operationID, _, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
+	operationID, markerTime, manifest, found, err := deriveOperationIDPrimary(f.cfg.UpgradePath, f.cfg.NodeID)
 	if err != nil {
 		if errorx.IsOfType(err, errManifestInvalid) {
 			// ManifestInvalid is terminal — re-reading the same bytes will not fix
@@ -153,7 +153,24 @@ func (f *Factory) HandleExecuteImmediate(ctx context.Context) error {
 			ReasonMarkerStatFailed)
 	}
 
-	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images)
+	// The marker persists, so this handler runs every poll tick. Once the Prepare CR
+	// is known to exist there is nothing to build, and the roster read (which can
+	// wait) is skipped. The check is cache-only; a miss just falls through to the
+	// authoritative dedup in deliverCR.
+	if f.cachedCreated(operationID, operatorv1alpha1.StepPrepare) {
+		return nil
+	}
+
+	var artifacts []operatorv1alpha1.UpgradeArtifact
+	roster, err := readCandidateRoster(ctx, f.cfg, markerTime)
+	if err != nil {
+		return err
+	}
+	if roster != nil {
+		artifacts = append(artifacts, *roster)
+	}
+
+	cr, err := buildPrepareCR(f.cfg, operationID, manifest.Images, artifacts...)
 	if err != nil {
 		return err
 	}

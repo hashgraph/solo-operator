@@ -37,6 +37,17 @@ const specOperationIDField = "spec.operationId"
 //     hit short-circuits the query, but its accuracy is maintained by the query
 //     and create paths above — it is never the sole basis for correctness.
 
+// cachedCreated reports whether the in-memory cache already records a CR for
+// operationID+step. It never calls the API, so it is cheap enough for a handler to
+// use to skip optional work (such as reading a file) on steady-state ticks. A false
+// result only means "not known to exist"; it is never proof of absence.
+func (f *Factory) cachedCreated(operationID, step string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, done := f.cache[operationID][step]
+	return done
+}
+
 // alreadyCreated reports whether a CR for operationID+step already exists and
 // its current status phase (empty when not found or unknown).
 func (f *Factory) alreadyCreated(ctx context.Context, gvr schema.GroupVersionResource, operationID, step string) (exists bool, phase string, _ error) {

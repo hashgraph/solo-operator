@@ -97,8 +97,9 @@ func prepareCRName(operationID string) string {
 // buildPrepareCR constructs the NetworkUpgradePrepare CR as an unstructured
 // object ready for persist-before-send and the dynamic-client Create. spec.images
 // is copied verbatim from the manifest; the UC does NOT do registry selection or
-// layer-hash verification — that is the operator's PrepareReconciler.
-func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.UpgradeImagesSpec) (*unstructured.Unstructured, error) {
+// layer-hash verification — that is the operator's PrepareReconciler. Any
+// artifacts (such as the candidate roster) are forwarded verbatim in spec.artifacts.
+func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.UpgradeImagesSpec, artifacts ...operatorv1alpha1.UpgradeArtifact) (*unstructured.Unstructured, error) {
 	prepare := &operatorv1alpha1.NetworkUpgradePrepare{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: operatorv1alpha1.GroupVersion.String(),
@@ -120,6 +121,7 @@ func buildPrepareCR(cfg Config, operationID string, images operatorv1alpha1.Upgr
 			OperationID:      operationID,
 			ConsensusCapsule: cfg.CapsuleName(),
 			Images:           images,
+			Artifacts:        artifacts,
 		},
 	}
 
