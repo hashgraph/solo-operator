@@ -79,7 +79,8 @@ the operator as a CR field before anything acts on it.
 | `FirewallPlan` type, status fields and condition names | done |
 | `orbit.spec.consensus.canAdoptRoster` | done |
 | CN exports the roster to `data/upgrade/` (property shipped in a package) | todo |
-| UC parses adoption log lines into `status.rosterAdoption` (safety net) | todo |
+| UC parses the CN's adoption log lines and sets the `roster-adoption` condition on its own pod (safety net) | done |
+| Operator proxies that condition to `ConsensusCapsule.status.rosterAdoption` and reacts | todo |
 | Operator Prepare reconciler (validate, key match, plan) | todo |
 | Operator Execute changes (copy plan, repoint Secrets, gating, promote) | todo |
 | `<capsule>-applied-roster` baseline ConfigMap | todo |
@@ -307,12 +308,16 @@ roster, forgetting to set the flag leaves a node whose certificate changed in th
 whose key was never swapped. That node cannot gossip. The Prepare warning exists to catch this days
 ahead, and the roster-adoption result below catches it again after the restart.
 
-**The UC's roster-adoption result (safety net, not built yet).** The UC's log monitor already tails
-`output/swirlds.log`. It would also match the three lines the CN logs once per upgrade restart
+**The UC's roster-adoption result (safety net).** The UC's log monitor already tails
+`output/swirlds.log`. It now also matches the three lines the CN logs once per upgrade restart
 (`Adopting candidate roster in round N`, `Rejecting candidate roster in round N`,
-`No candidate roster to adopt in round N`) and publish `adopted`, `rejected` or `none`, with the round
-and time, on `ConsensusCapsule.status`. The operator uses the first result after the Execute CR's
-`nodeUpgradeStartTime`:
+`No candidate roster to adopt in round N`). It logs a warning on a rejection and sets the
+`operator.solo.hiero.org/roster-adoption` condition on **its own pod**, the same way it reports platform
+status. The condition's reason is `Adopted`, `Rejected` or `NoCandidate`, and its message carries the
+round and the log time. The operator, which is the only writer of the `ConsensusCapsule` status, proxies
+it into `status.rosterAdoption` (not built yet). The operator uses the first result after the Execute CR's
+`nodeUpgradeStartTime`. The UC makes no decision about it and does not know the flag. An absent condition
+means "unknown".
 
 | Flag when Execute started | Log result | Operator reaction |
 |---|---|---|
@@ -368,7 +373,8 @@ The firewall plan needs the roster the node ran before the upgrade.
 | `NetworkUpgradeExecute` | `status.firewallPlan` | Operator | Verbatim copy, so the daemon reads one CR. Present only when the flag was true. |
 | Both | conditions `FirewallPlanComputed`, `FirewallApplied` | Operator, daemon | Progress and outcome. |
 | `Orbit` | `spec.consensus.canAdoptRoster` | Whoever confirms TSS readiness | `true`: the CN will adopt the candidate, so the operator acts. `false`: warn only. |
-| `ConsensusCapsule` | `status.rosterAdoption` | UC | `adopted`, `rejected` or `none`, with round and time. A safety net. |
+| Pod (UC's own) | condition `operator.solo.hiero.org/roster-adoption` | UC | Reason `Adopted`, `Rejected` or `NoCandidate`, with the log round and time. A safety net. |
+| `ConsensusCapsule` | `status.rosterAdoption` | Operator | Proxied from the pod condition. |
 | ConfigMap `<capsule>-applied-roster` | roster and annotations | Operator | Baseline for the next diff. |
 
 `FirewallPlan` holds one named allow rule (`cn-gossip`, tcp, the gossip port) and three **complete**
@@ -433,11 +439,14 @@ membership lists, so applying one is idempotent:
 
 ## Open questions
 
-1. **Who sets the flag, and when.** The design needs a reliable moment to set `canAdoptRoster` to `true`
-   (TSS readiness for the candidate is complete) and to set it back. Define the owner (council,
-   solo-provisioner or a job) and whether the flag is reset after each upgrade.
-2. **Adoption log signal.** The UC does not yet parse the adoption lines. Without it there is no
-   safety net for a wrong flag in either direction.
+1. **How the per-upgrade flag is delivered.** Decided: on networks where the TSS gate is on (the
+   production CNs), `canAdoptRoster` is `true` for one upgrade at a time and the upgrade protocol is the
+   only way to change those nodes. Open: the mechanism. A package fixed before `PREPARE_UPGRADE` cannot
+   prove readiness, because the candidate roster and its TSS work only start at `PREPARE_UPGRADE`. The
+   council's `FREEZE_UPGRADE` is the natural go/no-go point.
+2. **Operator side of the adoption signal.** The UC part is built. Still to do: proxy the pod condition
+   to the capsule status and implement the reactions in the table above. The CN log text can change, so
+   a missing result is always "unknown".
 3. **TSS interplay.** `PlatformStateUpdates` notes the candidate may instead be set at stake-period
    boundaries when TSS machinery keys it. Whether such a candidate can differ from the one exported
    at `PREPARE_UPGRADE` was not traced.
