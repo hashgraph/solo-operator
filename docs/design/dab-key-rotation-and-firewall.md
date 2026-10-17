@@ -1,236 +1,246 @@
 # Signing-key rotation and firewall changes from DAB transactions
 
-How a node operator's `NodeUpdate` (or a council `NodeCreate` / `NodeDelete`) turns into
-an automated gossip signing-key swap and a host-firewall update during a normal
-freeze upgrade, using the consensus node (CN), the UC sidecar, the operator, and the
+How a node operator's `NodeUpdate` (or a council `NodeCreate` / `NodeDelete`) becomes an
+automatic gossip signing-key swap and host-firewall update during a normal freeze upgrade.
+The pieces involved are the consensus node (CN), the UC sidecar, the operator and the
 `solo-provisioner-daemon`.
 
-**Status:** design. Parts marked **[done]** are implemented on this branch; parts marked
-**[todo]** are not. Statements about the consensus node were read from
-`hiero-consensus-node` `main` and are cited by path; anything not verified is listed under
-[Open questions](#open-questions).
+**Status:** design, partly implemented. See [Implementation status](#implementation-status).
+Statements about the CN were read from `hiero-consensus-node` `main`; anything not verified is
+listed under [Open questions](#open-questions).
+
+## Summary
+
+**The problem.** A DAB transaction changes the node's entry in consensus state and nothing
+else: no file is written and no signal reaches the UC. The change only takes effect when the
+network adopts a new roster, which today happens only at an upgrade restart. At that restart
+three things must line up on different machines:
+
+1. The rotating node starts with the **new private key** that matches its new certificate.
+2. Every other node's host firewall **allows the new gossip address**.
+3. A missing key or a closed port is found **days before** the freeze, not after it.
+
+**The design in five points.**
+
+1. The CN already exports a candidate roster at `PREPARE_UPGRADE`. The **UC forwards it
+   unmodified** in the Prepare CR. The **operator decides** what to do with it.
+2. The operator finds the staged key by matching the roster's certificate fingerprint to a Secret
+   label, and checks this early, at prepare time.
+3. The key swap rides the normal upgrade patch: one capsule patch changes the images and the
+   signing Secret, so there is one restart.
+4. The firewall is changed **make-before-break**: open the union of old and new addresses before
+   the restart, close the old ones only after the upgrade has succeeded.
+5. The operator acts on the roster only when `orbit.spec.consensus.canAdoptRoster` is `true`,
+   meaning the CN will adopt it. When it is `false` (the default) the operator only warns, keeps the
+   old key and changes no firewall rules.
+
+## Terms
+
+| Term | Meaning |
+|---|---|
+| Candidate roster | The roster the CN snapshots at `PREPARE_UPGRADE` and exports as `candidate-roster.json`. It becomes active at the next upgrade restart, if adopted. |
+| Adoption | The CN replacing its active roster with the candidate at an upgrade restart. It can be refused (see [When the operator acts](#when-the-operator-acts)). |
+| Applied roster | The roster the node is believed to be running. The baseline the next plan is diffed against. |
+| Staged Secret | A key Secret imported before the upgrade, named `node<N>-gossip-keys-<date>-<fp8>`. |
+| Firewall plan | The operator's computed firewall membership for one upgrade (`rollback`, `transition`, `target`). |
 
 ## Scope
 
-In scope:
+In scope: gossip signing certificate and key rotation for the node whose entry changed, and gossip
+endpoint changes with the resulting firewall change on **every** node. Freeze upgrades only.
+Firewall steps apply to the **mainnet (bare-metal) profile only**; the cluster-only profile has no
+daemon or host firewall, so there the operator only records the plan.
 
-- Gossip **signing certificate / private key** rotation for the node whose entry changed.
-- **Gossip endpoint** changes (new, changed or removed node addresses) and the resulting
-  host-firewall change on **every** node, not just the one that changed.
-- The freeze-based upgrade path (`PREPARE_UPGRADE` → `FREEZE_UPGRADE` → restart).
-- Firewall changes apply to the **mainnet (bare-metal) profile only**. The cluster-only profile has
-  no provisioner daemon and no host firewall, so there the operator only records the plan.
-
-Out of scope here:
-
-- gRPC TLS certificate and admin key rotation (same mechanism, different fields).
-- Service-endpoint changes and the HAProxy machine, which sit off-host on mainnet
-  (HIP-1495).
-- Block-node firewall and traffic shaping.
-- The no-freeze model, sketched under [Future: no-freeze changes](#future-no-freeze-changes).
-
-## Why this is needed
-
-A DAB transaction changes the node's entry in consensus state only. Nothing is written to
-disk and nothing is sent to the UC when it is handled
-(`NodeUpdateHandler.handle` only calls `nodeStore.put`). The change takes effect when the
-network adopts a new roster, which today happens only at an upgrade restart
-(`V0540RosterSchema.restart`, and only when `ctx.isUpgrade(...)`).
-
-So three things must line up at the upgrade restart, on different machines:
-
-1. The rotating node must start with the **new private key** that matches the new cert in
-   the adopted roster.
-2. Every other node's host firewall must **allow the new gossip address** (and may drop
-   the old one afterwards).
-3. Nobody should discover a missing key or a closed port after the network is frozen.
+Out of scope: gRPC TLS and admin key rotation (same mechanism, other fields), service endpoints and
+the off-host HAProxy machine (HIP-1495), block-node firewall and shaping, and the
+[no-freeze model](#future-no-freeze-changes).
 
 ## Roles
 
 | Component | Role |
 |---|---|
-| Node operator | Generates and imports the new key, submits `NodeUpdate`. |
-| Council | Sends `PREPARE_UPGRADE`, `FREEZE_UPGRADE` (and `FREEZE_ABORT` if needed). |
-| CN | Exports the candidate roster, writes the marker files. |
-| UC sidecar | Reads the roster and creates the upgrade CRs. **Does not interpret the roster.** |
-| Operator | Validates the roster, matches the key, computes the firewall plan, patches the capsule. |
+| Node operator | Imports the new key, submits `NodeUpdate`. |
+| Council | Sends `PREPARE_UPGRADE`, `FREEZE_UPGRADE`, and `FREEZE_ABORT` if needed. |
+| CN | Exports the candidate roster and writes the marker files. |
+| UC sidecar | Reads the roster and creates the upgrade CRs. **Never interprets the roster.** |
+| Operator | Validates the roster, matches the key, computes the plan, patches the capsule. |
 | `solo-provisioner-daemon` | Applies the firewall plan on the host. |
-| `solo-provisioner` | Generates and imports keys; owns the initial `cn-gossip` firewall rule. |
+| `solo-provisioner` | Generates and imports keys. Owns the initial `cn-gossip` firewall rule. |
 
-Design rule: the UC forwards, the operator decides. Every configuration change is visible
-to the operator as a CR field before anything acts on it.
+Rule of thumb: **the UC forwards, the operator decides.** Every configuration change is visible to
+the operator as a CR field before anything acts on it.
 
-## Prerequisites
+## Implementation status
 
-1. **CN exports the candidate roster where the UC can read it.** Set
+| Piece | Status |
+|---|---|
+| UC reads `candidate-roster.json` and forwards it | done |
+| `spec.artifacts` on the Prepare CR | done |
+| `FirewallPlan` type, status fields and condition names | done |
+| `orbit.spec.consensus.canAdoptRoster` | done |
+| CN exports the roster to `data/upgrade/` (property shipped in a package) | todo |
+| UC parses adoption log lines into `status.rosterAdoption` (safety net) | todo |
+| Operator Prepare reconciler (validate, key match, plan) | todo |
+| Operator Execute changes (copy plan, repoint Secrets, gating, promote) | todo |
+| `<capsule>-applied-roster` baseline ConfigMap | todo |
+| Daemon applies the firewall plan | todo |
+| `cn-gossip` rule created at provisioning (solo-weaver#1305) | todo |
+
+## Before you start
+
+1. **The CN exports the roster where the UC can read it.** Set
    `networkAdmin.candidateRosterExportFile` to
-   `/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/candidate-roster.json`. The path is
-   deliberately *beside* `current/`: the CN wipes `current/` when it extracts the package
-   (`ReadableFreezeUpgradeActions.extractAndReplaceArtifacts` calls `cleanDirectory`) on a
-   separate thread, so a file written into `current/` can be lost. The property is a node
-   property (`node.properties`). It ships in the deployment package in one freeze window and
-   is active from the next: the first window cannot export a roster, because the CN
-   handling that `PREPARE_UPGRADE` is still the old process. Leave
-   `--candidate-roster-required` off until the property is active. A `node.properties` shipped in
-   the package becomes a whole-file ConfigMap, so it must include any overrides operators
-   already set or it will replace them.
-2. **`cn-gossip` host-firewall rule exists** (mainnet), created by `solo-provisioner` at
-   provisioning (hashgraph/solo-weaver#1305). The daemon only creates it as a fallback.
-3. **Key Secrets follow the provisioner naming** (hashgraph/solo-weaver PR 1198):
-   `node<N>-gossip-keys-<date>-<fp8>`, where the fingerprint is the SHA-384 of the
-   certificate DER. A new key creates a new Secret next to the old one and never
-   overwrites it.
-4. **`orbit.spec.consensus.canAdoptRoster` matches the network [done: field].** `false` by
-   default. Set it to `true` only where the CN's TSS readiness gate cannot reject a candidate
-   roster (see [Adoption confirmation](#adoption-confirmation)).
+   `/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/candidate-roster.json`.
+   - Put it beside `current/`, not inside it. The CN wipes `current/` while extracting the package
+     (`ReadableFreezeUpgradeActions` calls `cleanDirectory` on a separate thread), so a file
+     written there can be lost.
+   - It is a node property (`node.properties`). Ship it in a deployment package in one freeze
+     window. It is active from the next, because the CN that handles that `PREPARE_UPGRADE` is still
+     the old process.
+   - A `node.properties` in the package becomes a whole-file ConfigMap, so it must include any
+     overrides operators already set or it replaces them.
+   - Leave `--candidate-roster-required` off until the property is active.
+2. **The `cn-gossip` firewall rule exists** (mainnet), created by `solo-provisioner` at
+   provisioning. The daemon only creates it as a fallback.
+3. **Key Secrets follow the provisioner naming** (solo-weaver PR 1198). The fingerprint in the name
+   is the SHA-384 of the certificate DER. A new key creates a new Secret beside the old one and
+   never overwrites it.
+4. **`orbit.spec.consensus.canAdoptRoster` is `true` before the upgrade that carries the change.**
+   Default `false`. Set it only when the CN will adopt the candidate: TSS readiness for it is
+   complete, or the TSS gate is off. Whoever confirms that (council, solo-provisioner or a job) sets
+   it. See [When the operator acts](#when-the-operator-acts).
 
-## Data model
+## The flow at a glance
 
-| Object | Field | Written by | Meaning |
-|---|---|---|---|
-| `NetworkUpgradePrepare` | `spec.artifacts[]` **[done]** | UC | Opaque files read from the node. Entry `candidate-roster.json` carries `name`, `sha256`, `content`. Content is the raw file, at most 512 KiB. |
-| `NetworkUpgradePrepare` | `status.firewallPlan` **[done: type]** | Operator | The plan below. |
-| `NetworkUpgradeExecute` | `status.firewallPlan` **[done: type]** | Operator | Verbatim copy, so the daemon reads one CR. |
-| Both | conditions `FirewallPlanComputed`, `FirewallApplied` **[done: constants]** | Operator / daemon | Progress and outcome. |
-| `Orbit` | `spec.consensus.canAdoptRoster` **[done]** | Whoever enables TSS | Asserts a candidate roster cannot be rejected at restart. |
-| `ConsensusCapsule` | `status.rosterAdoption` **[todo]** | UC | `adopted`, `rejected` or `none`, with round and time, parsed from the CN log. |
-| ConfigMap `<capsule>-applied-roster` **[todo]** | roster + annotations | Operator | The roster the node is believed to run. Baseline for the next diff. |
-
-`FirewallPlan` holds one named allow rule (`cn-gossip`, tcp, the gossip port) and three
-**complete** membership lists, never diffs, so applying one is idempotent:
-
-| List | Contents | Applied |
+| Phase | Trigger | What happens |
 |---|---|---|
-| `rollback` | Addresses of the roster in use before this upgrade | On abort |
-| `transition` | Union of the in-use and candidate addresses | Before the restart |
-| `target` | Candidate addresses only | After the upgrade is confirmed |
+| A. Prepare the key | Node operator, days ahead | Import the new key as a new Secret. Submit `NodeUpdate`. |
+| B. Prepare upgrade | `PREPARE_UPGRADE` | CN exports the roster. UC forwards it. Operator validates, matches the key, computes the plan. |
+| C. Schedule | `FREEZE_UPGRADE` | UC creates the Freeze CR. |
+| D. Execute | `now_frozen.mf` | If `canAdoptRoster` is true: daemon opens the transition firewall, operator swaps images and key in one patch. If false: images only, with a warning. CN restarts. |
+| E. Finish | After restart | If the operator acted: it promotes the baseline and the daemon closes the old addresses. |
 
-`digest` lets the daemon skip a plan it already applied. `rosterDigest` ties the plan to one
-candidate roster.
-
-### Candidate roster format
-
-`candidate-roster.json` is PBJ JSON of the `Network` message with one `rosterEntry` per
-node (`DiskStartupNetworks.tryToExport`). 64-bit integers are strings, bytes are base64,
-and zero values are omitted, so node 0 has **no `nodeId`**. `gossipCaCertificate` is the
-base64 of the certificate DER; `gossipEndpoint[]` has `ipAddressV4` (4 base64 bytes) or
-`domainName`, plus `port`. Samples:
-`hedera-node/configuration/dev/genesis-network.json` in `hiero-consensus-node`.
-
-## End-to-end flow
+### Before the freeze
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor NO as Node operator
     actor CO as Council
-    participant SP as solo-provisioner
+    participant CN as Consensus node
+    participant UC as UC sidecar
+    participant OP as Operator
+
+    NO->>NO: import new key (new Secret, old kept)
+    NO->>CN: NodeUpdate with new cert and/or endpoints
+    Note over CN: Saved to state only. No file, no signal.
+    CO->>CN: PREPARE_UPGRADE
+    CN->>CN: snapshot candidate roster, export candidate-roster.json
+    CN->>CN: extract package, write execute_immediate.mf last
+    UC->>CN: poll, see execute_immediate.mf
+    UC->>UC: read roster, check it, compute sha256
+    UC->>OP: create Prepare CR with the roster in spec.artifacts
+    OP->>OP: verify, parse, match cert to a staged Secret
+    OP->>OP: compute the firewall plan, set conditions
+```
+
+### During and after the freeze
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CO as Council
     participant CN as Consensus node
     participant UC as UC sidecar
     participant OP as Operator
     participant DM as Provisioner daemon
 
-    NO->>SP: keys generate then keys import (new Secret, old kept)
-    NO->>CN: NodeUpdate (new gossip cert and/or endpoints)
-    Note over CN: Saved to state only. No file, no signal.
-
-    CO->>CN: PREPARE_UPGRADE
-    CN->>CN: snapshot candidate roster, export candidate-roster.json
-    CN->>CN: extract package, write execute_immediate.mf (last)
-
-    UC->>CN: poll, sees execute_immediate.mf
-    UC->>UC: read roster (wait up to 15s), check, sha256
-    UC->>OP: create NetworkUpgradePrepare with spec.artifacts
-    OP->>OP: verify sha256, parse roster, load or seed applied-roster
-    OP->>OP: match this node's cert to a staged Secret by fingerprint
-    OP->>OP: compute FirewallPlan, set conditions on Prepare
-
     CO->>CN: FREEZE_UPGRADE
     CN->>UC: freeze_scheduled.mf
-    UC->>OP: create NetworkUpgradeFreeze
-
-    CN->>UC: now_frozen.mf (network frozen)
-    UC->>OP: create NetworkUpgradeExecute
+    UC->>OP: create Freeze CR
+    CN->>UC: now_frozen.mf
+    UC->>OP: create Execute CR
     OP->>OP: copy plan to Execute status, scale pod down
-    OP->>DM: phase ReadyForProvisionerDaemon
+    OP->>DM: ReadyForProvisionerDaemon
     DM->>DM: firewall set cn-gossip to transition list
-    DM->>OP: FirewallApplied=True (Transition), phase PendingNodeUpgrade
-    OP->>OP: patch capsule: new images and new signing Secret
-    OP->>CN: scale up, node starts with new key
-
-    CN->>CN: restart adopts or rejects the candidate roster
-    UC->>OP: adoption result from the CN log (status.rosterAdoption)
-    OP->>OP: Execute Succeeded, then promote applied-roster only if adopted (canAdoptRoster or log result)
+    DM->>OP: FirewallApplied, phase PendingNodeUpgrade
+    OP->>OP: one capsule patch: new images and new signing Secret
+    OP->>CN: scale up, node starts with the new key
+    CN->>CN: adopts or rejects the candidate roster
+    UC->>OP: adoption result from the CN log
+    OP->>OP: promote applied-roster only if adopted
     DM->>DM: firewall set cn-gossip to target list
 ```
 
-### Step by step
+## Step by step
 
-**A. Before the upgrade (days ahead)**
+### A. Prepare the key (days ahead)
 
-1. **Generate and import the key.** The node operator runs `solo-provisioner consensus
-   keys generate` off-cluster, then `keys import --node-id N`. This creates
-   `node<N>-gossip-keys-<date>-<fp8>` beside the current Secret. The running node is
-   unaffected.
-2. **Submit `NodeUpdate`.** The node operator submits it with the new
-   `gossip_ca_certificate` (and any endpoint changes), signed by the node's admin key.
-   `solo-provisioner` does not submit DAB transactions. **It must land before
-   `PREPARE_UPGRADE`**, because the candidate roster is a snapshot taken at that moment.
-3. **`PREPARE_UPGRADE`.** The council sends it. Each CN:
-   1. snapshots the future roster from the node store with the latest weights
-      (`PlatformStateUpdates`, `snapshotOfFutureRoster`) and stores it as the candidate;
-   2. exports it to `candidate-roster.json` (best effort, never affects consensus);
-   3. extracts the package asynchronously and writes `execute_immediate.mf` last.
+1. **Import the key.** The node operator runs `solo-provisioner consensus keys generate`, then
+   `keys import --node-id N` off-cluster. This creates `node<N>-gossip-keys-<date>-<fp8>` beside the
+   current Secret. The running node is unaffected.
+2. **Submit `NodeUpdate`** with the new `gossip_ca_certificate` and any endpoint changes, signed by
+   the node's admin key. `solo-provisioner` does not submit DAB transactions.
+   **It must land before `PREPARE_UPGRADE`**, because the candidate roster is a snapshot taken then.
 
-**B. Prepare phase (UC and operator)** **[UC done, operator todo]**
+### B. Prepare upgrade
 
-4. **UC reads the roster.** On `execute_immediate.mf` the UC reads
-   `data/upgrade/candidate-roster.json` (flag `--candidate-roster-path`). It waits up to
-   `--candidate-roster-wait` (15s), because the marker can be written before the export. It
-   rejects symlinks, files over 512 KiB, non-UTF-8 or non-JSON content, and files older than
-   30 minutes before the marker (a leftover). It computes the sha256 and creates the
-   `NetworkUpgradePrepare` CR with the roster in `spec.artifacts`, unmodified.
-   Missing or invalid roster: the CR is still created without it (warning), unless
+3. **`PREPARE_UPGRADE`.** Each CN snapshots the future roster with the latest weights and stores it
+   as the candidate (`PlatformStateUpdates`), exports it to `candidate-roster.json` (best effort,
+   never affects consensus), extracts the package asynchronously, and writes `execute_immediate.mf`
+   last.
+4. **The UC reads the roster** when it sees the marker (60s poll by default). It:
+   - waits up to `--candidate-roster-wait` (15s), because the marker can precede the export;
+   - rejects symlinks, files over 512 KiB, non-UTF-8 or non-JSON content, and files more than 30
+     minutes older than the marker (a leftover);
+   - computes the sha256 and creates the `NetworkUpgradePrepare` CR with the roster in
+     `spec.artifacts`, unmodified.
+
+   If the roster is missing or invalid, the CR is still created without it (with a warning), unless
    `--candidate-roster-required` holds the CR back.
-5. **Operator validates.** The Prepare reconciler:
-   1. verifies the sha256 and parses the roster (missing `nodeId` means 0);
-   2. loads `<capsule>-applied-roster`, or [seeds it](#the-applied-roster-baseline);
-   3. finds this capsule's entry by node ID;
-   4. **key check:** if the entry's cert differs from the mounted signing cert, compute
-      SHA-384 of the entry's DER and look for a Secret labelled
-      `solo.hiero.org/node=node<N>`, `solo.hiero.org/key-type=gossip`,
-      `solo.hiero.org/cert-fingerprint=<first 32 hex>`. A hit means the staged key matches
-      the roster by construction. No hit sets a failing condition now, days before the freeze;
-   5. computes the `FirewallPlan` and sets `FirewallPlanComputed`.
-   A roster with no change for this node and no address changes yields reason `NoChange`.
+5. **The operator validates:**
+   1. Verify the sha256 and parse the roster. A missing `nodeId` means 0.
+   2. Load `<capsule>-applied-roster`, or [seed it](#the-applied-roster-baseline).
+   3. Find this capsule's entry by node ID.
+   4. **Key check.** If the entry's cert differs from the mounted signing cert, compute the SHA-384
+      of the entry's DER and look for a Secret labelled `solo.hiero.org/node=node<N>`,
+      `solo.hiero.org/key-type=gossip` and `solo.hiero.org/cert-fingerprint=<first 32 hex>`. A hit
+      means the staged key matches the roster by construction. No hit sets a failing condition now,
+      days before the freeze.
+   5. Compute the firewall plan and set `FirewallPlanComputed`. A roster with no change for this
+      node and no address changes gives reason `NoChange`.
+   6. If the roster changes this node's key or any gossip address but `canAdoptRoster` is `false`,
+      log a specific warning and raise an event now: "the operator will not swap the key or change
+      the firewall". This is the early prompt to set the flag or handle it manually.
 
-**C. Freeze phase**
+### C. Schedule
 
-6. `FREEZE_UPGRADE` → `freeze_scheduled.mf` → UC creates `NetworkUpgradeFreeze`.
-   Re-verifying that the staged Secret still exists here is a cheap extra check **[todo]**.
+6. `FREEZE_UPGRADE` produces `freeze_scheduled.mf`, and the UC creates `NetworkUpgradeFreeze`.
+   Re-checking that the staged Secret still exists here would be a cheap extra safeguard.
 
-**D. Execute phase (inside the freeze window)**
+### D. Execute (inside the freeze window)
 
-7. `now_frozen.mf` → UC creates `NetworkUpgradeExecute`. The operator copies the plan into
-   its status, scales the pod down and sets `ReadyForProvisionerDaemon`.
-8. **Daemon applies `transition`** (`solo-provisioner network firewall set --name cn-gossip
-   --cidrs <transition>`, run through the daemon's `privexec` delegation) and reports
-   `FirewallApplied` with reason `Transition`. It then advances to `PendingNodeUpgrade`. A
-   digest it already applied is skipped.
-9. **Operator patches the capsule.** In the same patch that applies the new images it
-   repoints `spec.secrets.secretResources.signingPrivateKey` and
-   `signingPublicCertificate` to the matched Secret. This repoints an existing mount source;
-   it adds no mount point. One pod restart covers images and key, so the swap adds no extra
-   downtime.
-10. **CN restarts** with the new key. During restart the CN adopts the candidate roster if
-    TSS readiness allows (`canAdoptRoster`), otherwise it logs a rejection and keeps the old
-    one.
+7. `now_frozen.mf` makes the UC create `NetworkUpgradeExecute`. The operator records the value of
+   `canAdoptRoster` in the Execute status, so the decision is fixed for this upgrade, copies the plan
+   into its status when the flag is true, scales the pod down and sets `ReadyForProvisionerDaemon`.
+8. **If `canAdoptRoster` is true, the daemon applies `transition`** with `solo-provisioner network firewall set --name cn-gossip
+   --cidrs <transition>`, through its `privexec` delegation, and reports `FirewallApplied` with
+   reason `Transition`. A digest it already applied is skipped. It then advances to
+   `PendingNodeUpgrade`.
+9. **The operator patches the capsule.** One patch applies the new images and, when
+   `canAdoptRoster` is true, repoints
+   `spec.secrets.secretResources.signingPrivateKey` and `signingPublicCertificate` to the matched
+   Secret. This changes the source of an existing mount and adds no mount point. One pod restart
+   covers both, so the swap adds no downtime. When the flag is false the patch carries the images
+   only and the old key stays.
+10. **The CN restarts** with the new key and adopts the candidate roster if TSS readiness allows,
+    otherwise it logs a rejection and keeps the old one.
 
-**E. After the restart**
+### E. Confirm
 
-11. **Confirm adoption** (see [Adoption confirmation](#adoption-confirmation)). Only then:
-    1. the operator promotes the candidate to `<capsule>-applied-roster`;
-    2. the daemon applies `target`, which removes addresses no longer in the roster.
+11. **Finish.** If the operator acted, it promotes the candidate to `<capsule>-applied-roster` and
+    the daemon applies `target`, which removes addresses no longer in the roster. The UC's log
+    result is a safety net (see [When the operator acts](#when-the-operator-acts)).
 12. The Execute CR reaches `Succeeded` when the node is `ACTIVE`, as today.
 
 ### Abort
@@ -239,7 +249,7 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> Computed: Prepare validated
     Computed --> Transition: ReadyForProvisionerDaemon
-    Transition --> Target: adoption confirmed
+    Transition --> Target: upgrade succeeded
     Transition --> RolledBack: freeze aborted before restart
     Computed --> Discarded: freeze aborted
     Target --> [*]
@@ -247,64 +257,93 @@ stateDiagram-v2
     Discarded --> [*]
 ```
 
-`FREEZE_ABORT` is only possible before the freeze round. On `freeze_aborted.mf` the UC
-creates `NetworkUpgradeFreezeAbort`. If the daemon had already applied `transition`, it
-restores `rollback`. The staged Secret is simply never repointed and the baseline is never
-changed. Once the network is `FREEZING` an abort is impossible.
+`FREEZE_ABORT` is only possible before the freeze round. On `freeze_aborted.mf` the UC creates
+`NetworkUpgradeFreezeAbort`. If the daemon already applied `transition`, it restores `rollback`.
+The staged Secret was never repointed and the baseline was never changed, so nothing else needs
+undoing. Once the network is `FREEZING`, an abort is impossible.
 
-## Adoption confirmation
+## Key decisions
 
-`Succeeded` does not prove the candidate roster was adopted. During the upgrade restart
-the CN adopts the candidate only if `canAdoptRoster` (TSS readiness) allows it; otherwise it
-logs `Rejecting candidate roster in round N`, keeps the old roster, and the node can still
-reach `ACTIVE` (`V0540RosterSchema.restart`). Promoting the baseline, or applying the
-firewall `target` list, on a rejected roster would be wrong and would drop addresses of
-peers that are still in the active roster.
-
-Two inputs decide it:
-
-1. **`orbit.spec.consensus.canAdoptRoster`** (default `false`). An assertion that the CN's
-   TSS readiness gate cannot reject a candidate on this network: both `tss.hintsEnabled`
-   and `tss.historyEnabled` are off, or there is no TSS ledger id yet. It is configuration,
-   not a feature gate, and is set by whoever enables or disables TSS (solo-provisioner or a
-   job). Do not derive it from `genesis.addressBook.ledgerId`, which is the HAPI ledger id.
-2. **The UC's roster-adoption result [todo].** The UC's log monitor already tails
-   `output/swirlds.log`. It would also match the three lines logged once per upgrade
-   restart (`Adopting candidate roster in round N`, `Rejecting candidate roster in round N`,
-   `No candidate roster to adopt in round N`) and publish `adopted`, `rejected` or `none`
-   with the round and time on `ConsensusCapsule.status`. The operator takes the first result
-   after the Execute CR's `nodeUpgradeStartTime`.
-
-| `canAdoptRoster` | Log result | Operator action |
+| Decision | Choice | Why |
 |---|---|---|
-| any | `rejected` | Do **not** promote or apply `target`. Keep `transition` rules. Warn. A rejection always wins over the flag. |
-| `true` | `adopted`, `none` or absent | Treat `Succeeded` as adopted. Promote and apply `target`. |
-| `false` | `adopted` | Promote and apply `target`. |
-| `false` | `none` or absent after a timeout | Warn. Keep `transition` rules and the old baseline. |
+| Who reads the roster | UC reads and forwards, operator decides | The operator must see every configuration change. The UC stays simple. |
+| Where the roster travels | Inline in the Prepare CR (`spec.artifacts`) | One object, no new RBAC, no UC-created ConfigMap. |
+| Where the CN writes it | `data/upgrade/candidate-roster.json`, beside `current/` | The CN wipes `current/` during extraction. |
+| How the key is found | SHA-384 fingerprint label on the Secret | Provisioner names and labels Secrets this way. No extra convention. |
+| When the key is swapped | In the same patch as the images, only when `canAdoptRoster` is true | One restart. The decision is made before the restart, so a refused roster is never met with a swapped key. |
+| Firewall order | Open the union first, close old addresses last | Peers can always reach the node. |
+| Firewall plan form | Full membership lists, never diffs | Idempotent. A retry or restart converges. |
+| Acting on a roster | `orbit.spec.consensus.canAdoptRoster`, default false | The operator acts only when the CN will adopt the roster. False means warn and change nothing. |
+| Safety net | UC log result (`adopted` or `rejected`) | Catches a wrong flag: a rejection holds `target` and the baseline and raises a warning. |
+| Missing key at prepare | Best effort, upgrade proceeds with a loud warning | One node's key problem should not block the network's upgrade. |
 
-A wrong `true` removes the protection, which is why the log result can override it. The log
-depends on message text, so a missing line means "unknown", never "adopted". A structured CN
-signal (a marker written when adoption is decided) would be sturdier and needs a CN change.
+## When the operator acts
+
+**The problem.** At an upgrade restart the CN adopts the candidate roster only if its TSS readiness
+check allows it. Otherwise it logs `Rejecting candidate roster in round N`, keeps the old roster, and
+the node can still reach `ACTIVE` (`V0540RosterSchema.restart`). If the operator had swapped the key
+or changed the firewall for a roster that was then refused, the node would run a new key against the
+old roster and peers' addresses could be dropped wrongly. So the operator must act only when it knows
+the CN will adopt the roster.
+
+**The switch: `orbit.spec.consensus.canAdoptRoster`** (default `false`). It mirrors the CN's own check:
+`true` means the CN will adopt the candidate at the next upgrade restart. It is set by whoever confirms
+TSS readiness for that candidate (the council, solo-provisioner or a job), or can simply stay `true` on
+a network where the TSS gate is off (both `tss.hintsEnabled` and `tss.historyEnabled` are off, or there
+is no TSS ledger id yet). It is configuration, not a feature gate. Do not derive it from
+`genesis.addressBook.ledgerId`, which is the HAPI ledger id.
+
+| `canAdoptRoster` | What the operator does |
+|---|---|
+| `true` | **Acts.** Swaps the signing key to the matching staged Secret, applies the firewall `transition`, then `target` after the upgrade succeeds, and updates the baseline. |
+| `false` | **Warns only.** Keeps the old key, makes no firewall change, and logs a warning with an event. Prepare still validates the roster and computes the plan so the warning says exactly what would have changed. |
+
+**When the flag is read.** Prepare reads it to decide how specific a warning to raise. The Execute CR
+records the value when it is created, and every acting step in that upgrade uses the recorded value, so
+the decision cannot flip halfway through.
+
+**The silent failure to watch for.** The default is `false`, so on a network where the CN does adopt the
+roster, forgetting to set the flag leaves a node whose certificate changed in the adopted roster but
+whose key was never swapped. That node cannot gossip. The Prepare warning exists to catch this days
+ahead, and the roster-adoption result below catches it again after the restart.
+
+**The UC's roster-adoption result (safety net, not built yet).** The UC's log monitor already tails
+`output/swirlds.log`. It would also match the three lines the CN logs once per upgrade restart
+(`Adopting candidate roster in round N`, `Rejecting candidate roster in round N`,
+`No candidate roster to adopt in round N`) and publish `adopted`, `rejected` or `none`, with the round
+and time, on `ConsensusCapsule.status`. The operator uses the first result after the Execute CR's
+`nodeUpgradeStartTime`:
+
+| Flag when Execute started | Log result | Operator reaction |
+|---|---|---|
+| `true` | `rejected` | The flag was wrong. Do **not** apply `target` or update the baseline, keep the `transition` rules, and raise a loud `RosterRejected` warning. The node is on the new key against the old roster until the key is repointed by hand. |
+| `false` | `adopted` | The flag was wrong the other way. Raise a loud warning: the node's key may no longer match the adopted roster. Update the baseline, since the roster really changed. |
+| any other | `adopted`, `none`, or absent | No extra action. |
+
+**The UC does not know the flag.** It reports the log result for every upgrade and the operator makes
+every decision. Handing the flag to the UC would be worse: an argument or env var on the UC container
+changes the pod template and rolls the consensus pod, reading the Orbit needs new UC RBAC, and the UC
+has no `data/config` mount to read the CN's TSS settings.
+
+**Caveats.** The log result depends on message text, so a missing line means "unknown", never
+"adopted". A structured CN signal (a marker written when adoption is decided) would be sturdier and
+needs a CN change. Recovery from a wrong `true` is manual at first: repoint the capsule's signing Secret
+to the previous one (never overwritten) and restart. Automatic rollback can follow if it is needed.
 
 ## The applied-roster baseline
 
-The firewall plan needs the roster the node was running before the upgrade.
+The firewall plan needs the roster the node ran before the upgrade.
 
-- **Storage.** A ConfigMap per capsule, `<capsule>-applied-roster`. Annotations:
-  `source` (`genesis` or `upgrade`), `operationId`, `sha256`, applied time. The
-  `genesis-config` ConfigMap is **never** written to; the CN init container copies it.
-- **Seeding (lazy).** On the first Prepare for a capsule with no baseline, copy
-  `genesis-config` / `genesis-network.json` as-is, `source=genesis`. That file is the
-  package's pre-built genesis (from `consensus network genesis`) or, in cluster-only mode,
-  generated from the capsules, where gossip endpoints are hostnames. If neither exists the
-  baseline is unknown and the plan is **add-only** (reason `BaselineUnknown`): nothing
-  is removed that is not known.
-- **Update.** Only after the Execute CR succeeds **and** adoption is confirmed (see
-  [Adoption confirmation](#adoption-confirmation)), keyed by
-  `operationId` so a repeat is a no-op. Never at prepare, freeze, abort or failure.
-- **Staleness.** A genesis-seeded baseline predates any DAB change made since. The first
-  plan may therefore show unexplained differences. `set` replaces whole membership, so this
-  costs a stale diff, not a broken rule. Deleting the ConfigMap forces a reseed.
+| Aspect | Design |
+|---|---|
+| Storage | ConfigMap `<capsule>-applied-roster`. Annotations: `source` (`genesis` or `upgrade`), `operationId`, `sha256`, time applied. |
+| Never touch | `genesis-config`. The CN init container copies it. |
+| Seeding | Lazy, on the first Prepare for a capsule without a baseline. Copy `genesis-config` / `genesis-network.json` as-is with `source=genesis`. |
+| Seed source | The package's pre-built genesis (from `consensus network genesis`), or in cluster-only mode a roster generated from the capsules (hostnames, not IPs). |
+| No baseline at all | The plan is **add-only** (reason `BaselineUnknown`): nothing unknown is removed. |
+| Update | After the Execute CR succeeds and the operator acted, or when the UC log reports `adopted`. Keyed by `operationId` so a repeat is a no-op. Never at prepare, freeze, abort or failure, and never when the log reports `rejected`. |
+| Staleness | A genesis-seeded baseline predates any DAB change made since, so the first diff may show unexplained differences. Because `set` replaces whole membership, this costs a stale diff, not a broken rule. |
+| Reset | Deleting the ConfigMap forces a reseed. |
 
 ## Failure handling
 
@@ -312,25 +351,64 @@ The firewall plan needs the roster the node was running before the upgrade.
 |---|---|
 | No roster file | Prepare CR created without it. No rotation or firewall change is planned. |
 | Roster invalid or oversized | Skipped with a warning, or the CR held back if `--candidate-roster-required`. |
-| This node's cert changed, no matching Secret | **Best effort:** the upgrade still proceeds. The Execute CR carries `RosterKeyMismatch=True` and an event. The node comes up on the old key, which no longer matches its roster entry, so its events are rejected until the key is fixed. The firewall plan is still applied so peers can reach it. |
-| Candidate roster rejected at restart | Baseline and `target` are not applied (see [Adoption confirmation](#adoption-confirmation)). |
+| This node's cert changed, no matching Secret | **Best effort:** the upgrade proceeds. The Execute CR carries `RosterKeyMismatch=True` and an event. The node comes up on the old key, which no longer matches its roster entry, so its events are rejected until the key is fixed. The firewall plan is still applied so peers can reach it. |
+| `canAdoptRoster` is false and the roster changes this node or the firewall | The operator warns at prepare, keeps the old key and changes no firewall. If the CN adopts the roster anyway, the node's key will not match it until someone swaps the key by hand. |
+| `canAdoptRoster` is true but the CN refuses the roster | `target` and the baseline update are not applied, `transition` rules stay, and `RosterRejected` is raised. The node is on the new key against the old roster until the key is repointed by hand. |
 | Daemon cannot apply the rule | `FirewallApplied=False`, which fails the Execute CR, like `DaemonResult=False`. |
-| Many nodes mismatch at once | More than 1/3 of the weight in this state halts the network. A per-node CR cannot see this; fleet-level visibility is an open item (HIP-1496 HCS notifications). |
+| Many nodes mismatch at once | Over 1/3 of the weight in this state halts the network. A per-node CR cannot see it. Fleet-level visibility is an open item (HIP-1496 HCS notifications). |
 
-## Security considerations
+## Reference
 
-- A node's gossip endpoint is set by its own admin key, so one operator's transaction
-  decides what every peer's firewall opens. The operator must reject unspecified, loopback
-  and multicast addresses and limit the rule to the gossip port(s) before writing a plan.
-- The UC treats the upgrade directory as untrusted: no symlinks, a size cap, `O_NOFOLLOW`
-  reads. The operator re-verifies the sha256 and never trusts `content` blindly.
-- Roster and plan are public information. Private keys never appear in a CR; only Secret
-  names change.
-- The daemon runs unprivileged and changes the firewall only by running the
-  `solo-provisioner` CLI under sudo, as for other privileged work.
-- The operator needs `list` on Secrets with a label selector for the fingerprint lookup.
+### Data model
 
-## Configuration summary
+| Object | Field | Written by | Meaning |
+|---|---|---|---|
+| `NetworkUpgradePrepare` | `spec.artifacts[]` | UC | Opaque files read from the node. The roster entry is named `candidate-roster.json` with `name`, `sha256`, `content` (raw file, at most 512 KiB). |
+| `NetworkUpgradePrepare` | `status.firewallPlan` | Operator | The plan. |
+| `NetworkUpgradeExecute` | `status.firewallPlan` | Operator | Verbatim copy, so the daemon reads one CR. Present only when the flag was true. |
+| Both | conditions `FirewallPlanComputed`, `FirewallApplied` | Operator, daemon | Progress and outcome. |
+| `Orbit` | `spec.consensus.canAdoptRoster` | Whoever confirms TSS readiness | `true`: the CN will adopt the candidate, so the operator acts. `false`: warn only. |
+| `ConsensusCapsule` | `status.rosterAdoption` | UC | `adopted`, `rejected` or `none`, with round and time. A safety net. |
+| ConfigMap `<capsule>-applied-roster` | roster and annotations | Operator | Baseline for the next diff. |
+
+`FirewallPlan` holds one named allow rule (`cn-gossip`, tcp, the gossip port) and three **complete**
+membership lists, so applying one is idempotent:
+
+| List | Contents | Applied |
+|---|---|---|
+| `rollback` | Addresses of the roster in use before this upgrade | On abort |
+| `transition` | Union of in-use and candidate addresses | Before the restart |
+| `target` | Candidate addresses only | After the Execute CR succeeds |
+
+`digest` lets the daemon skip a plan it already applied. `rosterDigest` ties the plan to one roster.
+
+### Candidate roster format
+
+`candidate-roster.json` is PBJ JSON of the `Network` message with one `rosterEntry` per node
+(`DiskStartupNetworks.tryToExport`):
+
+```json
+{
+  "nodeMetadata": [
+    {
+      "rosterEntry": {
+        "nodeId": "1",
+        "weight": "1",
+        "gossipCaCertificate": "MIIDpjCCAg6gAwIBAgIIdUmp...",
+        "gossipEndpoint": [ { "ipAddressV4": "fwAAAQ==", "port": 31013 } ]
+      }
+    }
+  ]
+}
+```
+
+- 64-bit integers are strings, bytes are base64, and zero values are omitted, so node 0 has **no
+  `nodeId`**.
+- `gossipCaCertificate` is the base64 of the certificate DER.
+- An endpoint has `ipAddressV4` (4 base64 bytes) or `domainName`, plus `port`.
+- Samples: `hedera-node/configuration/dev/genesis-network.json` in `hiero-consensus-node`.
+
+### Configuration summary
 
 | Where | Setting | Value |
 |---|---|---|
@@ -338,40 +416,53 @@ The firewall plan needs the roster the node was running before the upgrade.
 | CN | `networkAdmin.exportCandidateRoster`, `createCandidateRosterOnPrepareUpgrade` | `true` (defaults) |
 | UC | `--candidate-roster-path` / `UC_CANDIDATE_ROSTER_PATH` | same path |
 | UC | `--candidate-roster-wait` / `UC_CANDIDATE_ROSTER_WAIT` | `15s` |
-| Orbit | `spec.consensus.canAdoptRoster` | `false` unless TSS gating is off (see [Adoption confirmation](#adoption-confirmation)) |
 | UC | `--candidate-roster-required` / `UC_CANDIDATE_ROSTER_REQUIRED` | `false` until the CN property has shipped |
+| Orbit | `spec.consensus.canAdoptRoster` | `true` before an upgrade whose roster the CN will adopt. Default `false`. |
+
+### Security considerations
+
+- A node's gossip endpoint is set by its own admin key, so one operator's transaction decides what
+  every peer's firewall opens. The operator must reject unspecified, loopback and multicast
+  addresses and limit the rule to the gossip port(s) before writing a plan.
+- The UC treats the upgrade directory as untrusted: no symlinks, a size cap, `O_NOFOLLOW` reads. The
+  operator re-verifies the sha256 and never trusts `content` blindly.
+- Roster and plan are public. Private keys never appear in a CR; only Secret names change.
+- The daemon runs unprivileged and changes the firewall only by running the `solo-provisioner` CLI
+  under sudo.
+- The operator needs `list` on Secrets with a label selector for the fingerprint lookup.
 
 ## Open questions
 
-1. **Adoption log signal [todo].** The UC log monitor does not yet parse the adoption lines or
-   publish a result. Until it does, only `canAdoptRoster=true` networks can complete the
-   promote-and-`target` step, and others stay on the `transition` rules.
-2. **TSS interplay.** `PlatformStateUpdates` comments that the candidate may instead be set
-   at stake-period boundaries when TSS machinery keys it. Whether a candidate set that way
-   can differ from the one exported at `PREPARE_UPGRADE` was not traced.
-3. **Prepare spec immutability.** The Execute spec is immutable by CEL rule; confirm adding
-   `spec.artifacts` to Prepare interacts correctly with any rule on that spec.
-4. **Timing of the firewall `transition`.** Applied at `ReadyForProvisionerDaemon`, inside the
-   freeze window. Applying it at prepare time would need a daemon watch on Prepare CRs and
-   avoids a slow node briefly being unreachable after restart.
-5. **Endpoint form.** Real rosters use `ipAddressV4`; operator-generated genesis uses
-   hostnames. Diffs should compare resolved values.
-6. **A real exported file.** Only dev and test samples of the format were inspected.
+1. **Who sets the flag, and when.** The design needs a reliable moment to set `canAdoptRoster` to `true`
+   (TSS readiness for the candidate is complete) and to set it back. Define the owner (council,
+   solo-provisioner or a job) and whether the flag is reset after each upgrade.
+2. **Adoption log signal.** The UC does not yet parse the adoption lines. Without it there is no
+   safety net for a wrong flag in either direction.
+3. **TSS interplay.** `PlatformStateUpdates` notes the candidate may instead be set at stake-period
+   boundaries when TSS machinery keys it. Whether such a candidate can differ from the one exported
+   at `PREPARE_UPGRADE` was not traced.
+4. **Prepare spec immutability.** The Execute spec is immutable by CEL rule. Confirm that adding
+   `spec.artifacts` to Prepare interacts correctly with any rule on its spec.
+5. **Firewall timing.** `transition` is applied at `ReadyForProvisionerDaemon`, inside the freeze
+   window. Applying it at prepare time needs a daemon watch on Prepare CRs and avoids a slow node
+   briefly being unreachable after restart.
+6. **Endpoint form.** Real rosters use `ipAddressV4`, operator-generated genesis uses hostnames.
+   Diffs should compare resolved values.
+7. **A real exported file.** Only dev and test samples of the format were inspected.
 
 ## Future: no-freeze changes
 
-Not designed. Two CN facts constrain it: roster adoption is only implemented at an
-upgrade restart, and a node's cert in the roster and the key it signs with must change at
-the same consensus instant, which a restart cannot do without an outage unless the platform
-accepts both certs for a window. A workable shape would add a candidate-roster export at DAB
-transaction time, a CN "pending" marker carrying the effective time ahead of adoption, and a
-new `NetworkRosterChange` CR reusing `spec.artifacts` and `FirewallPlan`.
+Not designed. Two CN facts constrain it. Roster adoption is only implemented at an upgrade restart.
+And a node's cert in the roster and the key it signs with must change at the same consensus instant,
+which a restart cannot do without an outage unless the platform accepts both certs for a window.
+A workable shape would add a candidate-roster export at DAB transaction time, a CN "pending" marker
+carrying the effective time ahead of adoption, and a new `NetworkRosterChange` CR reusing
+`spec.artifacts` and `FirewallPlan`.
 
 ## References
 
 - HIP-1495 (Kubernetes-native deployment), HIP-1496 (network upgrade process).
-- `hashgraph/solo-weaver` PR 1198 (key import/export and Secret naming), issue 1305
-  (`cn-gossip` rule).
-- `hiero-consensus-node`: `NodeUpdateHandler`, `PlatformStateUpdates`,
-  `ReadableFreezeUpgradeActions`, `FreezeHandler`, `V0540RosterSchema`,
-  `DiskStartupNetworks`.
+- `hashgraph/solo-weaver` PR 1198 (key import/export and Secret naming) and issue 1305 (`cn-gossip`
+  rule).
+- `hiero-consensus-node`: `NodeUpdateHandler`, `PlatformStateUpdates`, `ReadableFreezeUpgradeActions`,
+  `FreezeHandler`, `V0540RosterSchema`, `DiskStartupNetworks`.

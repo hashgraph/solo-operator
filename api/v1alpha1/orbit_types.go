@@ -242,23 +242,24 @@ type OrbitConsensus struct {
 	// +optional
 	FeatureGates *ConsensusFeatureGates `json:"featureGates,omitempty"`
 
-	// CanAdoptRoster asserts that a candidate roster cannot be rejected when the
-	// consensus node restarts after an upgrade. The CN adopts the candidate only if its
-	// TSS readiness check allows it; otherwise it keeps the old roster. That check cannot
-	// fire when both tss.hintsEnabled and tss.historyEnabled are off, or while the
-	// network has no TSS ledger id yet. Do not derive this from genesis.addressBook.ledgerId,
-	// which is the HAPI ledger id, not the TSS one.
+	// CanAdoptRoster states that the consensus node will adopt the candidate roster at
+	// the next upgrade restart, mirroring the CN's own canAdoptRoster check (TSS readiness).
+	// It is the switch for acting on a candidate roster.
 	//
-	// When true, a succeeded upgrade counts as an adopted roster, so the operator may
-	// promote the applied-roster baseline and apply the final firewall membership. When
-	// false (the default), the operator waits for the UC's roster-adoption result from
-	// the CN log and acts only on "adopted". A rejection reported by the log always wins,
-	// even when this is true.
+	// When true, the operator acts on the roster: it swaps the node's signing key to the
+	// staged Secret that matches the roster's certificate, computes the firewall plan and
+	// applies it. When false (the default), the operator only logs a warning when the roster
+	// changes this node or the firewall, keeps the old key and changes no firewall rules.
 	//
-	// This is configuration, not a feature gate: it describes the deployed network and is
-	// not removed on a schedule. Whoever enables or disables TSS (solo-provisioner or a
-	// job) sets it to match; the operator only reads it. A wrong "true" removes the
-	// protection against dropping firewall entries for peers still in the active roster.
+	// Set it to true only when the candidate will be adopted: TSS readiness for it is
+	// complete, or the TSS gate is off (both tss.hintsEnabled and tss.historyEnabled are
+	// false, or the network has no TSS ledger id yet). Do not derive it from
+	// genesis.addressBook.ledgerId, which is the HAPI ledger id, not the TSS one.
+	//
+	// This is configuration, not a feature gate: it describes the state of the deployed
+	// network and is not removed on a schedule. Whoever confirms readiness (the council,
+	// solo-provisioner or a job) sets it; the operator only reads it. A wrong "true" leaves a
+	// node on a new key against a roster the CN refused.
 	// +kubebuilder:default=false
 	// +optional
 	CanAdoptRoster bool `json:"canAdoptRoster,omitempty"`
