@@ -72,6 +72,11 @@ type NetworkUpgradeExecuteStatus struct {
 	Conditions []Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// +optional
 	SelectedSources *SelectedSources `json:"selectedSources,omitempty"`
+	// FirewallPlan is copied verbatim from the Prepare CR's status when this CR is
+	// created. The provisioner daemon only reads it; it reports progress through the
+	// FirewallApplied condition.
+	// +optional
+	FirewallPlan *FirewallPlan `json:"firewallPlan,omitempty"`
 	// +optional
 	UpgradedNodes []string `json:"upgradedNodes,omitempty"`
 	// +optional

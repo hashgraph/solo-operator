@@ -603,6 +603,88 @@ spec:
                   - type
                   type: object
                 type: array
+              firewallPlan:
+                description: |-
+                  FirewallPlan is the host firewall change the operator computed from the
+                  candidate roster. The operator copies it into the Execute CR's status.
+                properties:
+                  digest:
+                    description: |-
+                      Digest is the sha256 over the canonical form of the fields above. The daemon
+                      records the last digest it applied and skips the change when it matches, so
+                      a re-delivered plan is a no-op.
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  ports:
+                    description: |-
+                      Ports are the destination ports (or inclusive ranges like "50111-50112")
+                      the rule admits. Taken from the roster's gossip endpoints.
+                    items:
+                      pattern: ^[0-9]{1,5}(-[0-9]{1,5})?$
+                      type: string
+                    maxItems: 16
+                    minItems: 1
+                    type: array
+                  proto:
+                    default: tcp
+                    description: Proto is the protocol the rule's ports match. Defaults
+                      to tcp.
+                    enum:
+                    - tcp
+                    - udp
+                    type: string
+                  rollback:
+                    description: |-
+                      Rollback is the membership before this upgrade (the active roster's gossip
+                      addresses). The daemon restores it if the upgrade is aborted.
+                    items:
+                      maxLength: 253
+                      type: string
+                    maxItems: 256
+                    type: array
+                  rosterDigest:
+                    description: |-
+                      RosterDigest is the sha256 of the candidate-roster artifact the plan was
+                      computed from, tying the plan to exactly one roster.
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  rule:
+                    description: |-
+                      Rule is the named allow rule on the host firewall. It must not be one of the
+                      reserved blocks (mgmt, blocked, in_cluster).
+                    pattern: ^[a-z][a-z0-9_-]{0,31}$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: rule must not be a reserved firewall block
+                      rule: '!(self in [''mgmt'',''blocked'',''in_cluster''])'
+                  target:
+                    description: |-
+                      Target is the final membership, applied once the Execute CR has succeeded:
+                      the candidate roster's gossip addresses only.
+                    items:
+                      maxLength: 253
+                      type: string
+                    maxItems: 256
+                    type: array
+                  transition:
+                    description: |-
+                      Transition is the membership to install before the node restarts: the union
+                      of the active and candidate rosters, so a peer can reach a changed address
+                      and the old one still works until the upgrade has succeeded.
+                    items:
+                      maxLength: 253
+                      type: string
+                    maxItems: 256
+                    type: array
+                required:
+                - digest
+                - ports
+                - rollback
+                - rosterDigest
+                - rule
+                - target
+                - transition
+                type: object
               observedGeneration:
                 format: int64
                 type: integer

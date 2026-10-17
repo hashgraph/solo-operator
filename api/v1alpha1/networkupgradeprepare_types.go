@@ -38,6 +38,10 @@ type NetworkUpgradePrepareStatus struct {
 	Conditions []Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// +optional
 	SelectedSources *SelectedSources `json:"selectedSources,omitempty"`
+	// FirewallPlan is the host firewall change the operator computed from the
+	// candidate roster. The operator copies it into the Execute CR's status.
+	// +optional
+	FirewallPlan *FirewallPlan `json:"firewallPlan,omitempty"`
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
