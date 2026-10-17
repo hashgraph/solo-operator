@@ -5,6 +5,11 @@ automatic gossip signing-key swap and host-firewall update during a normal freez
 The pieces involved are the consensus node (CN), the UC sidecar, the operator and the
 `solo-provisioner-daemon`.
 
+**This is the marker-file design.** It needs no CN code change: the CN already writes marker files and a
+candidate roster, and everything else happens in the UC, operator and daemon. A possible evolution, where
+the CN also notifies the UC through a signed local API, is described in
+[dab-notification-sinks.md](dab-notification-sinks.md).
+
 **Status:** design, partly implemented. See [Implementation status](#implementation-status).
 Statements about the CN were read from `hiero-consensus-node` `main`; anything not verified is
 listed under [Open questions](#open-questions).
