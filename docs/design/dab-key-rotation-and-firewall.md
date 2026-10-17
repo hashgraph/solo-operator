@@ -30,9 +30,10 @@ three things must line up on different machines:
    signing Secret, so there is one restart.
 4. The firewall is changed **make-before-break**: open the union of old and new addresses before
    the restart, close the old ones only after the upgrade has succeeded.
-5. The operator acts on the roster only when `orbit.spec.consensus.canAdoptRoster` is `true`,
-   meaning the CN will adopt it. When it is `false` (the default) the operator only warns, keeps the
-   old key and changes no firewall rules.
+5. The operator acts on the roster only for upgrades at or above the package version set in
+   `orbit.spec.consensus.canAdoptRosterFromVersion`, meaning the CN is expected to adopt the roster.
+   The field is set once. For lower versions, or when it is empty (the default), the operator only
+   warns, keeps the old key and changes no firewall rules.
 
 ## Terms
 
@@ -77,7 +78,7 @@ the operator as a CR field before anything acts on it.
 | UC reads `candidate-roster.json` and forwards it | done |
 | `spec.artifacts` on the Prepare CR | done |
 | `FirewallPlan` type, status fields and condition names | done |
-| `orbit.spec.consensus.canAdoptRoster` | done |
+| `orbit.spec.consensus.canAdoptRosterFromVersion` | done |
 | CN exports the roster to `data/upgrade/` (property shipped in a package) | todo |
 | UC parses the CN's adoption log lines and sets the `roster-adoption` condition on its own pod (safety net) | done |
 | Operator proxies that condition to `ConsensusCapsule.status.rosterAdoption` and reacts | todo |
@@ -106,10 +107,11 @@ the operator as a CR field before anything acts on it.
 3. **Key Secrets follow the provisioner naming** (solo-weaver PR 1198). The fingerprint in the name
    is the SHA-384 of the certificate DER. A new key creates a new Secret beside the old one and
    never overwrites it.
-4. **`orbit.spec.consensus.canAdoptRoster` is `true` before the upgrade that carries the change.**
-   Default `false`. Set it only when the CN will adopt the candidate: TSS readiness for it is
-   complete, or the TSS gate is off. Whoever confirms that (council, solo-provisioner or a job) sets
-   it. See [When the operator acts](#when-the-operator-acts).
+4. **`orbit.spec.consensus.canAdoptRosterFromVersion` names the first package version to automate.**
+   Empty by default, which means never act. Set it once, to a version where the CN is expected to
+   adopt the candidate: the TSS gate is off, or TSS readiness is always complete before the freeze.
+   Every upgrade at or above that version is then eligible, with no per-upgrade step. See
+   [When the operator acts](#when-the-operator-acts) and [Updating the Orbit](#updating-the-orbit).
 
 ## The flow at a glance
 
@@ -118,7 +120,7 @@ the operator as a CR field before anything acts on it.
 | A. Prepare the key | Node operator, days ahead | Import the new key as a new Secret. Submit `NodeUpdate`. |
 | B. Prepare upgrade | `PREPARE_UPGRADE` | CN exports the roster. UC forwards it. Operator validates, matches the key, computes the plan. |
 | C. Schedule | `FREEZE_UPGRADE` | UC creates the Freeze CR. |
-| D. Execute | `now_frozen.mf` | If `canAdoptRoster` is true: daemon opens the transition firewall, operator swaps images and key in one patch. If false: images only, with a warning. CN restarts. |
+| D. Execute | `now_frozen.mf` | If automation is enabled for this version: daemon opens the transition firewall, operator swaps images and key in one patch. If not: images only, with a warning. CN restarts. |
 | E. Finish | After restart | If the operator acted: it promotes the baseline and the daemon closes the old addresses. |
 
 ### Before the freeze
@@ -210,9 +212,10 @@ sequenceDiagram
       days before the freeze.
    5. Compute the firewall plan and set `FirewallPlanComputed`. A roster with no change for this
       node and no address changes gives reason `NoChange`.
-   6. If the roster changes this node's key or any gossip address but `canAdoptRoster` is `false`,
-      log a specific warning and raise an event now: "the operator will not swap the key or change
-      the firewall". This is the early prompt to set the flag or handle it manually.
+   6. If the roster changes this node's key or any gossip address but automation is not enabled for
+      this version, log a specific warning and raise an event now: "the operator will not swap the
+      key or change the firewall". This is the early prompt to set the Orbit field or handle it
+      manually.
 
 ### C. Schedule
 
@@ -221,19 +224,20 @@ sequenceDiagram
 
 ### D. Execute (inside the freeze window)
 
-7. `now_frozen.mf` makes the UC create `NetworkUpgradeExecute`. The operator records the value of
-   `canAdoptRoster` in the Execute status, so the decision is fixed for this upgrade, copies the plan
-   into its status when the flag is true, scales the pod down and sets `ReadyForProvisionerDaemon`.
-8. **If `canAdoptRoster` is true, the daemon applies `transition`** with `solo-provisioner network firewall set --name cn-gossip
+7. `now_frozen.mf` makes the UC create `NetworkUpgradeExecute`. The operator decides whether automation
+   is enabled for this version, records the decision in the Execute status so it cannot change halfway
+   through, copies the plan into its status when enabled, scales the pod down and sets
+   `ReadyForProvisionerDaemon`.
+8. **If automation is enabled, the daemon applies `transition`** with `solo-provisioner network firewall set --name cn-gossip
    --cidrs <transition>`, through its `privexec` delegation, and reports `FirewallApplied` with
    reason `Transition`. A digest it already applied is skipped. It then advances to
    `PendingNodeUpgrade`.
-9. **The operator patches the capsule.** One patch applies the new images and, when
-   `canAdoptRoster` is true, repoints
+9. **The operator patches the capsule.** One patch applies the new images and, when automation is
+   enabled, repoints
    `spec.secrets.secretResources.signingPrivateKey` and `signingPublicCertificate` to the matched
    Secret. This changes the source of an existing mount and adds no mount point. One pod restart
-   covers both, so the swap adds no downtime. When the flag is false the patch carries the images
-   only and the old key stays.
+   covers both, so the swap adds no downtime. When automation is not enabled the patch carries the
+   images only and the old key stays.
 10. **The CN restarts** with the new key and adopts the candidate roster if TSS readiness allows,
     otherwise it logs a rejection and keeps the old one.
 
@@ -271,11 +275,11 @@ undoing. Once the network is `FREEZING`, an abort is impossible.
 | Where the roster travels | Inline in the Prepare CR (`spec.artifacts`) | One object, no new RBAC, no UC-created ConfigMap. |
 | Where the CN writes it | `data/upgrade/candidate-roster.json`, beside `current/` | The CN wipes `current/` during extraction. |
 | How the key is found | SHA-384 fingerprint label on the Secret | Provisioner names and labels Secrets this way. No extra convention. |
-| When the key is swapped | In the same patch as the images, only when `canAdoptRoster` is true | One restart. The decision is made before the restart, so a refused roster is never met with a swapped key. |
+| When the key is swapped | In the same patch as the images, only when automation is enabled for the version | One restart. The decision is made before the restart. |
 | Firewall order | Open the union first, close old addresses last | Peers can always reach the node. |
 | Firewall plan form | Full membership lists, never diffs | Idempotent. A retry or restart converges. |
-| Acting on a roster | `orbit.spec.consensus.canAdoptRoster`, default false | The operator acts only when the CN will adopt the roster. False means warn and change nothing. |
-| Safety net | UC log result (`adopted` or `rejected`) | Catches a wrong flag: a rejection holds `target` and the baseline and raises a warning. |
+| Acting on a roster | `orbit.spec.consensus.canAdoptRosterFromVersion`, a version floor set once | Every upgrade at or above the version is eligible, with no per-upgrade job. Empty or lower means warn and change nothing. |
+| Safety net | UC log result (`adopted` or `rejected`) | The floor cannot notice a single refused upgrade. A rejection holds `target` and the baseline and raises a warning. |
 | Missing key at prepare | Best effort, upgrade proceeds with a loud warning | One node's key problem should not block the network's upgrade. |
 
 ## When the operator acts
@@ -284,27 +288,35 @@ undoing. Once the network is `FREEZING`, an abort is impossible.
 check allows it. Otherwise it logs `Rejecting candidate roster in round N`, keeps the old roster, and
 the node can still reach `ACTIVE` (`V0540RosterSchema.restart`). If the operator had swapped the key
 or changed the firewall for a roster that was then refused, the node would run a new key against the
-old roster and peers' addresses could be dropped wrongly. So the operator must act only when it knows
-the CN will adopt the roster.
+old roster and peers' addresses could be dropped wrongly. So the operator should act only where the CN
+is expected to adopt the roster.
 
-**The switch: `orbit.spec.consensus.canAdoptRoster`** (default `false`). It mirrors the CN's own check:
-`true` means the CN will adopt the candidate at the next upgrade restart. It is set by whoever confirms
-TSS readiness for that candidate (the council, solo-provisioner or a job), or can simply stay `true` on
-a network where the TSS gate is off (both `tss.hintsEnabled` and `tss.historyEnabled` are off, or there
-is no TSS ledger id yet). It is configuration, not a feature gate. Do not derive it from
+**The switch: `orbit.spec.consensus.canAdoptRosterFromVersion`** (empty by default). The first package
+version whose candidate roster the CN is expected to adopt, as a semantic version. "Version" means
+`images.consensusNode.version` in the package's `consensus-node-components.yaml`, which the Prepare CR
+already carries. It is set **once**. Every upgrade to that version or a later one is eligible, so no job
+or step runs per upgrade. It is configuration, not a feature gate, and is set by solo-provisioner or an
+upgrade job (see [Updating the Orbit](#updating-the-orbit)). Do not derive it from
 `genesis.addressBook.ledgerId`, which is the HAPI ledger id.
 
-| `canAdoptRoster` | What the operator does |
+It mirrors the CN's own `canAdoptRoster` check, so choose a version where that check will pass: the TSS
+gate is off (both `tss.hintsEnabled` and `tss.historyEnabled` are off, or there is no TSS ledger id yet),
+or TSS readiness for a candidate is always complete before the council freezes the network.
+
+| Upgrade version vs the floor | What the operator does |
 |---|---|
-| `true` | **Acts.** Swaps the signing key to the matching staged Secret, applies the firewall `transition`, then `target` after the upgrade succeeds, and updates the baseline. |
-| `false` | **Warns only.** Keeps the old key, makes no firewall change, and logs a warning with an event. Prepare still validates the roster and computes the plan so the warning says exactly what would have changed. |
+| At or above | **Acts.** Swaps the signing key to the matching staged Secret, applies the firewall `transition`, then `target` after the upgrade succeeds, and updates the baseline. |
+| Below, or the field is empty | **Warns only.** Keeps the old key, makes no firewall change, and logs a warning with an event. Prepare still validates the roster and computes the plan so the warning says exactly what would have changed. |
 
-**When the flag is read.** Prepare reads it to decide how specific a warning to raise. The Execute CR
-records the value when it is created, and every acting step in that upgrade uses the recorded value, so
-the decision cannot flip halfway through.
+**The trade-off of a floor.** Because it holds for every later upgrade, it cannot notice one upgrade
+whose candidate the CN refuses. The UC's log result below is the safety net, and recovery from a wrong
+setting is manual at first. To switch automation off, clear the field or raise it above the next version.
 
-**The silent failure to watch for.** The default is `false`, so on a network where the CN does adopt the
-roster, forgetting to set the flag leaves a node whose certificate changed in the adopted roster but
+**When it is read.** Prepare reads it to decide how specific a warning to raise. The Execute CR records the
+decision when it is created, and every acting step in that upgrade uses the recorded value.
+
+**The silent failure to watch for.** The default is empty, so on a network where the CN does adopt the
+roster, forgetting to set the field leaves a node whose certificate changed in the adopted roster but
 whose key was never swapped. That node cannot gossip. The Prepare warning exists to catch this days
 ahead, and the roster-adoption result below catches it again after the restart.
 
@@ -316,17 +328,17 @@ ahead, and the roster-adoption result below catches it again after the restart.
 status. The condition's reason is `Adopted`, `Rejected` or `NoCandidate`, and its message carries the
 round and the log time. The operator, which is the only writer of the `ConsensusCapsule` status, proxies
 it into `status.rosterAdoption` (not built yet). The operator uses the first result after the Execute CR's
-`nodeUpgradeStartTime`. The UC makes no decision about it and does not know the flag. An absent condition
-means "unknown".
+`nodeUpgradeStartTime`. The UC makes no decision about it and does not know the Orbit setting. An absent
+condition means "unknown".
 
-| Flag when Execute started | Log result | Operator reaction |
+| Automation enabled when Execute started | Log result | Operator reaction |
 |---|---|---|
-| `true` | `rejected` | The flag was wrong. Do **not** apply `target` or update the baseline, keep the `transition` rules, and raise a loud `RosterRejected` warning. The node is on the new key against the old roster until the key is repointed by hand. |
-| `false` | `adopted` | The flag was wrong the other way. Raise a loud warning: the node's key may no longer match the adopted roster. Update the baseline, since the roster really changed. |
+| yes | `rejected` | The setting was wrong for this upgrade. Do **not** apply `target` or update the baseline, keep the `transition` rules, and raise a loud `RosterRejected` warning. The node is on the new key against the old roster until the key is repointed by hand. |
+| no | `adopted` | The setting was wrong the other way. Raise a loud warning: the node's key may no longer match the adopted roster. Update the baseline, since the roster really changed. |
 | any other | `adopted`, `none`, or absent | No extra action. |
 
-**The UC does not know the flag.** It reports the log result for every upgrade and the operator makes
-every decision. Handing the flag to the UC would be worse: an argument or env var on the UC container
+**The UC does not know the Orbit setting.** It reports the log result for every upgrade and the operator
+makes every decision. Handing it to the UC would be worse: an argument or env var on the UC container
 changes the pod template and rolls the consensus pod, reading the Orbit needs new UC RBAC, and the UC
 has no `data/config` mount to read the CN's TSS settings.
 
@@ -350,6 +362,25 @@ The firewall plan needs the roster the node ran before the upgrade.
 | Staleness | A genesis-seeded baseline predates any DAB change made since, so the first diff may show unexplained differences. Because `set` replaces whole membership, this costs a stale diff, not a broken rule. |
 | Reset | Deleting the ConfigMap forces a reseed. |
 
+## Updating the Orbit
+
+The Orbit spec is set by **upgrade jobs**, the package's `jobs/` descriptors (HIP-1494). They are
+idempotent per operation ID and run on both profiles: the UC triggers the `prepare` and `post-upgrade`
+phases always, and the `frozen` phase is triggered by the daemon on mainnet and by the UC on
+cluster-only. A job runs a migration-style step (check, apply, roll back) that patches the Orbit through a
+ServiceAccount allowed to patch only that Orbit, which keeps the package's privilege narrow.
+
+Which phase to use depends on the kind of update:
+
+| Kind of Orbit update | Example | Phase | Why |
+|---|---|---|---|
+| Set once, read by later upgrades | `canAdoptRosterFromVersion` | `prepare` of the rollout upgrade | Set it before the first upgrade that should be eligible. Nothing after the upgrade needs it. |
+| Component-coupled gate that must match the CN that restarts | `nodeNameZeroBased` | `frozen` | Set while the CN is stopped and before the capsule patch, so one restart covers both. |
+| Cleanup | clearing a value | `post-upgrade` | Runs only after the Execute CR succeeds. It does not run when a freeze is aborted. |
+
+Because `canAdoptRosterFromVersion` is a version floor, it needs none of the per-upgrade resets that a
+boolean would, and an aborted freeze leaves nothing stale behind.
+
 ## Failure handling
 
 | Situation | Behaviour |
@@ -357,8 +388,8 @@ The firewall plan needs the roster the node ran before the upgrade.
 | No roster file | Prepare CR created without it. No rotation or firewall change is planned. |
 | Roster invalid or oversized | Skipped with a warning, or the CR held back if `--candidate-roster-required`. |
 | This node's cert changed, no matching Secret | **Best effort:** the upgrade proceeds. The Execute CR carries `RosterKeyMismatch=True` and an event. The node comes up on the old key, which no longer matches its roster entry, so its events are rejected until the key is fixed. The firewall plan is still applied so peers can reach it. |
-| `canAdoptRoster` is false and the roster changes this node or the firewall | The operator warns at prepare, keeps the old key and changes no firewall. If the CN adopts the roster anyway, the node's key will not match it until someone swaps the key by hand. |
-| `canAdoptRoster` is true but the CN refuses the roster | `target` and the baseline update are not applied, `transition` rules stay, and `RosterRejected` is raised. The node is on the new key against the old roster until the key is repointed by hand. |
+| Automation is not enabled for this version and the roster changes this node or the firewall | The operator warns at prepare, keeps the old key and changes no firewall. If the CN adopts the roster anyway, the node's key will not match it until someone swaps the key by hand. |
+| Automation is enabled but the CN refuses the roster | `target` and the baseline update are not applied, `transition` rules stay, and `RosterRejected` is raised. The node is on the new key against the old roster until the key is repointed by hand. |
 | Daemon cannot apply the rule | `FirewallApplied=False`, which fails the Execute CR, like `DaemonResult=False`. |
 | Many nodes mismatch at once | Over 1/3 of the weight in this state halts the network. A per-node CR cannot see it. Fleet-level visibility is an open item (HIP-1496 HCS notifications). |
 
@@ -370,9 +401,9 @@ The firewall plan needs the roster the node ran before the upgrade.
 |---|---|---|---|
 | `NetworkUpgradePrepare` | `spec.artifacts[]` | UC | Opaque files read from the node. The roster entry is named `candidate-roster.json` with `name`, `sha256`, `content` (raw file, at most 512 KiB). |
 | `NetworkUpgradePrepare` | `status.firewallPlan` | Operator | The plan. |
-| `NetworkUpgradeExecute` | `status.firewallPlan` | Operator | Verbatim copy, so the daemon reads one CR. Present only when the flag was true. |
+| `NetworkUpgradeExecute` | `status.firewallPlan` | Operator | Verbatim copy, so the daemon reads one CR. Present only when automation is enabled. |
 | Both | conditions `FirewallPlanComputed`, `FirewallApplied` | Operator, daemon | Progress and outcome. |
-| `Orbit` | `spec.consensus.canAdoptRoster` | Whoever confirms TSS readiness | `true`: the CN will adopt the candidate, so the operator acts. `false`: warn only. |
+| `Orbit` | `spec.consensus.canAdoptRosterFromVersion` | solo-provisioner or an upgrade job, once | First package version the CN is expected to adopt. At or above: the operator acts. Below or empty: warn only. |
 | Pod (UC's own) | condition `operator.solo.hiero.org/roster-adoption` | UC | Reason `Adopted`, `Rejected` or `NoCandidate`, with the log round and time. A safety net. |
 | `ConsensusCapsule` | `status.rosterAdoption` | Operator | Proxied from the pod condition. |
 | ConfigMap `<capsule>-applied-roster` | roster and annotations | Operator | Baseline for the next diff. |
@@ -423,7 +454,7 @@ membership lists, so applying one is idempotent:
 | UC | `--candidate-roster-path` / `UC_CANDIDATE_ROSTER_PATH` | same path |
 | UC | `--candidate-roster-wait` / `UC_CANDIDATE_ROSTER_WAIT` | `15s` |
 | UC | `--candidate-roster-required` / `UC_CANDIDATE_ROSTER_REQUIRED` | `false` until the CN property has shipped |
-| Orbit | `spec.consensus.canAdoptRoster` | `true` before an upgrade whose roster the CN will adopt. Default `false`. |
+| Orbit | `spec.consensus.canAdoptRosterFromVersion` | The first package version to automate, for example `0.76.0`. Empty by default (never act). |
 
 ### Security considerations
 
@@ -439,11 +470,9 @@ membership lists, so applying one is idempotent:
 
 ## Open questions
 
-1. **How the per-upgrade flag is delivered.** Decided: on networks where the TSS gate is on (the
-   production CNs), `canAdoptRoster` is `true` for one upgrade at a time and the upgrade protocol is the
-   only way to change those nodes. Open: the mechanism. A package fixed before `PREPARE_UPGRADE` cannot
-   prove readiness, because the candidate roster and its TSS work only start at `PREPARE_UPGRADE`. The
-   council's `FREEZE_UPGRADE` is the natural go/no-go point.
+1. **Who sets the floor, and which version.** The field is set once, by solo-provisioner or an upgrade job.
+   Open: the owner, and the right version. It should be the first version where the CN is expected to
+   adopt candidates, which depends on the TSS gate state of each network.
 2. **Operator side of the adoption signal.** The UC part is built. Still to do: proxy the pod condition
    to the capsule status and implement the reactions in the table above. The CN log text can change, so
    a missing result is always "unknown".
