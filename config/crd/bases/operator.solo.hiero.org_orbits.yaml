@@ -51,6 +51,27 @@ spec:
               consensus:
                 description: Consensus contains shared configuration for all ConsensusCapsules
                 properties:
+                  canAdoptRoster:
+                    default: false
+                    description: |-
+                      CanAdoptRoster asserts that a candidate roster cannot be rejected when the
+                      consensus node restarts after an upgrade. The CN adopts the candidate only if its
+                      TSS readiness check allows it; otherwise it keeps the old roster. That check cannot
+                      fire when both tss.hintsEnabled and tss.historyEnabled are off, or while the
+                      network has no TSS ledger id yet. Do not derive this from genesis.addressBook.ledgerId,
+                      which is the HAPI ledger id, not the TSS one.
+
+                      When true, a succeeded upgrade counts as an adopted roster, so the operator may
+                      promote the applied-roster baseline and apply the final firewall membership. When
+                      false (the default), the operator waits for the UC's roster-adoption result from
+                      the CN log and acts only on "adopted". A rejection reported by the log always wins,
+                      even when this is true.
+
+                      This is configuration, not a feature gate: it describes the deployed network and is
+                      not removed on a schedule. Whoever enables or disables TSS (solo-provisioner or a
+                      job) sets it to match; the operator only reads it. A wrong "true" removes the
+                      protection against dropping firewall entries for peers still in the active roster.
+                    type: boolean
                   featureGates:
                     description: |-
                       FeatureGates holds transitional, rollout-only consensus feature gates. See
