@@ -18,6 +18,8 @@ In scope:
 - **Gossip endpoint** changes (new, changed or removed node addresses) and the resulting
   host-firewall change on **every** node, not just the one that changed.
 - The freeze-based upgrade path (`PREPARE_UPGRADE` → `FREEZE_UPGRADE` → restart).
+- Firewall changes apply to the **mainnet (bare-metal) profile only**. The cluster-only profile has
+  no provisioner daemon and no host firewall, so there the operator only records the plan.
 
 Out of scope here:
 
@@ -68,13 +70,19 @@ to the operator as a CR field before anything acts on it.
    separate thread, so a file written into `current/` can be lost. The property is a node
    property (`node.properties`). It ships in the deployment package in one freeze window and
    is active from the next: the first window cannot export a roster, because the CN
-   handling that `PREPARE_UPGRADE` is still the old process.
+   handling that `PREPARE_UPGRADE` is still the old process. Leave
+   `--candidate-roster-required` off until the property is active. A `node.properties` shipped in
+   the package becomes a whole-file ConfigMap, so it must include any overrides operators
+   already set or it will replace them.
 2. **`cn-gossip` host-firewall rule exists** (mainnet), created by `solo-provisioner` at
    provisioning (hashgraph/solo-weaver#1305). The daemon only creates it as a fallback.
 3. **Key Secrets follow the provisioner naming** (hashgraph/solo-weaver PR 1198):
    `node<N>-gossip-keys-<date>-<fp8>`, where the fingerprint is the SHA-384 of the
    certificate DER. A new key creates a new Secret next to the old one and never
    overwrites it.
+4. **`orbit.spec.consensus.canAdoptRoster` matches the network [done: field].** `false` by
+   default. Set it to `true` only where the CN's TSS readiness gate cannot reject a candidate
+   roster (see [Adoption confirmation](#adoption-confirmation)).
 
 ## Data model
 
@@ -84,6 +92,8 @@ to the operator as a CR field before anything acts on it.
 | `NetworkUpgradePrepare` | `status.firewallPlan` **[done: type]** | Operator | The plan below. |
 | `NetworkUpgradeExecute` | `status.firewallPlan` **[done: type]** | Operator | Verbatim copy, so the daemon reads one CR. |
 | Both | conditions `FirewallPlanComputed`, `FirewallApplied` **[done: constants]** | Operator / daemon | Progress and outcome. |
+| `Orbit` | `spec.consensus.canAdoptRoster` **[done]** | Whoever enables TSS | Asserts a candidate roster cannot be rejected at restart. |
+| `ConsensusCapsule` | `status.rosterAdoption` **[todo]** | UC | `adopted`, `rejected` or `none`, with round and time, parsed from the CN log. |
 | ConfigMap `<capsule>-applied-roster` **[todo]** | roster + annotations | Operator | The roster the node is believed to run. Baseline for the next diff. |
 
 `FirewallPlan` holds one named allow rule (`cn-gossip`, tcp, the gossip port) and three
@@ -149,8 +159,8 @@ sequenceDiagram
     OP->>CN: scale up, node starts with new key
 
     CN->>CN: restart adopts or rejects the candidate roster
-    UC->>OP: adoption result (see Open questions)
-    OP->>OP: Execute Succeeded, promote applied-roster
+    UC->>OP: adoption result from the CN log (status.rosterAdoption)
+    OP->>OP: Execute Succeeded, then promote applied-roster only if adopted (canAdoptRoster or log result)
     DM->>DM: firewall set cn-gossip to target list
 ```
 
@@ -218,7 +228,7 @@ sequenceDiagram
 
 **E. After the restart**
 
-11. **Confirm adoption** (see [Open questions](#open-questions)). Only then:
+11. **Confirm adoption** (see [Adoption confirmation](#adoption-confirmation)). Only then:
     1. the operator promotes the candidate to `<capsule>-applied-roster`;
     2. the daemon applies `target`, which removes addresses no longer in the roster.
 12. The Execute CR reaches `Succeeded` when the node is `ACTIVE`, as today.
@@ -242,6 +252,40 @@ creates `NetworkUpgradeFreezeAbort`. If the daemon had already applied `transiti
 restores `rollback`. The staged Secret is simply never repointed and the baseline is never
 changed. Once the network is `FREEZING` an abort is impossible.
 
+## Adoption confirmation
+
+`Succeeded` does not prove the candidate roster was adopted. During the upgrade restart
+the CN adopts the candidate only if `canAdoptRoster` (TSS readiness) allows it; otherwise it
+logs `Rejecting candidate roster in round N`, keeps the old roster, and the node can still
+reach `ACTIVE` (`V0540RosterSchema.restart`). Promoting the baseline, or applying the
+firewall `target` list, on a rejected roster would be wrong and would drop addresses of
+peers that are still in the active roster.
+
+Two inputs decide it:
+
+1. **`orbit.spec.consensus.canAdoptRoster`** (default `false`). An assertion that the CN's
+   TSS readiness gate cannot reject a candidate on this network: both `tss.hintsEnabled`
+   and `tss.historyEnabled` are off, or there is no TSS ledger id yet. It is configuration,
+   not a feature gate, and is set by whoever enables or disables TSS (solo-provisioner or a
+   job). Do not derive it from `genesis.addressBook.ledgerId`, which is the HAPI ledger id.
+2. **The UC's roster-adoption result [todo].** The UC's log monitor already tails
+   `output/swirlds.log`. It would also match the three lines logged once per upgrade
+   restart (`Adopting candidate roster in round N`, `Rejecting candidate roster in round N`,
+   `No candidate roster to adopt in round N`) and publish `adopted`, `rejected` or `none`
+   with the round and time on `ConsensusCapsule.status`. The operator takes the first result
+   after the Execute CR's `nodeUpgradeStartTime`.
+
+| `canAdoptRoster` | Log result | Operator action |
+|---|---|---|
+| any | `rejected` | Do **not** promote or apply `target`. Keep `transition` rules. Warn. A rejection always wins over the flag. |
+| `true` | `adopted`, `none` or absent | Treat `Succeeded` as adopted. Promote and apply `target`. |
+| `false` | `adopted` | Promote and apply `target`. |
+| `false` | `none` or absent after a timeout | Warn. Keep `transition` rules and the old baseline. |
+
+A wrong `true` removes the protection, which is why the log result can override it. The log
+depends on message text, so a missing line means "unknown", never "adopted". A structured CN
+signal (a marker written when adoption is decided) would be sturdier and needs a CN change.
+
 ## The applied-roster baseline
 
 The firewall plan needs the roster the node was running before the upgrade.
@@ -255,7 +299,8 @@ The firewall plan needs the roster the node was running before the upgrade.
   generated from the capsules, where gossip endpoints are hostnames. If neither exists the
   baseline is unknown and the plan is **add-only** (reason `BaselineUnknown`): nothing
   is removed that is not known.
-- **Update.** Only after the Execute CR succeeds **and** adoption is confirmed, keyed by
+- **Update.** Only after the Execute CR succeeds **and** adoption is confirmed (see
+  [Adoption confirmation](#adoption-confirmation)), keyed by
   `operationId` so a repeat is a no-op. Never at prepare, freeze, abort or failure.
 - **Staleness.** A genesis-seeded baseline predates any DAB change made since. The first
   plan may therefore show unexplained differences. `set` replaces whole membership, so this
@@ -268,7 +313,7 @@ The firewall plan needs the roster the node was running before the upgrade.
 | No roster file | Prepare CR created without it. No rotation or firewall change is planned. |
 | Roster invalid or oversized | Skipped with a warning, or the CR held back if `--candidate-roster-required`. |
 | This node's cert changed, no matching Secret | **Best effort:** the upgrade still proceeds. The Execute CR carries `RosterKeyMismatch=True` and an event. The node comes up on the old key, which no longer matches its roster entry, so its events are rejected until the key is fixed. The firewall plan is still applied so peers can reach it. |
-| Candidate roster rejected at restart | Baseline and `target` are not applied. |
+| Candidate roster rejected at restart | Baseline and `target` are not applied (see [Adoption confirmation](#adoption-confirmation)). |
 | Daemon cannot apply the rule | `FirewallApplied=False`, which fails the Execute CR, like `DaemonResult=False`. |
 | Many nodes mismatch at once | More than 1/3 of the weight in this state halts the network. A per-node CR cannot see this; fleet-level visibility is an open item (HIP-1496 HCS notifications). |
 
@@ -293,16 +338,14 @@ The firewall plan needs the roster the node was running before the upgrade.
 | CN | `networkAdmin.exportCandidateRoster`, `createCandidateRosterOnPrepareUpgrade` | `true` (defaults) |
 | UC | `--candidate-roster-path` / `UC_CANDIDATE_ROSTER_PATH` | same path |
 | UC | `--candidate-roster-wait` / `UC_CANDIDATE_ROSTER_WAIT` | `15s` |
+| Orbit | `spec.consensus.canAdoptRoster` | `false` unless TSS gating is off (see [Adoption confirmation](#adoption-confirmation)) |
 | UC | `--candidate-roster-required` / `UC_CANDIDATE_ROSTER_REQUIRED` | `false` until the CN property has shipped |
 
 ## Open questions
 
-1. **Adoption signal.** `Succeeded` does not prove the candidate was adopted (the CN may
-   log a rejection and keep the old roster). Promoting the baseline or applying `target`
-   without confirmation could cut off peers still in the active roster. Preferred: the UC
-   log monitor matches "Adopting candidate roster in round" / "Rejecting candidate roster in
-   round" (`V0540RosterSchema`) and records it on the Execute status. A CN-side signal would
-   be cleaner and needs a CN change.
+1. **Adoption log signal [todo].** The UC log monitor does not yet parse the adoption lines or
+   publish a result. Until it does, only `canAdoptRoster=true` networks can complete the
+   promote-and-`target` step, and others stay on the `transition` rules.
 2. **TSS interplay.** `PlatformStateUpdates` comments that the candidate may instead be set
    at stake-period boundaries when TSS machinery keys it. Whether a candidate set that way
    can differ from the one exported at `PREPARE_UPGRADE` was not traced.
