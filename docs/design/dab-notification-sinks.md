@@ -77,8 +77,22 @@ flowchart LR
 
 - `NotificationSink` has one method that takes an event. Call sites stay where markers are written today
   (`writeMarker`, the roster export, the roster schema's adoption hook), so the file behaviour is
-  unchanged.
-- **`UcSink` calls `FileSink` first and `ApiSink` second.** A failure in `ApiSink` is logged and
+  unchanged by default.
+- **`notification.sinks` is a real switch**, so the marker files can be turned off later without a new flag.
+  The marker and roster-export writes happen only when the list contains `file`:
+
+  | `notification.sinks` | Marker files and `candidate-roster.json` | API events |
+  |---|---|---|
+  | `file` (default) | written, as today | none |
+  | `file,uc` | written | sent |
+  | `uc` | **not written** | sent |
+
+  The default stays `file`, so nodes with the NMT or an older UC are unaffected. The switch fails safe: the markers
+  are left off only when `file` is absent **and** the `uc` sink is usable. An empty or unrecognised list means
+  `file`, and `uc` with a missing or empty secret file, or a refused URL, keeps the markers and logs an error,
+  because otherwise nothing would signal the upgrade. Nothing is rejected, so a typo cannot stop the node from
+  starting.
+- **When both are enabled, `UcSink` calls `FileSink` first and `ApiSink` second.** A failure in `ApiSink` is logged and
   ignored. A fallback-only policy (API first, file only if it fails) was considered and rejected: the NMT
   and the legacy UC read the files, the CN's restart catch-up rewrites them, and a fallback would save no
   writes while adding a case where an accepted-then-lost event leaves no file.
@@ -86,7 +100,8 @@ flowchart LR
   bounded queue, off the handle thread. Exceptions never propagate (the same rule as the roster export in
   `PlatformStateUpdates.doExport`). Events are node-local and non-consensus.
 - The sink object must be built before `initializeStatesApi`, so the adoption hook can use it.
-- Configured in `node.properties`, for example `notification.sinks=file,uc` (default `file`).
+- Configured in `node.properties`, for example `notification.sinks=file,uc` (default `file`); see "Retiring the
+  marker files" for when `uc` alone is safe.
 
 ### Events
 
@@ -103,7 +118,7 @@ flowchart LR
 For marker events the payload has `marker` (the file name) and `contents`, which is exactly what the file
 holds: the freeze or telemetry time in epoch seconds, or the check mark `✓`. The UC can therefore handle an event
 the same way it handles reading the file. The candidate roster event carries the roster in the same format as the
-export file (`roster`), its `sha256`, and the export `path`. The adoption event carries `result` (`adopted`,
+export file (`roster`), its `sha256`, the export `path` and the PREPARE_UPGRADE `consensusTime`. The adoption event carries `result` (`adopted`,
 `rejected` or `none`) and `round`.
 
 Every event has `schemaVersion`, an `id`, `type`, `time` (when the node raised it), `nodeId`, `softwareVersion` (the
@@ -113,9 +128,10 @@ always produces the same bytes.
 **Event IDs.** Events raised while a transaction is handled (`PREPARE_UPGRADE_READY`, `FREEZE_SCHEDULED`,
 `FREEZE_ABORTED`) use the transaction's **consensus time**, which is the same on every node, so the ID is
 network-wide: `PREPARE_UPGRADE_READY:<consensusTime>`. `NOW_FROZEN` uses the consensus time of the freeze round.
-`ROSTER_ADOPTION_DECIDED` uses the round, and `CANDIDATE_ROSTER_READY` the first 32 hex characters of the roster's
-SHA-256. Without a consensus time (for example a catch-up announcement after a reconnect) the ID falls back to the
-freeze time, then the upgrade file hash, then wall-clock time. An announcement of a past occurrence made during
+`ROSTER_ADOPTION_DECIDED` uses the round, and `CANDIDATE_ROSTER_READY` the consensus time of the PREPARE_UPGRADE that
+produced the roster. Without a consensus time (for example a catch-up announcement after a reconnect) the ID falls back to the
+freeze time, then the upgrade file hash, then wall-clock time (for the roster, the first 32 hex characters of its
+SHA-256). An announcement of a past occurrence made during
 catch-up can therefore have a different ID than the original, which is harmless because the UC also dedupes on
 state.
 
@@ -244,12 +260,13 @@ nodes here; node 0's entry has no `nodeId` because zero values are omitted):
 ```json
 {
   "schemaVersion": 1,
-  "id": "CANDIDATE_ROSTER_READY:5b0f3c9a77d14e2a8c61d0b94e1f7a32",
+  "id": "CANDIDATE_ROSTER_READY:2026-10-18T09:00:00.100Z",
   "type": "CANDIDATE_ROSTER_READY",
   "time": "2026-10-18T09:00:00.140Z",
   "nodeId": 3,
   "softwareVersion": "0.76.1",
   "payload": {
+    "consensusTime": "2026-10-18T09:00:00.100Z",
     "path": "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/candidate-roster.json",
     "roster": "{\"nodeMetadata\":[{\"rosterEntry\":{\"weight\":\"1\",\"gossipCaCertificate\":\"MIIDpjCCAg6gAwIB...\",\"gossipEndpoint\":[{\"ipAddressV4\":\"CgAAAQ==\",\"port\":50111}]}},{\"rosterEntry\":{\"nodeId\":\"1\",\"weight\":\"1\",\"gossipCaCertificate\":\"MIIDnjCCAgagAwIB...\",\"gossipEndpoint\":[{\"ipAddressV4\":\"CgAAAg==\",\"port\":50111}]}}]}",
     "sha256": "5b0f3c9a77d14e2a8c61d0b94e1f7a32e9c4d81f05a6b37d2c9e48f1a0b7d635"
@@ -361,9 +378,18 @@ apply, because it works by repointing Secret references. See the marker-file des
 - An `EventSource` abstraction next to today's `MarkerMonitor`. The marker poller and the API listener
   both feed the same handlers (`HandleExecuteImmediate` and the others), which already dedupe by
   operation ID and persist before sending.
-- **Events are advisory.** The UC treats an event as a claim and checks it against what is on disk (the
-  marker file, the roster file) before acting, so a valid HMAC proves the sender holds the secret but never
-  replaces the state the UC already trusts.
+- **Marker events are advisory.** The UC treats a marker event as a claim and checks it against the marker
+  file on disk before acting, so a valid HMAC proves the sender holds the secret but never replaces the state
+  the UC already trusts.
+- **The candidate roster comes from the event payload, not from the file.** On `CANDIDATE_ROSTER_READY` the UC
+  takes `payload.roster`, checks it against `payload.sha256`, and puts it in the Prepare CR's
+  `spec.artifacts`. It does not read `payload.path`. The HMAC is what authenticates the roster, so nothing
+  has to be confirmed on disk, and this keeps working when the CN is configured not to write marker files or
+  the export file. Only when no API event arrives (the marker-only configuration, or a lost call) does the UC
+  fall back to reading `candidate-roster.json` as it does today.
+- **Size.** The event is limited by `notification.maxEventBytes` (256 KiB by default), while a CR artifact may
+  be up to 512 KiB. A roster of a few dozen nodes is far below both. A roster over the event limit is dropped
+  by the CN with a warning, so the file fallback has to stay in place.
 
 ```mermaid
 sequenceDiagram
@@ -385,8 +411,9 @@ sequenceDiagram
 
 ## Failure and ordering
 
-- **UC down or not started yet:** the file is written, the API call fails quietly, and the poller picks up
-  the marker later. For events raised during CN start-up the sink retries for a short bounded time, since
+- **UC down or not started yet:** with `file` enabled the file is written, the API call fails quietly, and the
+  poller picks up the marker later. With `sinks=uc` alone the event is retried for the retry window and then
+  dropped with an error, which is why that mode needs the recovery path above. For events raised during CN start-up the sink retries for a short bounded time, since
   the UC usually comes up moments later.
 - **Adoption at startup.** The adoption hook runs during `initializeStatesApi`, before the platform is
   built. The HMAC needs no platform, so the event can be queued from the hook itself. The marker file is
@@ -399,6 +426,26 @@ sequenceDiagram
   files continue to work.
 - **Secret file unreadable at start-up:** the CN logs once and disables the API sink for that run.
 
+## Retiring the marker files
+
+The marker files are the older mechanism and the aim is to stop writing them, but not until the new model is
+everywhere. Until then they are the durable record: an API push is best effort, so a UC that restarts, crash-loops
+or starts after the CN finds the marker on disk, while a lost API event has no replay.
+
+1. **Now:** `sinks=file`, then `file,uc` as nodes adopt the API. The markers stay the source of truth and
+   marker events stay advisory.
+2. **After the NMT and the legacy UC are gone:** `file,uc` everywhere. The API is the primary path, and nothing
+   outside the UC depends on the markers.
+3. **Then, per environment:** `sinks=uc`. This needs, first:
+   - the UC's durable inbox (events survive a UC restart);
+   - a way to recover a missed event, either a CN-side replay of current upgrade state after the UC reconnects, or
+     a UC pull of the current state;
+   - a check that nothing else reads the markers: some are part of the CN's own upgrade state, and
+     `execute_immediate.mf` may be read by other tooling.
+
+`candidate-roster.json` is an artifact for humans and the file fallback, so it is the last to go. With
+`sinks=uc` it is not written, and the roster reaches the UC in the event payload.
+
 ## Security considerations
 
 - Local only: `127.0.0.1`, no Service or containerPort, and no `hostNetwork`.
@@ -408,7 +455,8 @@ sequenceDiagram
   a config dump. I did not check whether the capsule enables a shared process namespace, which would let a
   sidecar running as the same user read another container's filesystem through `/proc`.
 - Bounded request size, strict parsing, rate limit on the listener.
-- The UC never trusts payloads beyond what it can confirm on disk.
+- Marker events are never trusted beyond what the UC can confirm on disk. The roster is authenticated by the HMAC and
+  its digest instead, because with `sinks=uc` there is no file to compare it with.
 - The API grants no new capability: every effect already needs a CR, and the operator still decides.
 
 ## Rollout
@@ -429,6 +477,7 @@ HIP-1494's two-upgrade pattern applies:
 | `canAdoptRosterFromVersion` is a standing assumption | `CandidateReadyToAdopt` can make it per upgrade and automatic |
 | The roster travels as an export file in `data/upgrade/` | It can travel in the event, avoiding the `cleanDirectory` race |
 | The CN property for the export path must ship first | Not needed for the event path |
+| Marker files are always written | `notification.sinks` can turn them off once the API is the primary path |
 
 ## Open questions
 
