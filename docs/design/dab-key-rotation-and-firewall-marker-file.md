@@ -272,6 +272,35 @@ stateDiagram-v2
 The staged Secret was never repointed and the baseline was never changed, so nothing else needs
 undoing. Once the network is `FREEZING`, an abort is impossible.
 
+## Node removal (`NodeDelete`)
+
+A deleted node needs no new flow. The remaining nodes use the normal upgrade above. Only the removed node
+behaves differently.
+
+- **Timing.** Like `NodeUpdate`, it must land before `PREPARE_UPGRADE`. The candidate roster then leaves
+  the node out, and the CN adopts it at the upgrade restart.
+- **Remaining nodes.** Nothing new. The removed address is in `rollback` and `transition`, and absent from
+  `target`. It is closed last, after the upgrade has succeeded.
+- **The removed node's UC.** Nothing new. It still sees the markers and creates its CRs as usual.
+- **Prepare.** The operator finds no entry for this capsule's node ID in the candidate roster. It sets a
+  `NodeRemoved` condition and raises an event now, days ahead. It does this whether or not automation is
+  enabled for the version.
+- **Execute, automation enabled.** The operator records the decision when the CR is created, like every
+  other acting step.
+  - It does **not** hand off to the daemon. There is no infrastructure work for a node that is leaving.
+  - It does not patch images and does not scale the pod back up. A restarted node that is not in the
+    roster cannot load its signing certificate and exits in a loop.
+  - It sets `NodeRemoved=True` and ends the CR as `Succeeded`, without waiting for `ACTIVE`.
+- **Execute, automation not enabled.** The upgrade runs as today, with the warning raised at prepare. If
+  the CN adopts the roster, the node cannot restart on it. That is a manual fix.
+- **The host stays as it is.** The daemon makes no firewall or other change on the removed node's own host.
+- **Decommissioning is manual.** The operator never deletes the capsule, its volumes or its Secrets. The
+  capsule's status records that it left the roster, so genesis discovery and the Helm endpoint values skip
+  it. Removing the capsule and host is the node operator's job.
+- **If the CN refuses the roster.** The node is still in the active roster but was left offline. The UC's
+  `Rejected` result raises `RosterRejected`, and the node operator scales the capsule back up. It is still
+  on the old images, which is correct because the roster did not change.
+
 ## Key decisions
 
 | Decision | Choice | Why |
@@ -285,6 +314,8 @@ undoing. Once the network is `FREEZING`, an abort is impossible.
 | Firewall plan form | Full membership lists, never diffs | Idempotent. A retry or restart converges. |
 | Acting on a roster | `orbit.spec.consensus.canAdoptRosterFromVersion`, a version floor set once | Every upgrade at or above the version is eligible, with no per-upgrade job. Empty or lower means warn and change nothing. |
 | Safety net | UC log result (`adopted` or `rejected`) | The floor cannot notice a single refused upgrade. A rejection holds `target` and the baseline and raises a warning. |
+| Removed node | Stays offline. Execute ends `Succeeded` with `NodeRemoved=True`, with no daemon handoff | A node outside the roster cannot restart. The operator decides from the roster, behind the same version floor. |
+| Decommissioning | Manual | The other nodes already drop it. The operator never deletes data. |
 | Missing key at prepare | Best effort, upgrade proceeds with a loud warning | One node's key problem should not block the network's upgrade. |
 
 ## When the operator acts
