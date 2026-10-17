@@ -1,4 +1,4 @@
-# CN notification sinks: a signed UC events API alongside marker files
+# CN notification sinks: an authenticated UC events API alongside marker files
 
 How the consensus node (CN) could notify the UC sidecar through an authenticated local API in
 addition to the marker files it writes today.
@@ -14,9 +14,10 @@ working on its own. This document says what the API would add and how to build i
 2. **The marker file is always written; the API is additional.** If the UC is down, slow or not yet
    started, nothing is lost, because the file is still there.
 3. The UC exposes `POST /v1/events` on `127.0.0.1`. The CN and UC share the pod's network namespace.
-4. **The CN signs each event with its own node key** (`Platform.sign`, RSA `SHA384withRSA`). The UC
-   verifies with the node's signing certificate, which the operator mounts into the UC container. No
-   shared secret, and rotation follows key rotation automatically.
+4. **Requests carry an HMAC-SHA256 made with a per-capsule shared secret.** The operator creates the
+   secret and injects it as an environment variable into the CN and UC containers only. The secret is
+   never sent, so a sniffed request cannot be turned into a different one. It works at any point of CN
+   start-up, because it needs no platform object or key store.
 5. The API can carry what files cannot: the roster itself, the adoption decision, and TSS readiness.
    These replace log scraping and the version-floor assumption in the marker-file design.
 
@@ -35,10 +36,6 @@ working on its own. This document says what the API would add and how to build i
 
 - Marker files are written in one place, `ReadableFreezeUpgradeActions.writeMarker` (and re-written by
   `catchUpOnMissedSideEffects` at restart).
-- `Platform.sign(byte[])` is public on the platform interface
-  (`platform-sdk/swirlds-platform-core/.../Platform.java:57`) and application code already calls it
-  (`Hedera.java:1099`, `TssSubmissions.java:49` via `appContext.gossip().sign`). The signature type is
-  `SHA384withRSA` (`platform-sdk/base-crypto/.../SignatureType.java:15`).
 - The UC already serves HTTP: the control plane is `daemonkit.NewServer(SocketPath, ...)` with routes on an
   `http.ServeMux` (`internal/uc/uc.go`, `consensus_status_handler.go:47`), and a separate TCP listener
   serves metrics (`metrics_server.go`). A third listener for events fits the same structure.
@@ -47,12 +44,12 @@ working on its own. This document says what the API would add and how to build i
   and 205), and it runs the service migrations, including the roster schema's `restart` and therefore the
   adoption hook (`Hedera.java` ~1024, `serviceMigrator.doMigrations`). Only afterwards does
   `new PlatformBuilder(...).build()` create the platform (lines ~252 to 270), and `platform.start()` follows
-  (line 272). `Hedera.platform` is assigned only in `onStateInitialized` (`Hedera.java:921`), which the
-  platform calls later. So at adoption time there is **no `Platform` object** and `Platform.sign` cannot be
-  called.
-- The UC container is built in `buildUcContainer` (`internal/resources/consensus/deployment.go`) with a fixed
-  mount list plus `AdditionalVolumeMounts`, runs as uid and gid 2000, and pod volumes are created in
-  `buildVolumes` with a default file mode of 0644.
+  (line 272). `Hedera.platform` is assigned only in `onStateInitialized` (`Hedera.java:921`). So at adoption
+  time there is **no `Platform` object**, and `Platform.sign` (public, `Platform.java:57`) cannot be used. This
+  is why the authentication does not depend on the node key.
+- The UC container is built in `buildUcContainer` (`internal/resources/consensus/deployment.go`) and runs as
+  uid and gid 2000. Each container lists its own environment, so a variable can be given to the CN and UC
+  and not to the sidecars.
 
 ## Design
 
@@ -64,7 +61,7 @@ flowchart LR
     U --> F[FileSink: write marker file]
     U --> A[ApiSink: POST to UC, async]
     F --> D[(upgrade dir)]
-    A -->|signed event| UC[UC events API]
+    A -->|HMAC-signed event| UC[UC events API]
     D -->|poll| UC
 ```
 
@@ -75,9 +72,10 @@ flowchart LR
   ignored. A fallback-only policy (API first, file only if it fails) was considered and rejected: the NMT
   and the legacy UC read the files, the CN's restart catch-up rewrites them, and a fallback would save no
   writes while adding a case where an accepted-then-lost event leaves no file.
-- **Never block consensus handling.** The API call is asynchronous with a short timeout and a bounded
-  queue, off the handle thread. Exceptions never propagate (the same rule as the roster export in
+- **Never block consensus handling or start-up.** The API call is asynchronous with a short timeout and a
+  bounded queue, off the handle thread. Exceptions never propagate (the same rule as the roster export in
   `PlatformStateUpdates.doExport`). Events are node-local and non-consensus.
+- The sink object must be built before `initializeStatesApi`, so the adoption hook can use it.
 - Configured in `node.properties`, for example `notification.sinks=file,uc` (default `file`).
 
 ### Events
@@ -104,71 +102,57 @@ the file path and the API path, and any retry, map to one event.
   again and ignored.
 - Request size is capped, unknown fields are ignored (forward compatibility), and `GET /v1/health` lets
   the sink check availability.
-- A Unix socket in a shared directory is an alternative with the same API. It needs a pod-spec volume and
-  a custom Java client, since the JDK's HTTP client cannot use Unix sockets. It was not chosen because
-  authentication is handled by the signature, so localhost is enough.
+- Both sides use their standard HTTP clients (`java.net.http.HttpClient` in the CN, `net/http` in the UC).
 
-### Authentication: the CN signs, the UC verifies
+### Authentication: a shared secret and an HMAC per request
 
-- The CN signs `"solo-uc-event-v1" || id || type || time || payload` with `Platform.sign` and sends the
-  signature in a header. The fixed prefix is domain separation, so a signature made for gossip cannot be
-  reused here and the reverse.
-- The operator mounts **only the node's signing certificate** (the capsule's `signingPublicCertificate`
-  Secret key, public) into the UC container. The UC verifies with `SHA384withRSA` (PKCS#1 v1.5).
-- **Rotation is automatic.** The key swap repoints the signing Secret in one capsule patch. The CN gets
-  the new private key and the UC the new certificate from the same Secret, and both restart together.
-- **Replay is harmless:** the UC dedupes by `id` and rejects timestamps outside a window. A sniffed
-  request cannot become a different event.
-- A sidecar has neither the private key nor a shared secret, so it cannot forge an event.
+**The secret.** A random 32-byte value per capsule, in a Secret such as `<capsule>-uc-events-secret`, created
+by the operator before the StatefulSet exists (it already reads and writes Secrets). The CN and UC
+containers get it as an environment variable (for example `UC_EVENTS_SECRET`) through `secretKeyRef`. No
+other container does. Mark the reference `optional`, so a missing Secret never stops the pod: without it the
+CN disables the API sink, the UC rejects API events, and the marker files carry on as before.
+
+**The signature.** The CN sends two headers: a timestamp, and `HMAC-SHA256(secret, canonical)` in hex, where
+`canonical` is `"solo-uc-events-v1\n" + method + "\n" + path + "\n" + timestamp + "\n" + hex(sha256(body))`. The
+event `id` and `nodeId` are inside the body, so they are covered. The fixed prefix is domain separation. In
+Java this is `javax.crypto.Mac` (`HmacSHA256`), which is in the JDK and needs nothing started.
+
+**What the UC checks:**
+- recompute the HMAC and compare in constant time;
+- reject a timestamp outside a short window (a couple of minutes: the containers share a host clock);
+- dedupe by event `id`, so a replay within the window changes nothing;
+- cap the body size before reading it.
+
+**Why this resists sniffing.** The secret never travels. Someone who can read loopback traffic (needs
+`NET_RAW`, and the HIP uses CRI-O, whose defaults may already exclude it) sees events, which are public data,
+but cannot produce a different valid request.
+
+**Rotation.** Environment variables are fixed when a container starts. The CN and UC restart together with
+the pod, so they agree. Change the Secret only as part of a pod restart (for example together with the
+capsule patch at `PendingNodeUpgrade`). The edge case is a single container restarting inside a live pod, such
+as a CN crash restart: it re-reads the Secret and could differ from the UC that kept the old value, so events
+would be rejected until the UC restarts. The UC logs a clear "signature mismatch" warning, and the marker
+files keep working in the meantime. If this proves a problem, the UC can accept a current and a previous
+secret during an overlap.
+
+**What it does not give you:** no automatic tie to key rotation, a new secret to manage, and the UC holds
+the same secret, so it could also produce valid events (it is the receiver, so that does not matter).
 
 Options considered:
 
 | Option | Why not |
 |---|---|
-| Shared secret with an HMAC per request | A new secret to create, store and rotate, and the UC could also mint events. |
-| Operator-issued JWT | A bearer credential (reusable if copied), plus an operator signing key and re-minting. More machinery for weaker replay behaviour. |
-| Unix socket in a shared directory | Pod-spec change and custom Java client for isolation we get from the signature. |
-| Bearer token from env | Reusable if sniffed, and rotation needs a restart. |
+| The CN signs with its node key (`Platform.sign`) | Not available during start-up, when the adoption hook runs, because the platform does not exist yet. It also needs the signing certificate mounted into the UC, which does not work in `hostPath` key mode without mounting a single file. |
+| Operator-issued JWT | A bearer credential (reusable if copied), plus an operator signing key and re-minting. |
+| Plain bearer token from env | Simplest, but reusable if copied from traffic. The HMAC variant uses the same secret with no extra deployment cost. |
+| Unix socket in a shared directory | Pod-spec volume and a custom Java client, for isolation the secret already gives. |
 
-### Mounting the certificate into the UC
+### Behaviour in `hostPath` key mode
 
-Yes, this is feasible with the existing building blocks.
-
-**Where the certificate lives.** The capsule references it as `spec.secrets.secretResources.signingPublicCertificate`,
-a `KeyReference` (Secret name and key). With the provisioner's naming (solo-weaver PR 1198) that Secret
-also holds the private key, which is why the mount must list only the certificate key.
-
-**How to mount it (Secret mode):**
-
-1. In `buildVolumes`, add a pod volume from that Secret with `Items` listing **only** the certificate key,
-   mapped to a fixed path such as `signing-cert.pem`, and `DefaultMode` 0444. The private key in the same
-   Secret is not projected into that volume.
-2. In `buildUcContainer`, add a read-only mount of that volume (for example at `/etc/uc/signing`). Only the UC
-   mounts it. The CN's own mounts are unchanged.
-3. The UC runs as 2000:2000, and the volumes here already default to 0644, so it can read the file.
-4. The UC reads the file at start (and again on a verification failure). **If the file is absent, the UC
-   rejects API events and carries on with marker files**, so a missing mount can never break the existing path.
-
-Because this repoints with the same capsule patch that swaps the key, the UC always holds the certificate
-that matches the CN's private key (see rotation above). Adding the volume changes the pod template, so it
-rolls the pod once, and is best shipped with an upgrade restart.
-
-**What `Secrets.HostPath` is.** `ConsensusSecrets` has two alternatives: `secretResources` (per-key Secrets,
-used above) or `hostPath` (`deployment.go:478` onwards). With `hostPath` the operator mounts a host directory
-as the `keys` volume at `data/keys` and uses no Secrets: the directory holds the node's `s-private-node<N>.pem`
-and `s-public-node<N>.pem` files exactly as the legacy layout has them. It exists for bare-metal nodes whose
-keys already sit on disk, such as nodes migrating from the Docker layout, where the HIP reuses host paths in
-place. In that mode the certificate is **not in a Secret**, and mounting the whole directory into the UC would
-hand it the private keys.
-
-Two consequences for `hostPath` mode:
-
-- **The signature check can still work** by mounting only the certificate file with a `subPath` on the same
-  hostPath volume (`s-public-node<N>.pem`, named by the same zero-based convention the CN uses). The file must
-  exist at pod start, because kubelet creates a directory at a missing `subPath`. A subPath mount is fixed at
-  container start, which is fine because the pod restarts at every upgrade.
-- **Key rotation by the operator does not apply.** The key swap works by repointing Secret references, and there
-  are none in this mode, so the swap stays manual. Roster validation and the firewall plan still work.
+The shared secret does not depend on how keys are stored, so the events API works in `hostPath` mode as in
+Secret mode. `hostPath` mode (`ConsensusSecrets.hostPath`, `deployment.go:478` onwards) mounts a host directory
+as the `keys` volume with no per-key Secrets. In that mode the operator-driven **key swap** still does not
+apply, because it works by repointing Secret references. See the marker-file design.
 
 ### The UC side
 
@@ -176,8 +160,8 @@ Two consequences for `hostPath` mode:
   both feed the same handlers (`HandleExecuteImmediate` and the others), which already dedupe by
   operation ID and persist before sending.
 - **Events are advisory.** The UC treats an event as a claim and checks it against what is on disk (the
-  marker file, the roster file) before acting, so a signature proves the sender but never replaces the
-  state the UC already trusts.
+  marker file, the roster file) before acting, so a valid HMAC proves the sender holds the secret but never
+  replaces the state the UC already trusts.
 
 ```mermaid
 sequenceDiagram
@@ -188,9 +172,9 @@ sequenceDiagram
     participant OP as Operator
 
     CN->>FS: write marker file (always)
-    CN-)UC: POST /v1/events, signed (async, best effort)
-    UC->>UC: verify signature with the mounted certificate
-    UC->>UC: persist event, dedupe by id
+    CN-)UC: POST /v1/events with timestamp and HMAC (async, best effort)
+    UC->>UC: check HMAC, time window and id
+    UC->>UC: persist event
     UC-->>CN: 202 Accepted
     UC->>FS: confirm the marker or roster on disk
     UC->>OP: create the CR, as with the marker path
@@ -200,21 +184,25 @@ sequenceDiagram
 ## Failure and ordering
 
 - **UC down or not started yet:** the file is written, the API call fails quietly, and the poller picks up
-  the marker later.
-- **Adoption at startup (verified).** The adoption hook runs during `initializeStatesApi`, before the platform
-  is built, so `Platform.sign` does not exist yet. The CN records the decision, writes the file marker at
-  once (no signature needed), and sends the signed event after `onStateInitialized` has set the platform. An
-  alternative is to sign earlier with the node's `keysAndCerts`, which `ServicesMain` loads before the
-  platform, but that puts key material in application start-up code. Deferring is simpler.
+  the marker later. For events raised during CN start-up the sink retries for a short bounded time, since
+  the UC usually comes up moments later.
+- **Adoption at startup.** The adoption hook runs during `initializeStatesApi`, before the platform is
+  built. The HMAC needs no platform, so the event can be queued from the hook itself. The marker file is
+  written first as always.
 - **Restart catch-up:** the existing catch-up paths must call the sinks too, so a restarted CN re-announces
   state that the UC may have missed.
 - **Duplicates:** expected, and harmless with deterministic event IDs.
 - **UC restart:** persisted events survive in the inbox directory and are replayed like persisted CRs.
+- **Secret missing or mismatched:** the API path is off or rejected, with a clear warning, and the marker
+  files continue to work.
 
 ## Security considerations
 
 - Local only: `127.0.0.1`, no Service or containerPort, and no `hostNetwork`.
-- Authenticity from the node key, with domain separation, replay window and ID dedupe.
+- Authenticity from a secret that is never sent, with a time window, ID dedupe and constant-time comparison.
+- The secret is visible to anyone who can read that Secret through the API (the operator's RBAC governs this),
+  or run commands inside the CN or UC containers, like any other Secret. I did not check whether the capsule
+  enables a shared process namespace, which would let containers read each other's environment.
 - Bounded request size, strict parsing, rate limit on the listener.
 - The UC never trusts payloads beyond what it can confirm on disk.
 - The API grants no new capability: every effect already needs a CR, and the operator still decides.
@@ -223,8 +211,10 @@ sequenceDiagram
 
 HIP-1494's two-upgrade pattern applies:
 
-1. **Upgrade N:** the UC (events listener) and operator (certificate mount) understand the API. The CN does
-   not send events yet. Old CNs keep working on files alone.
+1. **Upgrade N:** the UC (events listener) and operator (creates the Secret first, then adds the optional
+   environment variable to the CN and UC containers) understand the API. The CN does not send events yet, and
+   a CN without the sinks ignores the variable. Adding the variable changes the pod template and rolls the pod
+   once, so it rides the upgrade restart.
 2. **Upgrade N+1:** a CN release with the sinks, enabled through `node.properties`.
 
 ## What it changes in the marker-file design
@@ -239,10 +229,11 @@ HIP-1494's two-upgrade pattern applies:
 ## Open questions
 
 1. **Ownership:** who builds the CN change, and which release carries it.
-2. **Signing right after `onStateInitialized`:** the platform object exists then, but confirm `Platform.sign`
-   is usable before `platform.start()`, and decide the queue that holds events raised earlier.
+2. **How the CN reads the secret:** whether its configuration system can take it from the environment, or
+   whether the sink reads `System.getenv` directly.
 3. **Event ID scheme:** a deterministic ID per occurrence that both sinks compute identically.
 4. **Port and versioning:** the listener port, and how `/v1` evolves.
-5. **`hostPath` mode:** whether to support the `subPath` certificate mount at all, given the key swap does not apply there.
-6. **Event schema ownership:** a shared definition used by the CN and the UC.
-7. **How much of the payload the UC should act on without disk confirmation**, if any.
+5. **Secret rotation policy:** only with a pod restart, or support a current and previous secret in the UC.
+6. **Shared process namespace:** confirm the capsule does not enable it.
+7. **Event schema ownership:** a shared definition used by the CN and the UC.
+8. **How much of the payload the UC should act on without disk confirmation**, if any.
