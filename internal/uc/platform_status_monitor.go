@@ -77,6 +77,10 @@ type PlatformStatusMonitor struct {
 	last     string
 	lastCode int32
 
+	// lastRoster is the last roster adoption result written to the pod condition, so
+	// a write happens only when the log reports a different result.
+	lastRoster *RosterAdoption
+
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 	scrapeSnapshot  atomic.Pointer[PlatformScrapeSnapshot]
 }
@@ -154,6 +158,8 @@ func (m *PlatformStatusMonitor) Run(ctx context.Context) (retErr error) {
 // UNKNOWN (endpoint unreachable or sample absent), the log monitor's status is
 // used as a fallback so a dead :9999 no longer masks a status the log already knows.
 func (m *PlatformStatusMonitor) poll(ctx context.Context) {
+	m.syncRosterAdoption(ctx)
+
 	code, name := m.scrape(ctx)
 
 	if code == platformStatusCodeUnknown && m.logMonitor != nil {
@@ -182,6 +188,42 @@ func (m *PlatformStatusMonitor) poll(ctx context.Context) {
 	}
 	m.last = name
 	m.lastCode = code
+}
+
+// syncRosterAdoption mirrors the log monitor's roster adoption result onto the UC's own
+// pod as the operator.solo.hiero.org/roster-adoption condition, so the operator can read
+// it. It writes only when the result changes, and a failed write is retried on the next
+// tick. The UC does not interpret the result: the operator decides what a refusal means.
+func (m *PlatformStatusMonitor) syncRosterAdoption(ctx context.Context) {
+	if m.logMonitor == nil {
+		return
+	}
+	cur := m.logMonitor.RosterAdoption()
+	if cur == nil || (m.lastRoster != nil && m.lastRoster.equal(*cur)) {
+		return
+	}
+
+	patch := rosterAdoptionConditionPatch(*cur, time.Now().UTC().Format(time.RFC3339))
+	pctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+	_, err := m.client.Resource(podGVR).Namespace(m.cfg.Namespace).
+		Patch(pctx, m.cfg.PodName, types.StrategicMergePatchType, patch, metav1.PatchOptions{}, "status")
+	if err != nil {
+		common.LogErr(logx.As().Error(), errx.WithReason(
+			errK8sAPI.Wrap(err, "patch pod %s status condition %s", m.cfg.PodName, operatorv1alpha1.PodConditionRosterAdoption),
+			ReasonRosterAdoptionPatchFailed), ReasonRosterAdoptionPatchFailed).
+			Str("pod", m.cfg.PodName).Msg("Failed to patch pod roster-adoption condition")
+		return // leave lastRoster unchanged so the next tick retries
+	}
+	m.lastRoster = cur
+
+	if m.events != nil {
+		if cur.Result == operatorv1alpha1.RosterAdoptionRejected {
+			m.events.error(platformStatusOperationID, ReasonRosterRejected.String(), cur.message())
+		} else {
+			m.events.info(platformStatusOperationID, ReasonRosterAdoptionDetected.String(), cur.message())
+		}
+	}
 }
 
 // scrape fetches the metrics endpoint and extracts the platform-status code and
