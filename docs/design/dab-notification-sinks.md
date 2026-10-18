@@ -387,6 +387,10 @@ apply, because it works by repointing Secret references. See the marker-file des
   has to be confirmed on disk, and this keeps working when the CN is configured not to write marker files or
   the export file. Only when no API event arrives (the marker-only configuration, or a lost call) does the UC
   fall back to reading `candidate-roster.json` as it does today.
+- **One create call, with the roster.** The Prepare CR's spec is immutable, so the UC cannot create it on
+  `PrepareUpgradeReady` and add the roster later when `CandidateRosterReady` arrives. The two events can come in
+  either order, so the UC holds the CR until the roster event arrives or the roster wait ends, as the marker
+  path does today, and then creates it once.
 - **Size.** The event is limited by `notification.maxEventBytes` (256 KiB by default), while a CR artifact may
   be up to 512 KiB. A roster of a few dozen nodes is far below both. A roster over the event limit is dropped
   by the CN with a warning, so the file fallback has to stay in place.

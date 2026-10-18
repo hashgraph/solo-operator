@@ -71,7 +71,7 @@ the off-host HAProxy machine (HIP-1495), block-node firewall and shaping, and th
 | UC sidecar | Reads the roster and creates the upgrade CRs. **Never interprets the roster.** |
 | Operator | Validates the roster, matches the key, computes the plan, patches the capsule. |
 | `solo-provisioner-daemon` | Applies the firewall plan on the host. |
-| `solo-provisioner` | Generates and imports keys. Owns the initial `cn-gossip` firewall rule. |
+| `solo-provisioner` | Generates and imports keys. Owns the initial `cn-gossip` firewall rule. Runs, reconfigures and tears down a CN on its host (`consensus node create`, `update`, `delete`). Does not submit DAB transactions. |
 
 Rule of thumb: **the UC forwards, the operator decides.** Every configuration change is visible to
 the operator as a CR field before anything acts on it.
@@ -206,6 +206,9 @@ sequenceDiagram
 
    If the roster is missing or invalid, the CR is still created without it (with a warning), unless
    `--candidate-roster-required` holds the CR back.
+
+   **The roster must go in the create call.** The Prepare spec is immutable (a CEL rule, `self == oldSelf`),
+   so a roster cannot be attached to a CR that already exists. An integration test covers both cases.
 5. **The operator validates:**
    1. Verify the sha256 and parse the roster. A missing `nodeId` means 0.
    2. Load `<capsule>-applied-roster`, or [seed it](#the-applied-roster-baseline).
@@ -290,16 +293,191 @@ behaves differently.
   - It does **not** hand off to the daemon. There is no infrastructure work for a node that is leaving.
   - It does not patch images and does not scale the pod back up. A restarted node that is not in the
     roster cannot load its signing certificate and exits in a loop.
+  - It makes sure the capsule is offline, even where the upgrade would normally skip the scale-down.
   - It sets `NodeRemoved=True` and ends the CR as `Succeeded`, without waiting for `ACTIVE`.
 - **Execute, automation not enabled.** The upgrade runs as today, with the warning raised at prepare. If
   the CN adopts the roster, the node cannot restart on it. That is a manual fix.
 - **The host stays as it is.** The daemon makes no firewall or other change on the removed node's own host.
-- **Decommissioning is manual.** The operator never deletes the capsule, its volumes or its Secrets. The
+- **Decommissioning is manual.** If the node was online during the upgrade window, the operator takes it
+  offline. If it missed the window, the node operator tears it down. The operator never deletes the capsule,
+  its volumes or its Secrets. The
   capsule's status records that it left the roster, so genesis discovery and the Helm endpoint values skip
-  it. Removing the capsule and host is the node operator's job.
+  it. The node operator removes the node from its host with `solo-provisioner consensus node delete`.
 - **If the CN refuses the roster.** The node is still in the active roster but was left offline. The UC's
   `Rejected` result raises `RosterRejected`, and the node operator scales the capsule back up. It is still
   on the old images, which is correct because the roster did not change.
+
+## Node addition (`NodeCreate`)
+
+Existing nodes use the normal upgrade. The new node is set up on its own host by
+`solo-provisioner consensus node create`, and starts from a recent state of the network.
+
+**Both node changes work the same in either transport.** The UC may read the roster from the marker file
+or receive it from the [events API](dab-notification-sinks.md). The operator only sees `spec.artifacts`.
+
+**Genesis and joining are different operations.** Genesis creates a network, once. A node joining an existing
+network is not part of it. A network can start with one genesis node and grow only through `NodeCreate`.
+Nodes run in separate clusters around the world, so the operator cannot discover them from Kubernetes
+Services. Where all nodes share one cluster (a private network with a known set, or test and dev), the
+operator can build the genesis roster from the capsules. Otherwise someone supplies it.
+
+### NodeCreate flow
+
+| # | Who | What |
+|---|---|---|
+| 1 | New node operator | Generates the node's keys with `solo-provisioner consensus keys`. The private keys stay on the operator's side. |
+| 2 | New node operator | Gives the council, offline: the gossip certificate, the admin public key, the node account, the gossip and service endpoints and the gRPC certificate hash. The account must already exist. |
+| 3 | Council | Submits `NodeCreate`, signed with the node's admin key. The receipt carries the **node ID**. It must land before `PREPARE_UPGRADE`. |
+| 4 | New node operator | Imports the keys with that node ID. |
+| 5 | Council | Sends `PREPARE_UPGRADE` and `FREEZE_UPGRADE`. Existing nodes run the normal upgrade and adopt the new roster. The new node is not running, so their attempts to reach it fail. `NodeCreate` sets no weight, so it has weight 0 and consensus is unaffected. The upgrade must raise the software version, or the CN will not adopt the roster. |
+| 6 | New node operator | Collects from a peer: the roster and a recent saved state. Gets the node details from the mirror node. |
+| 7 | New node operator | Runs `solo-provisioner consensus node create` with those inputs. |
+| 8 | New node | Starts, connects to its peers and catches up. |
+
+### NodeCreate step by step
+
+**Existing nodes (step 5).** Nothing new.
+- Prepare sees a node ID that is not in the baseline and raises an informational `NodeAdded`.
+- `transition` and `target` already include the new gossip address, so every host opens it before the
+  restart. That is why the new node can connect once it starts.
+
+**The roster (step 6).** The new node is outside the network and cannot produce a candidate roster. The
+package is built before `PREPARE_UPGRADE`, so it cannot carry one either. A peer supplies:
+- **The roster entries** (gossip certificate, gossip endpoints, weight): the candidate roster an existing
+  node exported, or its active roster after the upgrade. The mirror node's REST API does not publish the
+  gossip certificate or gossip endpoints. Its `node_cert_hash` is the hash of the TLS certificate, and its
+  `service_endpoints` are service endpoints.
+- **The node details** (account ID, admin key, service endpoints, stake) come from the mirror node.
+
+**The state (step 6).** A peer supplies a recent saved state, so the new node only has to catch up on the
+gap and does not have to receive the whole state by reconnect.
+- Any peer's state will do, because all peers hold the same state and hash.
+- It must be a state from **after** the upgrade restart. Its active roster must contain the new node. A
+  node that is not in the roster it starts from cannot load its signing certificate and exits.
+- A node saves a state every 900 seconds by default (`state.saveStatePeriod`), so a recent one exists.
+- The CN looks for saved states at `data/saved/com.hedera.services.ServicesMain/<nodeId>/123/<round>` under
+  its home directory. The node operator unpacks the downloaded state there, **before** the CN starts, and the
+  CN loads the latest one it finds. The peer's state sits under the peer's ID, so it is placed under the new
+  node's ID.
+- With a state, the CN reads its roster from the state and needs no `genesis-network.json`. Without one, it
+  takes the genesis path and the roster must be supplied as that file with a `node` section for every
+  node. That is slower but works.
+
+**`consensus node create` (step 7).**
+1. Checks the roster has this node ID with a matching certificate fingerprint, and that its node IDs,
+   account IDs and stake agree with the mirror node. The mirror node cannot prove gossip certificates, so
+   compare the roster across more than one peer.
+2. Unpacks the state into the capsule's `saved` volume at that path, under the node's ID, after checking its
+   checksum. The CN verifies the state itself when it loads it. The capsule's genesis-init container sees that directory and does not wait for
+   a genesis file.
+3. Sets up the `cn-gossip` rule from the roster: every peer's gossip address, and not its own.
+4. Checks that each peer's gossip port is reachable. A refusal usually means that peer has not opened this
+   node's address yet.
+5. Creates the capsule at the post-upgrade version, with the roster as its genesis file only when no state
+   was given. It then starts the capsule and reports status until `ACTIVE`.
+
+**The new node.**
+- Its first applied-roster baseline is seeded from the supplied roster, so it matches the network.
+- Its UC starts with no markers and creates nothing until the first upgrade.
+- No Execute CR exists for it, so starting is the node operator's step.
+
+## Host commands (`solo-provisioner consensus node`)
+
+These run, reconfigure and tear down a CN on its host. They never submit DAB transactions. The upgrade-time
+work stays with the UC, the operator and the daemon.
+
+| Command | When | What it does |
+|---|---|---|
+| `create` | A new node, after the freeze | See [Node addition](#node-addition-nodecreate). |
+| `update` | Before the freeze, when this node's own entry changed | Stages and checks the node's new configuration. |
+| `delete` | After the node left the roster | Removes the CN from its host. |
+
+All three are idempotent and have a `--check` mode that prints the plan without changing anything.
+
+### `update`
+
+The operator swaps the key inside the upgrade patch, so `update` does not repoint anything during a normal
+upgrade. It makes sure the swap will succeed:
+1. Takes the certificate file the node operator sent in `NodeUpdate`, and checks that a Secret for it is
+   imported and labelled with the same fingerprint.
+2. Reports anything else on the node's entry that the host must follow, such as a new gRPC certificate or a
+   new node account.
+3. With `--apply`, for an upgrade where automation is not enabled: repoints the signing Secret to the staged
+   one and restarts the node. It refuses unless the node's adopted roster entry matches the staged
+   certificate.
+
+A change of gossip IP needs nothing on the node's own host. The peers' hosts follow through the firewall
+plan. Moving the node to a different host is [described below](#moving-a-node-to-another-host).
+
+#### Capsule fields that follow a `NodeUpdate`
+
+The candidate roster carries only the node ID, weight, gossip certificate and gossip endpoints. The operator
+can derive the certificate and the gossip address from it, and nothing else.
+
+| `NodeUpdate` field | Capsule field | What follows |
+|---|---|---|
+| `gossip_ca_certificate` | `secrets.secretResources.signingPrivateKey` and `signingPublicCertificate` | Repointed in the upgrade patch, as designed above. |
+| `account_id` | `spec.accountId` | **Must follow, in the same patch as the images.** The pod label, the Helm network map and the Cheetah uploader folders (`record<accountId>`, `block-<accountId>`) all use it, and the CN names its stream folders after the node account when it starts. A stale value points the uploaders at an empty folder. The roster does not carry it. |
+| `gossip_endpoint` | `externalAddress`, `gossipPort` | The address only feeds status and generated values. A new gossip port also changes the capsule's Service. |
+| `service_endpoint` | `grpcPort`, Service, proxies | Out of scope (HIP-1495). The roster does not carry it. |
+| `grpc_certificate_hash` | `secrets.secretResources.grpcTls*` | Same mechanism as the signing key, out of scope. |
+| `description`, `admin_key`, `decline_reward`, `grpc_proxy_endpoint` | none | Nothing in the capsule reads them. |
+
+The capsule's `nodeId`, `nodeAlias` and `weight` never follow a `NodeUpdate`. The weight in the capsule spec
+only feeds genesis and status.
+
+Because the pod label is part of the pod template, changing `spec.accountId` before the freeze would restart
+the node early. The new value therefore has to be staged and applied by the operator inside the Execute patch.
+The proposal is a `pendingAccountId` on the capsule, written by `consensus node update` and applied and
+cleared by the operator, with the mirror node's `node_account_id` as a cross-check after the upgrade.
+
+### Moving a node to another host
+
+This is a `NodeUpdate` on the roster side, with the node's process starting somewhere else:
+1. On the new host, generate new keys, then submit a `NodeUpdate` with the new certificate and the new gossip
+   and service endpoints. It must land before `PREPARE_UPGRADE`. The node ID and account stay the same.
+2. **Peers** follow the normal firewall plan: the new address opens first and the old one closes last.
+3. **The old host must not restart.** Its key no longer matches the adopted roster entry, so the CN would
+   exit in a loop. The operator treats it like a removed node: offline, no handoff, `Succeeded` with
+   `NodeMoved=True`.
+4. **The new host** starts like a new node, with a state and the roster from a peer, using
+   `consensus node create` with the existing node ID. There is no `NodeCreate`.
+5. The node operator then removes the old node with `consensus node delete`.
+
+The old host's operator cannot tell a move from a missing staged key. Without a signal the operator keeps its
+existing behaviour for that case (warn, restart on the old key, and the CN fails to load it). The proposal is
+that `consensus node update --move` marks the capsule, so Execute takes the offline path above.
+
+### `delete`
+
+1. Refuses unless the capsule's status says it left the roster, or `--force` is given.
+2. Makes sure the capsule is offline, then removes it.
+3. Keeps the capsule's volumes and key Secrets by default. `--purge-data` removes the volumes. Key Secrets stay
+   until a `keys delete` command exists.
+4. Removes this node from the daemon's configuration and from `state.yaml`.
+
+It does not touch the firewall, the cluster, the operator or anything else on the host. The host stays as it
+is.
+
+## Cluster-only mode
+
+All three operations work in this mode, except the firewall steps. There is no daemon and no host firewall,
+so the operator only records the plan. Everything else, including moving a state, works.
+
+- **NodeUpdate.** The same. The operator patches the key and the images in one change. The firewall plan is
+  recorded and not applied.
+- **NodeDelete.** The same. The operator forces the capsule offline, even where it would normally skip the
+  scale-down, and `consensus node delete` removes it.
+- **NodeCreate.** It is simpler, because everything is in one cluster:
+  - The roster entries come from the Prepare CR of an existing node, and the node details from the capsules.
+    The new node's operator needs no peer and no mirror node.
+  - The state is copied from a running peer's `saved` volume into the new capsule's `saved` volume, or
+    unpacked from a downloaded archive as on mainnet.
+  - With a state in place, the capsule's genesis-init container does not wait for a genesis file. The shared
+    `genesis-config` ConfigMap is never touched, so running nodes are not affected.
+  - The firewall and reachability steps are skipped.
+- **Gossip addresses.** The CN refuses a hostname in a gossip endpoint unless `nodes.gossipFqdnRestricted` is
+  `false`. Networks that use service hostnames must set it before `NodeCreate` or `NodeUpdate`.
 
 ## Key decisions
 
@@ -316,6 +494,11 @@ behaves differently.
 | Safety net | UC log result (`adopted` or `rejected`) | The floor cannot notice a single refused upgrade. A rejection holds `target` and the baseline and raises a warning. |
 | Removed node | Stays offline. Execute ends `Succeeded` with `NodeRemoved=True`, with no daemon handoff | A node outside the roster cannot restart. The operator decides from the roster, behind the same version floor. |
 | Decommissioning | Manual | The other nodes already drop it. The operator never deletes data. |
+| Roster for a new node | A peer supplies it, and the mirror node supplies the node details | The package predates the candidate, and the mirror node has no gossip certificates or endpoints. |
+| State for a new node | A peer supplies a recent saved state from after the upgrade restart | The node catches up on a small gap and does not receive the whole state. The roster comes from the state. |
+| Removing a node from its host | `consensus node delete`, which keeps volumes and keys unless asked, and leaves the host as it is | Decommissioning is the node operator's call, and data loss is hard to undo. |
+| Cluster-only mode | All operations, except firewall steps | Everything except the firewall is cluster work. A state is copied between volumes. |
+| Starting a new node | `consensus node create`, run by the node operator after the freeze | No Execute CR exists for it. A join CR is a rare-event cost for little gain. |
 | Missing key at prepare | Best effort, upgrade proceeds with a loud warning | One node's key problem should not block the network's upgrade. |
 
 ## When the operator acts
@@ -515,14 +698,24 @@ membership lists, so applying one is idempotent:
 3. **TSS interplay.** `PlatformStateUpdates` notes the candidate may instead be set at stake-period
    boundaries when TSS machinery keys it. Whether such a candidate can differ from the one exported
    at `PREPARE_UPGRADE` was not traced.
-4. **Prepare spec immutability.** The Execute spec is immutable by CEL rule. Confirm that adding
-   `spec.artifacts` to Prepare interacts correctly with any rule on its spec.
-5. **Firewall timing.** `transition` is applied at `ReadyForProvisionerDaemon`, inside the freeze
+4. **Firewall timing.** `transition` is applied at `ReadyForProvisionerDaemon`, inside the freeze
    window. Applying it at prepare time needs a daemon watch on Prepare CRs and avoids a slow node
    briefly being unreachable after restart.
-6. **Endpoint form.** Real rosters use `ipAddressV4`, operator-generated genesis uses hostnames.
+5. **Endpoint form.** Real rosters use `ipAddressV4`, operator-generated genesis uses hostnames.
    Diffs should compare resolved values.
-7. **A real exported file.** Only dev and test samples of the format were inspected.
+6. **A real exported file.** Only dev and test samples of the format were inspected.
+7. **TSS and a new node.** `NodeCreate` sets no weight, so a new node enters the candidate with weight 0. The
+   adoption check only applies where TSS is on, and it is not on mainnet yet. When TSS goes live, whether a
+   weight-0 node blocks readiness for the candidate has to be traced.
+8. **Software version must rise.** The CN adopts a candidate roster only if the software version at the
+   restart is higher than the state's. A freeze that adds a node needs a version bump, even if only the
+   build number changes. Confirm how the package pipeline guarantees this.
+9. **Staged account ID.** A `pendingAccountId` on the capsule, applied by the operator inside the Execute
+    patch, is proposed. The field name and who clears it are open.
+10. **Gossip port changes.** How the CN picks its own listen port, and so whether a changed gossip port needs
+    more than the capsule's Service to follow, was not traced.
+11. **The move signal.** Confirm that `consensus node update --move` is the right way to tell the operator a
+    node is leaving for another host.
 
 ## Future: no-freeze changes
 
