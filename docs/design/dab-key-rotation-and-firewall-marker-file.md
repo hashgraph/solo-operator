@@ -71,7 +71,7 @@ the off-host HAProxy machine (HIP-1495), block-node firewall and shaping, and th
 | UC sidecar | Reads the roster and creates the upgrade CRs. **Never interprets the roster.** |
 | Operator | Validates the roster, matches the key, computes the plan, patches the capsule. |
 | `solo-provisioner-daemon` | Applies the firewall plan on the host. |
-| `solo-provisioner` | Generates and imports keys. Owns the initial `cn-gossip` firewall rule. Runs, reconfigures and tears down a CN on its host (`consensus node create`, `update`, `delete`). Does not submit DAB transactions. |
+| `solo-provisioner` | Generates and imports keys. Owns the initial `cn-gossip` firewall rule. Installs, joins, reconfigures and removes a CN on its host (`consensus node install`, `join`, `reconfigure`, `uninstall`). Does not submit DAB transactions. |
 
 Rule of thumb: **the UC forwards, the operator decides.** Every configuration change is visible to
 the operator as a CR field before anything acts on it.
@@ -302,7 +302,7 @@ behaves differently.
   offline. If it missed the window, the node operator tears it down. The operator never deletes the capsule,
   its volumes or its Secrets. The
   capsule's status records that it left the roster, so genesis discovery and the Helm endpoint values skip
-  it. The node operator removes the node from its host with `solo-provisioner consensus node delete`.
+  it. The node operator removes the node from its host with `solo-provisioner consensus node uninstall`.
 - **If the CN refuses the roster.** The node is still in the active roster but was left offline. The UC's
   `Rejected` result raises `RosterRejected`, and the node operator scales the capsule back up. It is still
   on the old images, which is correct because the roster did not change.
@@ -310,7 +310,7 @@ behaves differently.
 ## Node addition (`NodeCreate`)
 
 Existing nodes use the normal upgrade. The new node is set up on its own host by
-`solo-provisioner consensus node create`, and starts from a recent state of the network.
+`solo-provisioner consensus node join`, and starts from a recent state of the network.
 
 **Both node changes work the same in either transport.** The UC may read the roster from the marker file
 or receive it from the [events API](dab-notification-sinks.md). The operator only sees `spec.artifacts`.
@@ -331,7 +331,7 @@ operator can build the genesis roster from the capsules. Otherwise someone suppl
 | 4 | New node operator | Imports the keys with that node ID. |
 | 5 | Council | Sends `PREPARE_UPGRADE` and `FREEZE_UPGRADE`. Existing nodes run the normal upgrade and adopt the new roster. The new node is not running, so their attempts to reach it fail. `NodeCreate` sets no weight, so it has weight 0 and consensus is unaffected. The upgrade must raise the software version, or the CN will not adopt the roster. |
 | 6 | New node operator | Collects from a peer: the roster and a recent saved state. Gets the node details from the mirror node. |
-| 7 | New node operator | Runs `solo-provisioner consensus node create` with those inputs. |
+| 7 | New node operator | Runs `solo-provisioner consensus node join` with those inputs. |
 | 8 | New node | Starts, connects to its peers and catches up. |
 
 ### NodeCreate step by step
@@ -363,7 +363,7 @@ gap and does not have to receive the whole state by reconnect.
   takes the genesis path and the roster must be supplied as that file with a `node` section for every
   node. That is slower but works.
 
-**`consensus node create` (step 7).**
+**`consensus node join` (step 7).**
 1. Checks the roster has this node ID with a matching certificate fingerprint, and that its node IDs,
    account IDs and stake agree with the mirror node. The mirror node cannot prove gossip certificates, so
    compare the roster across more than one peer.
@@ -383,28 +383,27 @@ gap and does not have to receive the whole state by reconnect.
 
 ## Host commands (`solo-provisioner consensus node`)
 
-These run, reconfigure and tear down a CN on its host. They never submit DAB transactions. The upgrade-time
-work stays with the UC, the operator and the daemon.
+These install, join, reconfigure and remove a CN on its host. They never submit DAB transactions. The
+upgrade-time work stays with the UC, the operator and the daemon. Image changes are never made here. They go
+through the network upgrade.
 
-| Command | When | What it does |
+| Command | Used for | What it does |
 |---|---|---|
-| `create` | A new node, after the freeze | See [Node addition](#node-addition-nodecreate). |
-| `update` | Before the freeze, when this node's own entry changed | Stages and checks the node's new configuration. |
-| `delete` | After the node left the roster | Removes the CN from its host. |
+| `install` | A node of a new network (genesis) | Unchanged. |
+| `join` | A new node, or a node moved to another host, joining an existing network | See [Node addition](#node-addition-nodecreate). |
+| `reconfigure` | A node already on this host | In-place, same-image changes. The DAB flow needs nothing from it today, and it may grow later. |
+| `uninstall` | A node that left the roster | Removes the CN from its host. |
 
-All three are idempotent and have a `--check` mode that prints the plan without changing anything.
+All of them are idempotent and have a `--check` mode that prints the plan without changing anything.
 
-### `update`
+### `NodeUpdate` needs no new command
 
-The operator swaps the key inside the upgrade patch, so `update` does not repoint anything during a normal
-upgrade. It makes sure the swap will succeed:
-1. Takes the certificate file the node operator sent in `NodeUpdate`, and checks that a Secret for it is
-   imported and labelled with the same fingerprint.
-2. Reports anything else on the node's entry that the host must follow, such as a new gRPC certificate or a
-   new node account.
-3. With `--apply`, for an upgrade where automation is not enabled: repoints the signing Secret to the staged
-   one and restarts the node. It refuses unless the node's adopted roster entry matches the staged
-   certificate.
+The operator swaps the key inside the upgrade patch, so the node operator has nothing to run on the host:
+- Before the freeze, the node operator checks that the staged key matches the certificate sent in `NodeUpdate`
+  with `consensus keys verify`.
+- Where automation is not enabled for the version, the node operator repoints the signing Secret by hand
+  after the CN adopts the roster.
+- Other changes that follow, such as the account ID below, are patched on the capsule by hand.
 
 A change of gossip IP needs nothing on the node's own host. The peers' hosts follow through the firewall
 plan. Moving the node to a different host is [described below](#moving-a-node-to-another-host).
@@ -428,7 +427,7 @@ only feeds genesis and status.
 
 Because the pod label is part of the pod template, changing `spec.accountId` before the freeze would restart
 the node early. The new value therefore has to be staged and applied by the operator inside the Execute patch.
-The proposal is a `pendingAccountId` on the capsule, written by `consensus node update` and applied and
+The proposal is a `pendingAccountId` on the capsule, written by the node operator and applied and
 cleared by the operator, with the mirror node's `node_account_id` as a cross-check after the upgrade.
 
 ### Moving a node to another host
@@ -437,27 +436,25 @@ This is a `NodeUpdate` on the roster side, with the node's process starting some
 1. On the new host, generate new keys, then submit a `NodeUpdate` with the new certificate and the new gossip
    and service endpoints. It must land before `PREPARE_UPGRADE`. The node ID and account stay the same.
 2. **Peers** follow the normal firewall plan: the new address opens first and the old one closes last.
-3. **The old host must not restart.** Its key no longer matches the adopted roster entry, so the CN would
-   exit in a loop. The operator treats it like a removed node: offline, no handoff, `Succeeded` with
-   `NodeMoved=True`.
-4. **The new host** starts like a new node, with a state and the roster from a peer, using
-   `consensus node create` with the existing node ID. There is no `NodeCreate`.
-5. The node operator then removes the old node with `consensus node delete`.
+3. **The new host** starts like a new node, with a state and the roster from a peer, using
+   `consensus node join` with the existing node ID. There is no `NodeCreate`.
+4. **The old host** is removed by the node operator with `consensus node uninstall`, once the freeze has begun.
+   Running it earlier would take a voting node offline for days.
 
-The old host's operator cannot tell a move from a missing staged key. Without a signal the operator keeps its
-existing behaviour for that case (warn, restart on the old key, and the CN fails to load it). The proposal is
-that `consensus node update --move` marks the capsule, so Execute takes the offline path above.
+There is no special signal for a move. Until the old node is removed, the operator treats it as any node whose
+key does not match its roster entry: it raises `RosterKeyMismatch`, and the pod restarts on the old key and
+the CN fails to load it. That does no harm, because the roster entry now belongs to the new host.
 
-### `delete`
+### `uninstall`
 
-1. Refuses unless the capsule's status says it left the roster, or `--force` is given.
-2. Makes sure the capsule is offline, then removes it.
-3. Keeps the capsule's volumes and key Secrets by default. `--purge-data` removes the volumes. Key Secrets stay
+It removes the node from this cluster. It does not wait for the node to leave the roster. The node operator
+decides when to run it.
+1. Makes sure the capsule is offline, then removes it.
+2. Keeps the capsule's volumes and key Secrets by default. `--purge-data` removes the volumes. Key Secrets stay
    until a `keys delete` command exists.
-4. Removes this node from the daemon's configuration and from `state.yaml`.
+3. Updates `state.yaml` and removes this node from the daemon's configuration.
 
-It does not touch the firewall, the cluster, the operator or anything else on the host. The host stays as it
-is.
+It does not touch the firewall, the operator or anything else on the host. The host stays as it is.
 
 ## Cluster-only mode
 
@@ -467,7 +464,7 @@ so the operator only records the plan. Everything else, including moving a state
 - **NodeUpdate.** The same. The operator patches the key and the images in one change. The firewall plan is
   recorded and not applied.
 - **NodeDelete.** The same. The operator forces the capsule offline, even where it would normally skip the
-  scale-down, and `consensus node delete` removes it.
+  scale-down, and `consensus node uninstall` removes it.
 - **NodeCreate.** It is simpler, because everything is in one cluster:
   - The roster entries come from the Prepare CR of an existing node, and the node details from the capsules.
     The new node's operator needs no peer and no mirror node.
@@ -496,9 +493,9 @@ so the operator only records the plan. Everything else, including moving a state
 | Decommissioning | Manual | The other nodes already drop it. The operator never deletes data. |
 | Roster for a new node | A peer supplies it, and the mirror node supplies the node details | The package predates the candidate, and the mirror node has no gossip certificates or endpoints. |
 | State for a new node | A peer supplies a recent saved state from after the upgrade restart | The node catches up on a small gap and does not receive the whole state. The roster comes from the state. |
-| Removing a node from its host | `consensus node delete`, which keeps volumes and keys unless asked, and leaves the host as it is | Decommissioning is the node operator's call, and data loss is hard to undo. |
+| Removing a node from its host | `consensus node uninstall`, which keeps volumes and keys unless asked, and leaves the host as it is | Decommissioning is the node operator's call, and data loss is hard to undo. |
 | Cluster-only mode | All operations, except firewall steps | Everything except the firewall is cluster work. A state is copied between volumes. |
-| Starting a new node | `consensus node create`, run by the node operator after the freeze | No Execute CR exists for it. A join CR is a rare-event cost for little gain. |
+| Starting a new node | `consensus node join`, run by the node operator after the freeze | No Execute CR exists for it. A join CR is a rare-event cost for little gain. |
 | Missing key at prepare | Best effort, upgrade proceeds with a loud warning | One node's key problem should not block the network's upgrade. |
 
 ## When the operator acts
@@ -714,8 +711,6 @@ membership lists, so applying one is idempotent:
     patch, is proposed. The field name and who clears it are open.
 10. **Gossip port changes.** How the CN picks its own listen port, and so whether a changed gossip port needs
     more than the capsule's Service to follow, was not traced.
-11. **The move signal.** Confirm that `consensus node update --move` is the right way to tell the operator a
-    node is leaving for another host.
 
 ## Future: no-freeze changes
 
