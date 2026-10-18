@@ -298,6 +298,80 @@ var _ = Describe("NetworkUpgradePrepare Controller", func() {
 	})
 })
 
+// The Prepare spec is immutable (CEL `self == oldSelf`), so the UC must send the candidate
+// roster in the same create call as the rest of the spec; it cannot attach it afterwards.
+var _ = Describe("NetworkUpgradePrepare spec immutability", func() {
+	ctx := context.Background()
+
+	const ns = "nup-immutable"
+
+	newPrepare := func(name string, artifacts []operatorv1alpha1.UpgradeArtifact) *operatorv1alpha1.NetworkUpgradePrepare {
+		disabled := false
+		return &operatorv1alpha1.NetworkUpgradePrepare{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: ns,
+				Labels:    map[string]string{operatorv1alpha1.LabelOperationID: name, operatorv1alpha1.LabelStep: operatorv1alpha1.StepPrepare},
+			},
+			Spec: operatorv1alpha1.NetworkUpgradePrepareSpec{
+				Orbit:            ns,
+				OperationID:      name,
+				ConsensusCapsule: "node0",
+				Images: operatorv1alpha1.UpgradeImagesSpec{
+					ConsensusNode: operatorv1alpha1.ImageComponentSpec{
+						Version:    "0.75.0",
+						Enabled:    &disabled,
+						Registries: []operatorv1alpha1.ImageRegistrySpec{{Image: "gcr.io/a/cn:0.75.0"}},
+					},
+				},
+				Artifacts: artifacts,
+			},
+		}
+	}
+
+	roster := func(content string) []operatorv1alpha1.UpgradeArtifact {
+		return []operatorv1alpha1.UpgradeArtifact{{
+			Name:    operatorv1alpha1.ArtifactCandidateRoster,
+			Sha256:  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Content: content,
+		}}
+	}
+
+	BeforeEach(func() {
+		createNamespaceIgnoreExisting(ctx, ns)
+	})
+
+	It("accepts artifacts at creation and rejects changing them afterwards", func() {
+		nup := newPrepare("immutable-with-roster", roster(`{"nodeMetadata":[]}`))
+		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
+		DeferCleanup(func() { deleteAndPurge(ctx, nup.DeepCopy()) })
+
+		key := types.NamespacedName{Name: nup.Name, Namespace: ns}
+		got := &operatorv1alpha1.NetworkUpgradePrepare{}
+		Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+
+		got.Spec.Artifacts = roster(`{"nodeMetadata":[{}]}`)
+		err := k8sClient.Update(ctx, got)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("spec is immutable after creation"))
+	})
+
+	It("rejects attaching artifacts to a CR that was created without them", func() {
+		nup := newPrepare("immutable-without-roster", nil)
+		Expect(k8sClient.Create(ctx, nup)).To(Succeed())
+		DeferCleanup(func() { deleteAndPurge(ctx, nup.DeepCopy()) })
+
+		key := types.NamespacedName{Name: nup.Name, Namespace: ns}
+		got := &operatorv1alpha1.NetworkUpgradePrepare{}
+		Expect(k8sClient.Get(ctx, key, got)).To(Succeed())
+
+		got.Spec.Artifacts = roster(`{"nodeMetadata":[]}`)
+		err := k8sClient.Update(ctx, got)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("spec is immutable after creation"))
+	})
+})
+
 func conditionTrue(conds []operatorv1alpha1.Condition, condType string) bool {
 	for _, c := range conds {
 		if c.Type == condType {
