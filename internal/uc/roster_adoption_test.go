@@ -91,11 +91,11 @@ func TestRosterAdoptionConditionPatch(t *testing.T) {
 	}
 }
 
-func newRosterLogMonitor(t *testing.T, content string) (*LogMonitor, string, string) {
+func newRosterLogMonitor(t *testing.T, content string) (mon *LogMonitor, logFile, persist string) {
 	t.Helper()
 	dir := t.TempDir()
-	logFile := filepath.Join(dir, "swirlds.log")
-	persist := filepath.Join(dir, "persist")
+	logFile = filepath.Join(dir, "swirlds.log")
+	persist = filepath.Join(dir, "persist")
 	mkdirAll(t, persist)
 	writeLog(t, logFile, content)
 	cfg := DefaultConfig()
