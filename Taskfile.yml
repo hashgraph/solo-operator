@@ -158,11 +158,13 @@ tasks:
 
   lint:
     desc: Run linters
+    deps: [ tools:golangci-lint ]
     cmds:
       - golangci-lint run --timeout=5m
 
   lint:fix:
     desc: Run linters and fix issues
+    deps: [ tools:golangci-lint ]
     cmds:
       - golangci-lint run --fix --timeout=5m
 
@@ -196,16 +198,19 @@ tasks:
 
   generate:manifests:
     desc: Generate CRD manifests
+    deps: [ tools:controller-gen ]
     cmds:
       - controller-gen crd paths="./..." output:crd:artifacts:config=config/crd/bases
 
   generate:deepcopy:
     desc: Generate DeepCopy methods
+    deps: [ tools:controller-gen ]
     cmds:
       - controller-gen object:headerFile=".github/boilerplate.go.txt" paths="./..."
 
   generate:rbac:
     desc: Generate RBAC manifests
+    deps: [ tools:controller-gen ]
     cmds:
       - controller-gen rbac:roleName=manager-namespaced-role paths="./..." output:rbac:artifacts:config=config/rbac
 
@@ -384,6 +389,7 @@ tasks:
 
   helm:sync-crds:
     desc: Sync CRD manifests from config/crd/bases into the crds Helm subchart templates
+    deps: [ tools:yq ]
     cmds:
       - |
         set -eu
@@ -405,6 +411,7 @@ tasks:
 
   helm:sync-rbac:
     desc: Sync RBAC rules from config/rbac/role.yaml into charts/solo-operator/templates/_rbac_rules.tpl
+    deps: [ tools:yq ]
     cmds:
       - |
         set -eu
@@ -510,13 +517,58 @@ tasks:
       - echo "Nightly test passed"
 
   tools:
-    desc: Install required tools
+    desc: Install required tools (skips any already built with the current Go at the pinned version)
     cmds:
-      # Pinned (not @latest): controller-gen output must be deterministic so
-      # generated CRDs don't churn across Go toolchains / machines. v0.21.0
-      # matches the controller-gen.kubebuilder.io/version stamped in config/crd/bases
-      # and runs on Go 1.26.x. Bump deliberately, then re-run `task generate`.
-      - go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
-      - go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.24.1
-      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
-      - go install github.com/mikefarah/yq/v4@v4.53.6
+      - task: tools:controller-gen
+      - task: tools:setup-envtest
+      - task: tools:golangci-lint
+      - task: tools:yq
+
+  # Pinned (not @latest): controller-gen output must be deterministic so
+  # generated CRDs don't churn across Go toolchains / machines. v0.21.0
+  # matches the controller-gen.kubebuilder.io/version stamped in config/crd/bases.
+  # Bump deliberately, then re-run `task generate`.
+  tools:controller-gen:
+    internal: true
+    cmds:
+      - task: tools:install
+        vars: { BIN: controller-gen, PKG: sigs.k8s.io/controller-tools/cmd/controller-gen, MOD: sigs.k8s.io/controller-tools, VER: v0.21.0 }
+
+  tools:setup-envtest:
+    internal: true
+    cmds:
+      - task: tools:install
+        vars: { BIN: setup-envtest, PKG: sigs.k8s.io/controller-runtime/tools/setup-envtest, MOD: sigs.k8s.io/controller-runtime/tools/setup-envtest, VER: v0.24.1 }
+
+  tools:golangci-lint:
+    internal: true
+    cmds:
+      - task: tools:install
+        vars: { BIN: golangci-lint, PKG: github.com/golangci/golangci-lint/v2/cmd/golangci-lint, MOD: github.com/golangci/golangci-lint/v2, VER: v2.14.0 }
+
+  tools:yq:
+    internal: true
+    cmds:
+      - task: tools:install
+        vars: { BIN: yq, PKG: github.com/mikefarah/yq/v4, MOD: github.com/mikefarah/yq/v4, VER: v4.53.6 }
+
+  # Idempotent installer. A tool is up to date only if the binary on PATH was
+  # built with the active Go toolchain AND at the pinned module version. The
+  # Go check matters because these tools type-check with the go/types they were
+  # built with: a binary built on an older Go fails on newer stdlib syntax
+  # ("method must have no type parameters" with Go 1.27). It reinstalls over
+  # the binary already on PATH so a stale copy can't shadow the new one.
+  tools:install:
+    internal: true
+    requires:
+      vars: [BIN, PKG, MOD, VER]
+    status:
+      - |
+        bin="$(command -v {{.BIN}})" || exit 1
+        info="$(go version -m "$bin")" || exit 1
+        echo "$info" | head -1 | grep -q ": $(go env GOVERSION)$" &&
+        echo "$info" | grep -qE "^[[:space:]]+mod[[:space:]]+{{.MOD}}[[:space:]]+{{.VER}}"
+    cmds:
+      - |
+        if bin="$(command -v {{.BIN}})"; then export GOBIN="$(dirname "$bin")"; fi
+        go install {{.PKG}}@{{.VER}}
