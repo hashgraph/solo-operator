@@ -2296,6 +2296,26 @@ func TestRebuildSource_CarriesStrategyAndPolicyFromOld(t *testing.T) {
 	}
 }
 
+// A matched candidate that is public (no pull secrets) must stay public — it must not
+// inherit the union of other candidates' secrets. Guards against reintroducing the
+// nil-means-no-match fallback bug.
+func TestRebuildSource_MatchedPublicCandidateGetsNoUnion(t *testing.T) {
+	old := &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories: []operatorv1alpha1.ImageRepository{
+			{Repository: "pub", ImageName: "cn", ImageTag: "0.74.0"}, // public: no pull secrets
+			{Repository: "priv", ImageName: "cn", ImageTag: "0.74.0", ImagePullSecrets: []corev1.LocalObjectReference{{Name: "sec-priv"}}},
+		},
+		ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{{OS: "linux", Architecture: "amd64", LayerHashes: []string{"aa"}}},
+	}
+	got, err := rebuildSource(old, deterministicComponent("0.74.2", "pub/cn:0.74.2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ImageRepositories[0].ImagePullSecrets) != 0 {
+		t.Errorf("matched public candidate got secrets %+v, want none", got.ImageRepositories[0].ImagePullSecrets)
+	}
+}
+
 func TestRebuildSource_StripsDigestFromRef(t *testing.T) {
 	got, err := rebuildSource(sourcedFor("reg-a"), deterministicComponent("0.74.2", "reg-a/cn:0.74.2@"+string(executeDigest)))
 	if err != nil {
