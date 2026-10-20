@@ -53,7 +53,7 @@ reason about install, upgrade, and registry changes.
 ```mermaid
 sequenceDiagram
     actor Ops
-    participant Installer as Installer (solo-provisioner)
+    participant Installer
     participant Reg as Registries
     participant Prepare as NetworkUpgradePrepare
     participant Execute as NetworkUpgradeExecute
@@ -61,30 +61,30 @@ sequenceDiagram
     participant Kubelet
 
     Note over Ops,Reg: Install
-    Ops->>Reg: create shared host-keyed pull secret covering the registry hosts
-    Installer->>Capsule: ConsensusCapsule with softwareVersionSource<br/>(candidate registries + layer hashes + shared secret)
-    Capsule->>Reg: probe candidates, verify layer hashes (fail-closed)
-    Capsule->>Kubelet: deploy the resolved digest (install-time selection)
+    Ops->>Reg: create shared host-keyed pull secret for the registry hosts
+    Installer->>Capsule: ConsensusCapsule with softwareVersionSource (candidates, hashes, secret)
+    Capsule->>Reg: probe candidates and verify layer hashes (fail-closed)
+    Capsule->>Kubelet: deploy the resolved digest
 
     Note over Reg: New image published to a private registry first
     Ops->>Reg: push image to the private registry
-    Ops->>Reg: ensure the shared secret covers the private host (rotation channel)
+    Ops->>Reg: ensure the shared secret covers the private host
 
     Note over Prepare,Execute: Upgrade
-    Prepare->>Reg: probe candidates; only the private registry serves the image
-    Prepare->>Prepare: verify layer hashes, select the private registry (digest D)
-    Execute->>Capsule: rebuild softwareVersionSource for the new version<br/>+ set selected = {private image, D}
-    Capsule->>Kubelet: deploy exactly D from the private registry<br/>(honor selected — no re-probe)
+    Prepare->>Reg: probe candidates, only the private registry serves it
+    Prepare->>Prepare: verify layer hashes and select the private registry (digest D)
+    Execute->>Capsule: rebuild source for the new version and set selected D
+    Capsule->>Kubelet: deploy exactly D from the private registry (no re-probe)
 
-    Note over Reg: Later: image promoted to the public registries
+    Note over Reg: Later, image promoted to the public registries
     Ops->>Reg: push image to the public registries
-    Note over Capsule: No automatic change — the node stays on D (private)
+    Note over Capsule: No automatic change, the node stays on D
 
     Note over Prepare,Execute: Next upgrade
-    Prepare->>Reg: probe candidates (public and private both serve now)
-    Prepare->>Prepare: select per strategy/order (e.g. public first) → new digest
-    Execute->>Capsule: rebuild + set selected = {public image, new digest}
-    Capsule->>Kubelet: deploy from public; the private registry is now a dead fallback
+    Prepare->>Reg: probe candidates, public and private both serve now
+    Prepare->>Prepare: select per strategy and order, e.g. public first
+    Execute->>Capsule: rebuild and set selected to the new digest
+    Capsule->>Kubelet: deploy from public, private is now a dead fallback
 ```
 
 **The key point to internalize:** after an upgrade pins `selected`, the node stays on that
@@ -98,16 +98,16 @@ fingerprinted by the source content):
 
 ```mermaid
 flowchart TD
-    A[Reconcile a sourced container] --> B{cached result for<br/>the current source?}
-    B -- Valid --> G[Reuse the cached digest — no probe]
-    B -- PullFailed --> E[Re-resolve across candidates — fail over]
-    B -- "Invalid / none" --> C{fresh source with<br/>a selected pin?}
-    C -- yes --> D[Deploy exactly the selected digest — no probe]
+    A[Reconcile a sourced container] --> B{cached result for the current source}
+    B -- Valid --> G[Reuse the cached digest, no probe]
+    B -- PullFailed --> E[Re-resolve across candidates, fail over]
+    B -- Invalid or none --> C{fresh source with a selected pin}
+    C -- yes --> D[Deploy exactly the selected digest, no probe]
     C -- no --> E
     E --> H[Probe candidates in strategy order]
-    H --> I[Verify layer hashes — fail-closed]
+    H --> I[Verify layer hashes, fail-closed]
     I --> J[Pin the winning digest, cache Valid]
-    D -. pod can't pull .-> P[next reconcile marks PullFailed]
+    D -. pod cannot pull .-> P[next reconcile marks PullFailed]
     P -.-> E
 ```
 
