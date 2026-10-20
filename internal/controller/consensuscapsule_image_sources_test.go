@@ -115,6 +115,40 @@ func TestResolveImageSources_SelectedNotACandidateReResolves(t *testing.T) {
 	}
 }
 
+// A PullFailed entry means the pinned image can't be pulled: resolveImageSources must
+// re-resolve (fail over), and must NOT re-honor the selected pin (which would re-deploy the
+// unpullable image and loop).
+func TestResolveImageSources_PullFailedFailsOverNotHonorSelected(t *testing.T) {
+	capsule := capsuleWithConsensusSource()
+	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	src.Selected = &operatorv1alpha1.SelectedImage{Image: "ghcr.io/hashgraph/consensus-node:0.75.0", Digest: testResolvedDigest}
+	hash, err := sourceHash(src)
+	if err != nil {
+		t.Fatalf("sourceHash: %v", err)
+	}
+	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{{
+		Container:  "consensusNode",
+		SourceHash: hash,
+		Image:      "ghcr.io/hashgraph/consensus-node:0.75.0@" + string(testResolvedDigest),
+		Digest:     testResolvedDigest,
+		Repository: "ghcr.io/hashgraph",
+		Validity:   operatorv1alpha1.ImageValidityPullFailed,
+	}}
+	checker := &fakeImageChecker{}
+	r := newResolveReconciler(checker, capsule)
+
+	if _, err := r.resolveImageSources(context.Background(), capsule); err != nil {
+		t.Fatalf("resolveImageSources: %v", err)
+	}
+	if checker.calls == 0 {
+		t.Error("expected re-resolution (failover), not honoring the selected pin, when PullFailed")
+	}
+	entry := findResolvedImage(capsule, "consensusNode")
+	if entry == nil || entry.Validity != operatorv1alpha1.ImageValidityValid {
+		t.Errorf("expected entry back to Valid after failover, got %+v", entry)
+	}
+}
+
 func TestResolveImageSources_CacheHitSkipsChecker(t *testing.T) {
 	capsule := capsuleWithConsensusSource()
 	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
@@ -313,19 +347,18 @@ func TestMismatchedSourceTag(t *testing.T) {
 	}
 }
 
-func TestResolveImageSources_NoValidRegistryRequeues(t *testing.T) {
+// No valid registry returns a temporary error so the workqueue rate limiter backs off and
+// resets on the next success, rather than requeuing at a fixed interval.
+func TestResolveImageSources_NoValidRegistryErrorsForBackoff(t *testing.T) {
 	capsule := capsuleWithConsensusSource()
 	checker := &fakeImageChecker{fn: func(spec operatorv1alpha1.ImageRegistrySpec) registry.RegistryResult {
 		return registry.RegistryResult{Image: spec.Image, State: registry.StateUnreachable}
 	}}
 	r := newResolveReconciler(checker, capsule)
 
-	res, err := r.resolveImageSources(context.Background(), capsule)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res == nil || res.RequeueAfter == 0 {
-		t.Fatalf("expected a requeue result, got %v", res)
+	_, err := r.resolveImageSources(context.Background(), capsule)
+	if err == nil {
+		t.Fatal("expected an error so the rate limiter backs off when no registry is valid")
 	}
 	if capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion != nil {
 		t.Error("expected no pin when no valid registry")

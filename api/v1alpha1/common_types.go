@@ -206,7 +206,7 @@ type SelectedImage struct {
 }
 
 // ImageValidity represents the validation status of an image
-// +kubebuilder:validation:Enum=Unknown;Valid;Invalid;NotFound
+// +kubebuilder:validation:Enum=Unknown;Valid;Invalid;NotFound;PullFailed
 type ImageValidity string
 
 const (
@@ -214,6 +214,10 @@ const (
 	ImageValidityValid    ImageValidity = "Valid"
 	ImageValidityInvalid  ImageValidity = "Invalid"
 	ImageValidityNotFound ImageValidity = "NotFound"
+	// ImageValidityPullFailed means the pinned image resolved fine but the kubelet could
+	// not pull it (the pod is in ImagePullBackOff). It signals the next reconcile to
+	// re-resolve the source and fail over to another candidate registry.
+	ImageValidityPullFailed ImageValidity = "PullFailed"
 )
 
 // ImageRepositoryStatus represents the status of an image repository

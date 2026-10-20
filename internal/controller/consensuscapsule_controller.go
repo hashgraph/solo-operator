@@ -654,6 +654,7 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	oldPhase := capsule.Status.Phase
 	phase := operatorv1alpha1.PhasePending
 	requeue := false
+	resolvedImagesChanged := false
 
 	// Default to UNKNOWN — reflect no live reading unless the current pod exposes a
 	// fresh platform-status condition. This deliberately does NOT retain the previous
@@ -674,6 +675,13 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 				platformStatus = name
 				platformStatusCode = operatorv1alpha1.PlatformStatusCodeForName(name)
 			}
+			// A sourced consensus node stuck in ImagePullBackOff can't pull its pinned
+			// image; mark it so the next reconcile re-resolves the source and fails over to
+			// another candidate registry.
+			if markConsensusImagePullFailure(capsule, &pod) {
+				resolvedImagesChanged = true
+				requeue = true
+			}
 		}
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
@@ -684,6 +692,11 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 			phase = operatorv1alpha1.PhaseFailed
 		case corev1.PodPending:
 			phase = operatorv1alpha1.PhasePending
+			// The pod watch predicate does not forward ImagePullBackOff updates, so re-check
+			// a pulling sourced node until it runs (or the pull failure is detected above).
+			if findResolvedImage(capsule, "consensusNode") != nil {
+				requeue = true
+			}
 		default:
 			phase = operatorv1alpha1.PhaseUnknown
 		}
@@ -702,7 +715,8 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		capsule.Status.PlatformStatus == platformStatus &&
 		capsule.Status.PlatformStatusCode == platformStatusCode &&
 		capsule.Status.RunState == originalRunState &&
-		capsule.Status.ObservedGeneration == capsule.Generation {
+		capsule.Status.ObservedGeneration == capsule.Generation &&
+		!resolvedImagesChanged {
 		if requeue {
 			return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
 		}
@@ -750,6 +764,30 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		return ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// markConsensusImagePullFailure flips a sourced consensus node's resolved-image entry to
+// PullFailed when the kubelet cannot pull the pinned image (the container is in
+// ImagePullBackOff on the update-revision pod). The next resolveImageSources then
+// re-resolves the source and fails over to another candidate registry. It is a no-op for a
+// container without a source, or one already marked PullFailed, and returns whether it
+// changed the entry.
+func markConsensusImagePullFailure(capsule *operatorv1alpha1.ConsensusCapsule, pod *corev1.Pod) bool {
+	entry := findResolvedImage(capsule, "consensusNode")
+	if entry == nil || entry.Validity == operatorv1alpha1.ImageValidityPullFailed {
+		return false
+	}
+	name := consensus.ConsensusContainerName(capsule)
+	for i := range pod.Status.ContainerStatuses {
+		cs := &pod.Status.ContainerStatuses[i]
+		if cs.Name == name && cs.State.Waiting != nil && cs.State.Waiting.Reason == "ImagePullBackOff" {
+			updated := *entry
+			updated.Validity = operatorv1alpha1.ImageValidityPullFailed
+			setResolvedImage(capsule, updated)
+			return true
+		}
+	}
+	return false
 }
 
 // rollupRunningPhase determines the phase for a Running pod by layering the live

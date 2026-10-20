@@ -1134,3 +1134,41 @@ func TestFinalizeManualStopped(t *testing.T) {
 		}
 	})
 }
+
+func TestMarkConsensusImagePullFailure(t *testing.T) {
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{{
+		Container: "consensusNode",
+		Digest:    testResolvedDigest,
+		Validity:  operatorv1alpha1.ImageValidityValid,
+	}}
+	name := consensus.ConsensusContainerName(capsule)
+	backoff := &corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+		Name:  name,
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+	}}}}
+
+	if !markConsensusImagePullFailure(capsule, backoff) {
+		t.Fatal("expected ImagePullBackOff to be marked")
+	}
+	if e := findResolvedImage(capsule, "consensusNode"); e == nil || e.Validity != operatorv1alpha1.ImageValidityPullFailed {
+		t.Errorf("expected PullFailed, got %+v", e)
+	}
+	// Idempotent once marked.
+	if markConsensusImagePullFailure(capsule, backoff) {
+		t.Error("expected no change when already PullFailed")
+	}
+	// A running container is not marked.
+	capsule.Status.ResolvedImages[0].Validity = operatorv1alpha1.ImageValidityValid
+	running := &corev1.Pod{Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{{
+		Name:  name,
+		State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+	}}}}
+	if markConsensusImagePullFailure(capsule, running) {
+		t.Error("expected no change for a running container")
+	}
+	// A non-sourced container (no resolved entry) is not marked.
+	if markConsensusImagePullFailure(&operatorv1alpha1.ConsensusCapsule{}, backoff) {
+		t.Error("expected no change for a non-sourced container")
+	}
+}

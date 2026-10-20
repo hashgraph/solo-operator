@@ -23651,6 +23651,7 @@ spec:
                       - Valid
                       - Invalid
                       - NotFound
+                      - PullFailed
                       type: string
                   required:
                   - container

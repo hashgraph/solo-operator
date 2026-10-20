@@ -126,34 +126,9 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 
 	var checker registry.ImageChecker
 	rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	requeue := false
+	resolveFailed := false
 
 	for _, sc := range sourced {
-		// An upgrade pinned a specific digest (NetworkUpgradeExecute set source.Selected):
-		// deploy exactly it and skip registry selection — the upgrade already selected and
-		// verified this image. The candidate registries stay on the source for the next
-		// upgrade's re-selection. Falls through to normal resolution only if the selected
-		// image is not one of the candidates (so a pin can never strip its pull secrets).
-		if sel := sc.source.Selected; sel != nil {
-			if resolved, ok := softwareVersionFromSelected(sc.source, sel); ok {
-				pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
-				setResolvedImage(capsule, operatorv1alpha1.ResolvedImageStatus{
-					Container:           sc.name,
-					Image:               common.BuildImage(resolved),
-					Digest:              sel.Digest,
-					Repository:          resolved.Repository,
-					LayerHashesVerified: true,
-					Validity:            operatorv1alpha1.ImageValidityValid,
-				})
-				statusChanged = true
-				common.Debug(ctx, ReasonImageSourceResolved).
-					Str("container", sc.name).Str("image", common.BuildImage(resolved)).Msg("Honoring upgrade-selected image")
-				continue
-			}
-			common.Warn(ctx, ReasonImageSourceResolved).
-				Str("container", sc.name).Str("image", sel.Image).Msg("Selected image is not a candidate; re-resolving")
-		}
-
 		comp := sc.source.ToImageComponentSpec()
 
 		// Fail-closed: a source must have candidate registries and usable per-platform
@@ -204,14 +179,19 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 			return &ctrl.Result{}, err
 		}
 
-		// Cache hit: reuse the pinned image, skip registry inspection. This is steady
-		// state (the source is unchanged), so it is logged at debug rather than emitting
-		// an event — the selection is already durable in status.resolvedImages and the
-		// RegistrySelected event fired when it was first chosen.
-		if cached := findResolvedImage(capsule, sc.name); cached != nil &&
-			cached.SourceHash == hash &&
-			cached.Validity == operatorv1alpha1.ImageValidityValid &&
-			cached.Digest != "" {
+		// Decide how to resolve this container, keyed by the current source (sourceHash):
+		//   - cached Valid        → reuse the pinned image, no probe (steady state).
+		//   - cached PullFailed    → the pinned image won't pull; re-resolve to fail over.
+		//   - cached Invalid       → last resolution found no registry; retry.
+		//   - fresh (new/changed source) with a selected pin → honor it, no probe. An upgrade
+		//     already selected and verified this image; the kubelet's real pull is the check,
+		//     and a failed pull surfaces as PullFailed above on the next reconcile.
+		//   - fresh with no pin    → select across the candidates (first install).
+		cached := findResolvedImage(capsule, sc.name)
+		matchesHash := cached != nil && cached.SourceHash == hash
+		if matchesHash && cached.Validity == operatorv1alpha1.ImageValidityValid && cached.Digest != "" {
+			// Steady state: reuse the cached pin. Logged at debug, not evented — the
+			// RegistrySelected event fired when it was first chosen.
 			if resolved, ok := softwareVersionFromCache(sc.source, cached); ok {
 				pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
 				common.Debug(ctx, ReasonImageSourceResolved).
@@ -219,7 +199,30 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 				continue
 			}
 			// Cache reference no longer maps to a candidate — fall through and re-resolve.
+		} else if !matchesHash {
+			if sel := sc.source.Selected; sel != nil {
+				if resolved, ok := softwareVersionFromSelected(sc.source, sel); ok {
+					pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
+					setResolvedImage(capsule, operatorv1alpha1.ResolvedImageStatus{
+						Container:           sc.name,
+						SourceHash:          hash,
+						Image:               common.BuildImage(resolved),
+						Digest:              sel.Digest,
+						Repository:          resolved.Repository,
+						LayerHashesVerified: true,
+						Validity:            operatorv1alpha1.ImageValidityValid,
+					})
+					statusChanged = true
+					common.Debug(ctx, ReasonImageSourceResolved).
+						Str("container", sc.name).Str("image", common.BuildImage(resolved)).Msg("Honoring upgrade-selected image")
+					continue
+				}
+				common.Warn(ctx, ReasonImageSourceResolved).
+					Str("container", sc.name).Str("image", sel.Image).Msg("Selected image is not a candidate; re-resolving")
+			}
 		}
+		// Otherwise fall through to select across the candidates (cached PullFailed/Invalid,
+		// or a fresh source with no usable selected pin).
 
 		// Build the checker lazily (once per reconcile) with a keychain derived from the
 		// capsule's image-pull secrets so private candidates can be inspected.
@@ -239,7 +242,7 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 				Validity:   operatorv1alpha1.ImageValidityInvalid,
 			})
 			statusChanged = true
-			requeue = true
+			resolveFailed = true
 			r.eventImageSource(capsule, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
 				"%s: no valid registry available for softwareVersionSource", sc.name)
 			common.Warn(ctx, ReasonNoValidRegistry).Str("container", sc.name).Msg("Found no valid registry for softwareVersionSource")
@@ -284,8 +287,14 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 		*p.target = p.resolved
 	}
 
-	if requeue {
-		return &ctrl.Result{RequeueAfter: podReadinessRequeueAfter}, nil
+	if resolveFailed {
+		// No candidate registry currently serves a verified image. Return a temporary error
+		// so the workqueue rate limiter backs off (and resets on the next success) instead
+		// of retrying at a fixed interval.
+		return &ctrl.Result{}, errx.WithHints(
+			errx.WithReason(errNoValidRegistry.New("no valid registry available for one or more softwareVersionSource containers"), ReasonNoValidRegistry),
+			"Confirm at least one candidate registry serves the image with matching layer hashes, and that pull secrets are valid.",
+		)
 	}
 	return nil, nil
 }
