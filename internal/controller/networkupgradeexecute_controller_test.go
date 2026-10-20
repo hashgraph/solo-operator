@@ -2275,6 +2275,82 @@ func TestApplyImagePatch_SourcedUCAndBackupRebuildSource(t *testing.T) {
 	}
 }
 
+// End-to-end: after execute rebuilds a sourced capsule's source for the new version, a
+// capsule reconcile resolves the rebuilt source and pins the NEW version — it does not
+// revert to the old image (the #1395 regression). A stale resolved-image cache entry for
+// the old version is present to prove the rebuild busts the cache and re-resolves.
+func TestSourcedUpgrade_ReconcileAfterPatchDoesNotRevert(t *testing.T) {
+	// Capsule installed with a source for the old version, already resolved + cached to it.
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test", Generation: 1},
+	}
+	cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+	cn.SoftwareVersionSource = &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories: []operatorv1alpha1.ImageRepository{
+			{Repository: "ghcr.io/hashgraph", ImageName: "consensus-node", ImageTag: "0.74.0"},
+		},
+		ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{
+			{OS: "linux", Architecture: "amd64", LayerHashes: []string{"sha256:aaa"}},
+		},
+	}
+	oldHash, err := sourceHash(cn.SoftwareVersionSource)
+	if err != nil {
+		t.Fatalf("sourceHash: %v", err)
+	}
+	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{{
+		Container:  "consensusNode",
+		SourceHash: oldHash,
+		Image:      "ghcr.io/hashgraph/consensus-node:0.74.0@" + string(testResolvedDigest),
+		Digest:     testResolvedDigest,
+		Repository: "ghcr.io/hashgraph",
+		Validity:   operatorv1alpha1.ImageValidityValid,
+	}}
+
+	// Execute patches the new version (0.74.2).
+	newComp := deterministicComponent("0.74.2", "ghcr.io/hashgraph/consensus-node:0.74.2")
+	newComp.Deterministic.LayerHashes = map[string][]operatorv1alpha1.Sha256Digest{"linux/amd64": {"sha256:aaa"}}
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: newComp},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "ghcr.io/hashgraph/consensus-node:0.74.2", Digest: executeDigest},
+		},
+	)
+	if err := (&NetworkUpgradeExecuteReconciler{}).applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if cn.SoftwareVersion != nil || cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
+		t.Fatalf("execute did not rebuild the source to 0.74.2: %+v", cn)
+	}
+
+	// Capsule reconcile resolves the rebuilt source. The fake checker returns a fresh digest
+	// for the new candidate; the stale cache entry for 0.74.0 must not win.
+	checker := &fakeImageChecker{fn: func(spec operatorv1alpha1.ImageRegistrySpec) registry.RegistryResult {
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid, Digest: altExecuteDigest, LayerHashesVerified: true}
+	}}
+	// Seed the fake client AFTER the patch so Status().Update reloads the rebuilt spec,
+	// not the pre-patch one (client.Status().Update reloads the server's spec).
+	r := newResolveReconciler(checker, capsule)
+	if _, err := r.resolveImageSources(context.Background(), capsule); err != nil {
+		t.Fatalf("resolveImageSources: %v", err)
+	}
+
+	// The node is pinned to the NEW version, resolved fresh — not reverted to 0.74.0.
+	sv := cn.SoftwareVersion
+	if sv == nil {
+		t.Fatal("expected SoftwareVersion pinned after reconcile")
+	}
+	if sv.ImageTag != "0.74.2" {
+		t.Errorf("reverted: image tag = %q, want 0.74.2", sv.ImageTag)
+	}
+	if sv.Digest != altExecuteDigest {
+		t.Errorf("digest = %q, want the freshly resolved %q (stale cache must not win)", sv.Digest, altExecuteDigest)
+	}
+	// The multi-registry source is retained for future failover.
+	if cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
+		t.Errorf("source not retained after reconcile: %+v", cn.SoftwareVersionSource)
+	}
+}
+
 // Focused rebuildSource unit tests.
 
 func TestRebuildSource_CarriesStrategyAndPolicyFromOld(t *testing.T) {
