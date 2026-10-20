@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -907,5 +908,65 @@ func TestBuildStatefulSet_OmittedSidecarRemoved(t *testing.T) {
 	}
 	if containerNames(withoutUC)["uc"] {
 		t.Errorf("expected uc container removed when omitted, got %v", containerNames(withoutUC))
+	}
+}
+
+func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *operatorv1alpha1.StreamUploaderConfig
+		want map[string]string
+	}{
+		{
+			name: "s3 bare bucket",
+			cfg: &operatorv1alpha1.StreamUploaderConfig{
+				BucketName: "solo-backups",
+				S3:         &operatorv1alpha1.S3Config{Enabled: true, URL: "http://rustfs:9000"},
+			},
+			want: map[string]string{
+				"BACKUP_UPLOADER_BUCKET_1":       "solo-backups",
+				"RCLONE_CONFIG_BACKUPS_TYPE":     "s3",
+				"RCLONE_CONFIG_BACKUPS_ENDPOINT": "http://rustfs:9000",
+			},
+		},
+		{
+			name: "gcs bucket with folder",
+			cfg: &operatorv1alpha1.StreamUploaderConfig{
+				BucketName: "solo-backups/node0",
+				GCS:        &operatorv1alpha1.GCSConfig{Enabled: true},
+			},
+			want: map[string]string{
+				"BACKUP_UPLOADER_BUCKET_1":   "solo-backups/node0",
+				"RCLONE_CONFIG_BACKUPS_TYPE": "gcs",
+			},
+		},
+		{
+			name: "no bucket",
+			cfg: &operatorv1alpha1.StreamUploaderConfig{
+				S3: &operatorv1alpha1.S3Config{Enabled: true},
+			},
+			want: map[string]string{
+				"RCLONE_CONFIG_BACKUPS_TYPE": "s3",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newStsReconciler()
+			c := r.buildBackupUploaderContainer(&operatorv1alpha1.StreamUploader{
+				Enabled:         true,
+				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
+				Config:          tt.cfg,
+			})
+
+			got := map[string]string{}
+			for _, e := range c.Env {
+				got[e.Name] = e.Value
+			}
+			if !maps.Equal(got, tt.want) {
+				t.Errorf("env: got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
