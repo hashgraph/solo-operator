@@ -384,9 +384,15 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			Name:         "data-config-dir",
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		},
+		// s6-overlay's /init needs a writable /run; non-root with no_new_privs can't create it.
+		{
+			Name:         VolumeTypeS6Run,
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+		},
 	}
 
 	volumeMounts := []corev1.VolumeMount{
+		{Name: VolumeTypeS6Run, MountPath: "/run"},
 		// log4j2.xml is owned by the Log4j2Config CR's ConfigMap; takes effect on next pod restart.
 		{Name: "log4j2-config", MountPath: HapiBase + "/log4j2.xml", SubPath: "log4j2.xml", ReadOnly: true},
 		// settings.txt is owned by the NodeSettings CR's ConfigMap; takes effect on next pod restart.
@@ -1034,7 +1040,7 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		name = "backup-uploader"
 	}
 
-	// backup.sh writes into /, so it needs root.
+	// Root only for the /<hostname>.txt marker; drop once hiero-ledger/solo-containers#255 is released.
 	runAsNonRoot := false
 	securityContext := common.RestrictedSecurityContext()
 	securityContext.RunAsNonRoot = &runAsNonRoot

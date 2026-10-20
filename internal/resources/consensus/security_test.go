@@ -92,12 +92,45 @@ func TestBuildStatefulSet_HardenedByDefault(t *testing.T) {
 	}
 	assertRunAs(t, byName["alloy"], AlloyUID)
 
+	// Root exception for the /<hostname>.txt marker; flip to HederaUID once hiero-ledger/solo-containers#255 ships.
 	backup := byName["backup-uploader"].SecurityContext
 	if backup.RunAsNonRoot == nil || *backup.RunAsNonRoot {
 		t.Errorf("backup-uploader must opt out of runAsNonRoot, got %v", backup.RunAsNonRoot)
 	}
 	if main := byName[DefaultConsensusContainerName].SecurityContext; main.RunAsUser != nil || main.RunAsNonRoot != nil {
 		t.Errorf("consensus-node must defer uid and runAsNonRoot to the image and pod, got %+v", main)
+	}
+}
+
+// Without a writable /run, s6-overlay's /init fails under no_new_privs: "unable to mkdir /run/s6".
+func TestBuildStatefulSet_ConsensusNodeWritableRun(t *testing.T) {
+	r := newStsReconciler()
+	sts, err := r.buildStatefulSet(context.Background(), capsuleWithImage("v0.72.1"))
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+	spec := sts.Spec.Template.Spec
+
+	var main *corev1.Container
+	for i := range spec.Containers {
+		if spec.Containers[i].Name == DefaultConsensusContainerName {
+			main = &spec.Containers[i]
+		}
+	}
+	if main == nil {
+		t.Fatal("consensus-node container not found")
+	}
+	idx := slices.IndexFunc(main.VolumeMounts, func(m corev1.VolumeMount) bool { return m.MountPath == "/run" })
+	if idx < 0 {
+		t.Fatal("consensus-node must mount a writable /run")
+	}
+	if m := main.VolumeMounts[idx]; m.Name != VolumeTypeS6Run || m.ReadOnly {
+		t.Errorf("/run mount must be writable %q, got %+v", VolumeTypeS6Run, m)
+	}
+
+	vi := slices.IndexFunc(spec.Volumes, func(v corev1.Volume) bool { return v.Name == VolumeTypeS6Run })
+	if vi < 0 || spec.Volumes[vi].EmptyDir == nil || spec.Volumes[vi].EmptyDir.Medium != corev1.StorageMediumMemory {
+		t.Errorf("%q must be a Memory emptyDir, got %+v", VolumeTypeS6Run, spec.Volumes)
 	}
 }
 
