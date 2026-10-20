@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"sort"
 	"strings"
 	"time"
 
@@ -778,71 +779,78 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	images := execute.Spec.Images
 	selected := execute.Status.SelectedSources
 
-	// pinErr captures the first component whose selected source lacks a content digest.
-	// The deployed image is pinned to that digest, so an unpinned source must abort the
-	// execute (terminal) rather than silently deploy a mutable tag. This is the last of
-	// the layered digest checks (CRD-required + UC-enforced upstream).
-	var pinErr error
+	// applyErr captures the first terminal failure: a selected source that lacks a content
+	// digest (the deployed image is pinned to that digest, so an unpinned source must abort
+	// rather than silently deploy a mutable tag — the last of the layered digest checks,
+	// CRD-required + UC-enforced upstream), or a source that cannot be rebuilt for the new
+	// version (see setSoftwareVersion). Either aborts the execute.
+	var applyErr error
+	setErr := func(err error) {
+		if err != nil && applyErr == nil {
+			applyErr = err
+		}
+	}
 
-	// applyComponent returns the selected image tag and its verified content digest.
-	// The digest is threaded through to SoftwareVersion.Digest so the deployed reference
-	// is pinned to the exact image verified during Prepare (see setSoftwareVersion).
-	applyComponent := func(name operatorv1alpha1.ComponentName) (image string, digest operatorv1alpha1.Sha256Digest, remove bool, upgrade bool) {
+	// applyComponent returns the new version's component spec, the selected image tag and
+	// its verified content digest. The digest is threaded through to SoftwareVersion.Digest
+	// (single-version containers) and gates upgrade success; comp carries the registries and
+	// layer hashes used to rebuild a sourced container's source (see setSoftwareVersion).
+	applyComponent := func(name operatorv1alpha1.ComponentName) (comp operatorv1alpha1.ImageComponentSpec, image string, digest operatorv1alpha1.Sha256Digest, remove bool, upgrade bool) {
 		comp, present := images.Component(name)
 		if !present {
-			return "", "", false, false
+			return comp, "", "", false, false
 		}
 		if comp.Enabled != nil && !*comp.Enabled {
-			return "", "", true, false
+			return comp, "", "", true, false
 		}
 		src := selected.Get(name)
 		if src == nil {
-			return "", "", false, false
+			return comp, "", "", false, false
 		}
-		if src.Digest == "" && pinErr == nil {
-			pinErr = errx.WithReason(
+		if src.Digest == "" {
+			setErr(errx.WithReason(
 				errReconcile.New("selected source for component %q (operationId %s) has no content digest; refusing to deploy an unpinned (mutable-tag) image", name, execute.Spec.OperationID),
-				ReasonSourceUnpinned)
+				ReasonSourceUnpinned))
 		}
-		return src.Image, src.Digest, false, true
+		return comp, src.Image, src.Digest, false, true
 	}
 
-	if img, digest, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
+	if comp, img, digest, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
 		cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
-		setSoftwareVersion(&cn.SoftwareVersion, &cn.SoftwareVersionSource, img, digest)
+		setErr(setSoftwareVersion(&cn.SoftwareVersion, &cn.SoftwareVersionSource, comp, img, digest))
 	}
 
-	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
+	if comp, img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.RecordsUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.RecordsUploader, img, digest)
+		setErr(ensureCheetah(&capsule.Spec.PodProperties.Containers.RecordsUploader, comp, img, digest))
 	}
 
-	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentEventStreamUploader); remove {
+	if comp, img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentEventStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.EventsUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.EventsUploader, img, digest)
+		setErr(ensureCheetah(&capsule.Spec.PodProperties.Containers.EventsUploader, comp, img, digest))
 	}
 
-	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBlockStreamUploader); remove {
+	if comp, img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBlockStreamUploader); remove {
 		capsule.Spec.PodProperties.Containers.BlocksUploader = nil
 	} else if upgrade {
-		ensureCheetah(&capsule.Spec.PodProperties.Containers.BlocksUploader, img, digest)
+		setErr(ensureCheetah(&capsule.Spec.PodProperties.Containers.BlocksUploader, comp, img, digest))
 	}
 
-	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBackupUploader); remove {
+	if comp, img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentBackupUploader); remove {
 		capsule.Spec.PodProperties.Containers.BackupUploader = nil
 	} else if upgrade {
-		ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, img, digest)
+		setErr(ensureStream(&capsule.Spec.PodProperties.Containers.BackupUploader, comp, img, digest))
 	}
 
-	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentUC); remove {
+	if comp, img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentUC); remove {
 		capsule.Spec.PodProperties.Containers.UC = nil
 	} else if upgrade {
-		ensureUC(&capsule.Spec.PodProperties.Containers.UC, img, digest)
+		setErr(ensureUC(&capsule.Spec.PodProperties.Containers.UC, comp, img, digest))
 	}
 
-	return pinErr
+	return applyErr
 }
 
 // upgradeOutcome is the terminal-state evaluation of the post-upgrade consensus
@@ -1001,67 +1009,172 @@ func (r *NetworkUpgradeExecuteReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Complete(r)
 }
 
-func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string, digest operatorv1alpha1.Sha256Digest) {
+func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, comp operatorv1alpha1.ImageComponentSpec, image string, digest operatorv1alpha1.Sha256Digest) error {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.CheetahUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
+	return setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, comp, image, digest)
 }
 
-func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string, digest operatorv1alpha1.Sha256Digest) {
+func ensureStream(ptr **operatorv1alpha1.StreamUploader, comp operatorv1alpha1.ImageComponentSpec, image string, digest operatorv1alpha1.Sha256Digest) error {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.StreamUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
+	return setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, comp, image, digest)
 }
 
-func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string, digest operatorv1alpha1.Sha256Digest) {
+func ensureUC(ptr **operatorv1alpha1.UcSidecar, comp operatorv1alpha1.ImageComponentSpec, image string, digest operatorv1alpha1.Sha256Digest) error {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.UcSidecar{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
+	return setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, comp, image, digest)
 }
 
-// setSoftwareVersion decomposes the selected image tag into repo/name/tag and pins the
-// verified content digest onto the SoftwareVersion. common.BuildImage then emits a
-// digest-pinned reference (repo/name:tag@sha256:...), so the kubelet runs exactly the
-// image that was verified during Prepare. image is always the tag-only ref (ParseImage
-// never sees the digest); digest is carried separately.
+// setSoftwareVersion applies the upgraded image to one container, in the shape the
+// container was installed with.
 //
-// If the container was installed with a SoftwareVersionSource, the source is cleared in
-// the same write. The capsule controller resolves the source and overwrites
-// SoftwareVersion with it, so leaving it set would keep deploying the old image. The
-// source's layer hashes are also specific to the old version, so it cannot be reused for
-// the upgrade image; the pin to the Prepare-verified digest replaces it. Pull policy and
-// pull secrets are carried over so private registries keep working.
-func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, src **operatorv1alpha1.SoftwareVersionSource, image string, digest operatorv1alpha1.Sha256Digest) {
+// Single SoftwareVersion: decompose the selected tag into repo/name/tag and pin the
+// Prepare-verified digest, so common.BuildImage emits repo/name:tag@sha256:... and the
+// kubelet runs exactly the verified image. image is the tag-only ref (ParseImage never
+// sees the digest); digest is carried separately.
+//
+// SoftwareVersionSource: the capsule controller resolves the source and overwrites
+// SoftwareVersion with the result, so the upgrade cannot leave the old source in place —
+// the node would keep deploying the old image. Rather than clear the source (which would
+// drop multi-registry failover and layer-hash re-verification), rebuild it for the new
+// version from the execute spec's registries and layer hashes, and clear SoftwareVersion
+// so exactly one of the two fields is set. The deployed image stays byte-equivalent to the
+// Prepare-verified one: the source is deterministic, so re-resolution lands on the same
+// digest. See rebuildSource.
+func setSoftwareVersion(
+	sv **operatorv1alpha1.SoftwareVersion,
+	src **operatorv1alpha1.SoftwareVersionSource,
+	comp operatorv1alpha1.ImageComponentSpec,
+	image string,
+	digest operatorv1alpha1.Sha256Digest,
+) error {
+	if *src != nil {
+		rebuilt, err := rebuildSource(*src, comp)
+		if err != nil {
+			return err
+		}
+		*src = rebuilt
+		*sv = nil
+		return nil
+	}
+
 	if *sv == nil {
 		*sv = &operatorv1alpha1.SoftwareVersion{}
 	}
 	(*sv).Repository, (*sv).ImageName, (*sv).ImageTag = common.ParseImage(image)
 	(*sv).Digest = digest
+	return nil
+}
 
-	if *src == nil {
-		return
+// rebuildSource builds a SoftwareVersionSource for the upgraded version. It is the inverse
+// of SoftwareVersionSource.ToImageComponentSpec: the candidate registries (in manifest
+// order) and per-platform layer hashes come from comp — the new version — while the
+// install-time operational settings stay with the deployment. SelectionStrategy and
+// ImagePullPolicy carry over from old, and each candidate's pull secrets come from the
+// matching old candidate (repository+name), falling back to the union of every old secret
+// when the upgrade introduces a registry the old source did not list. Pull secrets are
+// host-keyed dockerconfigjson, so attaching the union is safe: a secret that does not match
+// a candidate's host is ignored at pull time. (Ops contract: a standing, shared pull secret
+// — e.g. private-registry-creds — referenced by the install source covers any
+// newly-introduced private registry host; the union fallback carries it onto the new
+// candidate.)
+//
+// It fails closed: the new version must carry candidate registries and per-platform layer
+// hashes, and every candidate must resolve to a non-empty tag — the source carries the tag
+// across registries and resolves the digest itself.
+func rebuildSource(
+	old *operatorv1alpha1.SoftwareVersionSource,
+	comp operatorv1alpha1.ImageComponentSpec,
+) (*operatorv1alpha1.SoftwareVersionSource, error) {
+	if len(comp.Registries) == 0 || len(comp.Deterministic.LayerHashes) == 0 {
+		return nil, errx.WithReason(
+			errImageSourceInvalid.New("cannot rebuild softwareVersionSource: the upgrade component has no candidate registries or no per-platform layer hashes"),
+			ReasonImageSourceInvalid)
 	}
-	old := *src
-	if old.ImagePullPolicy != "" {
-		(*sv).ImagePullPolicy = old.ImagePullPolicy
+
+	// The union of every old candidate's pull secrets, used when a new candidate's registry
+	// was not listed in the old source.
+	union := sourcePullSecretRefs([]sourcedContainer{{source: old}})
+
+	repos := make([]operatorv1alpha1.ImageRepository, 0, len(comp.Registries))
+	for i := range comp.Registries {
+		// Drop any digest before parsing: ParseImage cannot split a combined tag@digest, and
+		// a source carries the tag (it resolves the digest itself).
+		ref := strings.SplitN(comp.Registries[i].Image, "@", 2)[0]
+		repo, name, tag := common.ParseImage(ref)
+		if tag == "" {
+			return nil, errx.WithReason(
+				errImageSourceInvalid.New("cannot rebuild softwareVersionSource: registry %q has no image tag", comp.Registries[i].Image),
+				ReasonImageSourceInvalid)
+		}
+		repos = append(repos, operatorv1alpha1.ImageRepository{
+			Repository:       repo,
+			ImageName:        name,
+			ImageTag:         tag,
+			ImagePullSecrets: candidatePullSecrets(old, repo, name, union),
+		})
 	}
-	// Match on repository+name only: the upgrade tag differs from every old candidate's.
-	var secrets []corev1.LocalObjectReference
+
+	verification := verificationSpecFromHashes(comp.Deterministic.LayerHashes)
+	if len(verification) == 0 {
+		return nil, errx.WithReason(
+			errImageSourceInvalid.New("cannot rebuild softwareVersionSource: the upgrade component has no usable per-platform (os/architecture) layer hashes"),
+			ReasonImageSourceInvalid)
+	}
+
+	return &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories:     repos,
+		ImageVerificationSpec: verification,
+		SelectionStrategy:     old.SelectionStrategy,
+		ImagePullPolicy:       old.ImagePullPolicy,
+	}, nil
+}
+
+// candidatePullSecrets returns the old source candidate's pull secrets matched by
+// repository+name (the tag differs across versions), or the union fallback when the upgrade
+// image's registry was not an old candidate.
+func candidatePullSecrets(old *operatorv1alpha1.SoftwareVersionSource, repo, name string, union []corev1.LocalObjectReference) []corev1.LocalObjectReference {
 	for i := range old.ImageRepositories {
 		c := &old.ImageRepositories[i]
-		if c.Repository == (*sv).Repository && c.ImageName == (*sv).ImageName {
-			secrets = c.ImagePullSecrets
-			break
+		if c.Repository == repo && c.ImageName == name {
+			return c.ImagePullSecrets
 		}
 	}
-	if secrets == nil {
-		// The upgrade image comes from a registry not listed in the old source; keep
-		// every secret the source knew about rather than risk an unauthenticated pull.
-		secrets = sourcePullSecretRefs([]sourcedContainer{{source: old}})
+	return union
+}
+
+// verificationSpecFromHashes is the inverse of platformLayerHashes: it turns the
+// per-platform ("os/arch") layer-hash map back into ImageVerificationSpec entries. Entries
+// are emitted in a stable platform order so a retried write is byte-identical; the layer
+// hashes within a platform keep their order — they are the image's ordered layers, compared
+// positionally during verification.
+func verificationSpecFromHashes(byPlatform map[string][]operatorv1alpha1.Sha256Digest) []operatorv1alpha1.ImageVerificationSpec {
+	platforms := make([]string, 0, len(byPlatform))
+	for p := range byPlatform {
+		platforms = append(platforms, p)
 	}
-	(*sv).ImagePullSecrets = secrets
-	*src = nil
+	sort.Strings(platforms)
+
+	specs := make([]operatorv1alpha1.ImageVerificationSpec, 0, len(platforms))
+	for _, p := range platforms {
+		os, arch, ok := strings.Cut(p, "/")
+		if !ok || os == "" || arch == "" {
+			continue // platformLayerHashes only emits "os/arch"; skip anything malformed
+		}
+		hashes := make([]string, len(byPlatform[p]))
+		for i, h := range byPlatform[p] {
+			hashes[i] = string(h)
+		}
+		specs = append(specs, operatorv1alpha1.ImageVerificationSpec{
+			OS:           os,
+			Architecture: arch,
+			LayerHashes:  hashes,
+		})
+	}
+	return specs
 }
