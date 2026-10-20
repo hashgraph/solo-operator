@@ -4,6 +4,7 @@ package consensus
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -40,9 +41,12 @@ func TestBuildAlloyContainer_Defaults(t *testing.T) {
 		t.Errorf("expected image %q, got %q", want, container.Image)
 	}
 	// Should have args to run the config
-	if len(container.Args) != 2 || container.Args[0] != "run" {
-		t.Errorf("expected args [run /etc/alloy/config.alloy], got %v", container.Args)
+	wantArgs := []string{"run", "/etc/alloy/config.alloy", "--storage.path=" + AlloyStoragePath}
+	if !slices.Equal(container.Args, wantArgs) {
+		t.Errorf("expected args %v, got %v", wantArgs, container.Args)
 	}
+	assertRestricted(t, container)
+	assertRunAs(t, container, AlloyUID)
 	// Should always have the alloy-config volume mount
 	if len(container.VolumeMounts) != 1 {
 		t.Fatalf("expected 1 volume mount (alloy-config), got %d", len(container.VolumeMounts))

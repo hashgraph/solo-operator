@@ -494,10 +494,8 @@ func TestBuildCheetahUploaderContainer(t *testing.T) {
 				t.Errorf("expected 2 volume mounts, got %d", len(container.VolumeMounts))
 			}
 
-			// No per-container security context — fsGroup at pod level handles ownership
-			if container.SecurityContext != nil {
-				t.Error("cheetah container should not set a per-container security context")
-			}
+			assertRestricted(t, container)
+			assertRunAs(t, container, HederaUID)
 
 			// Check resources
 			if tt.uploader.Resources != nil {

@@ -245,6 +245,7 @@ echo "genesis-init: done"`
 			{Name: "data-config-dir", MountPath: HapiBase + "/data/config"},
 			{Name: VolumeTypeSaved, MountPath: "/data/saved"},
 		},
+		SecurityContext:          runAsSecurityContext(HederaUID, HederaUID),
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          corev1.PullIfNotPresent,
@@ -312,9 +313,7 @@ func (r *StatefulSetSubReconciler) buildConsensusNodeContainer(capsule *operator
 		ImagePullPolicy:          common.PullPolicyOrDefault(cn.SoftwareVersion, corev1.PullIfNotPresent),
 	}
 
-	if cn.SecurityContext != nil {
-		container.SecurityContext = cn.SecurityContext
-	}
+	container.SecurityContext = hardenedSecurityContext(cn.SecurityContext)
 
 	if cn.Resources != nil {
 		container.Resources = *cn.Resources
@@ -848,8 +847,10 @@ func (r *StatefulSetSubReconciler) buildCheetahUploaderContainer(uploader *opera
 			"--config-check-interval",
 			configCheckInterval,
 		},
-		Env:                      env,
-		VolumeMounts:             volumeMounts,
+		Env:          env,
+		VolumeMounts: volumeMounts,
+		// Image USER is non-numeric, so runAsNonRoot needs an explicit uid.
+		SecurityContext:          runAsSecurityContext(HederaUID, HederaUID),
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(uploader.SoftwareVersion, corev1.PullIfNotPresent),
@@ -926,19 +927,15 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 	// (uid:gid 2000:2000). Run the UC as the same uid:gid so the dirs it creates
 	// and rotates (current/, previous/) are writable by the node's extraction and
 	// vice-versa; a foreign uid leaves them unwritable and the upgrade unzip fails.
-	hederaUID := HederaUID
 	container := corev1.Container{
 		Name:  name,
 		Image: image,
 		Ports: []corev1.ContainerPort{
 			{Name: "uc-metrics", ContainerPort: UCMetricsPort, Protocol: corev1.ProtocolTCP},
 		},
-		Env:          env,
-		VolumeMounts: volumeMounts,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  &hederaUID,
-			RunAsGroup: &hederaUID,
-		},
+		Env:                      env,
+		VolumeMounts:             volumeMounts,
+		SecurityContext:          runAsSecurityContext(HederaUID, HederaUID),
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -1037,9 +1034,15 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		name = "backup-uploader"
 	}
 
+	// backup.sh writes into /, so it needs root.
+	runAsNonRoot := false
+	securityContext := common.RestrictedSecurityContext()
+	securityContext.RunAsNonRoot = &runAsNonRoot
+
 	container := corev1.Container{
 		Name:                     name,
 		Image:                    image,
+		SecurityContext:          securityContext,
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -1102,13 +1105,14 @@ func (r *StatefulSetSubReconciler) buildAlloyContainer(capsule *operatorv1alpha1
 	container := corev1.Container{
 		Name:  containerName,
 		Image: image,
-		Args:  []string{"run", "/etc/alloy/config.alloy"},
+		Args:  []string{"run", "/etc/alloy/config.alloy", "--storage.path=" + AlloyStoragePath},
 		Ports: []corev1.ContainerPort{
 			{Name: "alloy-metrics", ContainerPort: AlloyHTTPPort, Protocol: corev1.ProtocolTCP},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "alloy-config", MountPath: "/etc/alloy", ReadOnly: true},
 		},
+		SecurityContext:          runAsSecurityContext(AlloyUID, AlloyUID),
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		ImagePullPolicy:          common.PullPolicyOrDefault(config.SoftwareVersion, corev1.PullIfNotPresent),
@@ -1183,9 +1187,7 @@ func (r *StatefulSetSubReconciler) applyPodProperties(sts *appsv1.StatefulSet, c
 	if len(podProps.ResourceClaims) > 0 {
 		sts.Spec.Template.Spec.ResourceClaims = podProps.ResourceClaims
 	}
-	if podProps.SecurityContext != nil {
-		sts.Spec.Template.Spec.SecurityContext = podProps.SecurityContext
-	}
+	sts.Spec.Template.Spec.SecurityContext = hardenedPodSecurityContext(podProps.SecurityContext)
 	if podProps.Priority != nil {
 		sts.Spec.Template.Spec.Priority = podProps.Priority
 	}
