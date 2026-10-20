@@ -3785,6 +3785,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -4258,6 +4282,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -4640,6 +4688,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -5208,6 +5280,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -5590,6 +5686,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -5978,6 +6098,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:
@@ -6374,6 +6518,30 @@ spec:
                                   type: object
                                 minItems: 1
                                 type: array
+                              selected:
+                                description: |-
+                                  Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+                                  operator deploys this exact image and skips registry selection and verification — the
+                                  upgrade already verified it — while the candidate registries above remain for the next
+                                  upgrade's re-selection. Unset on a fresh install, where the operator selects and
+                                  verifies across the candidates. The selected image must be one of ImageRepositories.
+                                properties:
+                                  digest:
+                                    description: Digest is the verified content digest
+                                      the image is pinned to.
+                                    pattern: ^sha256:[a-f0-9]{64}$
+                                    type: string
+                                  image:
+                                    description: |-
+                                      Image is the winning registry's tag-only reference, e.g.
+                                      "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+                                      ImageRepositories so the operator can reuse that candidate's pull secrets.
+                                    minLength: 1
+                                    type: string
+                                required:
+                                - digest
+                                - image
+                                type: object
                               selectionStrategy:
                                 description: |-
                                   SelectionStrategy chooses the order candidate registries are probed in:

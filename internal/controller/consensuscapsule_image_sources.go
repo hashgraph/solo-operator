@@ -129,6 +129,31 @@ func (r *ConsensusCapsuleReconciler) resolveImageSources(ctx context.Context, ca
 	requeue := false
 
 	for _, sc := range sourced {
+		// An upgrade pinned a specific digest (NetworkUpgradeExecute set source.Selected):
+		// deploy exactly it and skip registry selection — the upgrade already selected and
+		// verified this image. The candidate registries stay on the source for the next
+		// upgrade's re-selection. Falls through to normal resolution only if the selected
+		// image is not one of the candidates (so a pin can never strip its pull secrets).
+		if sel := sc.source.Selected; sel != nil {
+			if resolved, ok := softwareVersionFromSelected(sc.source, sel); ok {
+				pins = append(pins, pendingPin{target: sc.target, resolved: resolved})
+				setResolvedImage(capsule, operatorv1alpha1.ResolvedImageStatus{
+					Container:           sc.name,
+					Image:               common.BuildImage(resolved),
+					Digest:              sel.Digest,
+					Repository:          resolved.Repository,
+					LayerHashesVerified: true,
+					Validity:            operatorv1alpha1.ImageValidityValid,
+				})
+				statusChanged = true
+				common.Debug(ctx, ReasonImageSourceResolved).
+					Str("container", sc.name).Str("image", common.BuildImage(resolved)).Msg("Honoring upgrade-selected image")
+				continue
+			}
+			common.Warn(ctx, ReasonImageSourceResolved).
+				Str("container", sc.name).Str("image", sel.Image).Msg("Selected image is not a candidate; re-resolving")
+		}
+
 		comp := sc.source.ToImageComponentSpec()
 
 		// Fail-closed: a source must have candidate registries and usable per-platform
@@ -307,6 +332,25 @@ func repoByRef(src *operatorv1alpha1.SoftwareVersionSource, ref string) *operato
 		}
 	}
 	return nil
+}
+
+// softwareVersionFromSelected builds a pinned SoftwareVersion from an upgrade's selected
+// image, mapping it back to its candidate repository so pull secrets and pull policy come
+// from the source. It returns ok=false when the selected image is not one of the candidates
+// — the caller then re-resolves rather than deploy a reference stripped of its pull secrets.
+func softwareVersionFromSelected(src *operatorv1alpha1.SoftwareVersionSource, sel *operatorv1alpha1.SelectedImage) (*operatorv1alpha1.SoftwareVersion, bool) {
+	repo := repoByRef(src, sel.Image)
+	if repo == nil {
+		return nil, false
+	}
+	return &operatorv1alpha1.SoftwareVersion{
+		Repository:       repo.Repository,
+		ImageName:        repo.ImageName,
+		ImageTag:         repo.ImageTag,
+		Digest:           sel.Digest,
+		ImagePullPolicy:  src.ImagePullPolicy,
+		ImagePullSecrets: repo.ImagePullSecrets,
+	}, true
 }
 
 // softwareVersionFromCache reconstructs a pinned SoftwareVersion from a cached selection,

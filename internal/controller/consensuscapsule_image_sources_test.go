@@ -74,6 +74,47 @@ func TestResolveImageSources_ResolvesAndPins(t *testing.T) {
 	}
 }
 
+// When the source carries an upgrade-selected image, the operator deploys exactly it and
+// never probes a registry.
+func TestResolveImageSources_HonorsSelectedSkipsChecker(t *testing.T) {
+	capsule := capsuleWithConsensusSource()
+	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	src.Selected = &operatorv1alpha1.SelectedImage{
+		Image:  "ghcr.io/hashgraph/consensus-node:0.75.0",
+		Digest: testResolvedDigest,
+	}
+	checker := &fakeImageChecker{}
+	r := newResolveReconciler(checker, capsule)
+
+	if _, err := r.resolveImageSources(context.Background(), capsule); err != nil {
+		t.Fatalf("resolveImageSources: %v", err)
+	}
+	if checker.calls != 0 {
+		t.Errorf("expected selected image honored without probing, got %d calls", checker.calls)
+	}
+	sv := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion
+	if sv == nil || sv.Digest != testResolvedDigest || sv.ImageTag != "0.75.0" {
+		t.Errorf("expected pinned selected image, got %+v", sv)
+	}
+}
+
+// A selected image that is not one of the candidates falls through to normal resolution
+// rather than deploying a reference stripped of its pull secrets.
+func TestResolveImageSources_SelectedNotACandidateReResolves(t *testing.T) {
+	capsule := capsuleWithConsensusSource()
+	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource
+	src.Selected = &operatorv1alpha1.SelectedImage{Image: "other-reg/consensus-node:9.9.9", Digest: testResolvedDigest}
+	checker := &fakeImageChecker{}
+	r := newResolveReconciler(checker, capsule)
+
+	if _, err := r.resolveImageSources(context.Background(), capsule); err != nil {
+		t.Fatalf("resolveImageSources: %v", err)
+	}
+	if checker.calls == 0 {
+		t.Error("expected re-resolution when the selected image is not a candidate")
+	}
+}
+
 func TestResolveImageSources_CacheHitSkipsChecker(t *testing.T) {
 	capsule := capsuleWithConsensusSource()
 	src := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersionSource

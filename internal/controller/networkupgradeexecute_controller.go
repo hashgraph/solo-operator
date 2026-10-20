@@ -1058,6 +1058,9 @@ func setSoftwareVersion(
 		if err != nil {
 			return err
 		}
+		// Pin the digest this upgrade selected so the capsule controller deploys exactly it
+		// and skips re-selection; the candidate registries stay for the next upgrade.
+		rebuilt.Selected = &operatorv1alpha1.SelectedImage{Image: image, Digest: digest}
 		*src = rebuilt
 		*sv = nil
 		return nil

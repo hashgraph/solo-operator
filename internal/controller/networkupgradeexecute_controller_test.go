@@ -1894,6 +1894,9 @@ func TestApplyImagePatch_SourcedConsensusNodeRebuildsSource(t *testing.T) {
 	if src.ImagePullPolicy != "Always" {
 		t.Errorf("pull policy = %q, want Always (from the install source)", src.ImagePullPolicy)
 	}
+	if src.Selected == nil || src.Selected.Image != "reg-a/cn:0.74.2" || src.Selected.Digest != executeDigest {
+		t.Errorf("selected pin = %+v, want reg-a/cn:0.74.2 @ %s", src.Selected, executeDigest)
+	}
 }
 
 // When the upgrade introduces a registry that was not a candidate of the old source, the
@@ -2321,9 +2324,13 @@ func TestSourcedUpgrade_ReconcileAfterPatchDoesNotRevert(t *testing.T) {
 	if cn.SoftwareVersion != nil || cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
 		t.Fatalf("execute did not rebuild the source to 0.74.2: %+v", cn)
 	}
+	if cn.SoftwareVersionSource.Selected == nil || cn.SoftwareVersionSource.Selected.Digest != executeDigest {
+		t.Fatalf("execute did not pin the selected digest: %+v", cn.SoftwareVersionSource.Selected)
+	}
 
-	// Capsule reconcile resolves the rebuilt source. The fake checker returns a fresh digest
-	// for the new candidate; the stale cache entry for 0.74.0 must not win.
+	// Capsule reconcile honors the upgrade-selected digest and does NOT re-probe. The fake
+	// checker would return a different digest if called, so it must not be called and the
+	// stale cache entry for 0.74.0 must not win.
 	checker := &fakeImageChecker{fn: func(spec operatorv1alpha1.ImageRegistrySpec) registry.RegistryResult {
 		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid, Digest: altExecuteDigest, LayerHashesVerified: true}
 	}}
@@ -2334,7 +2341,11 @@ func TestSourcedUpgrade_ReconcileAfterPatchDoesNotRevert(t *testing.T) {
 		t.Fatalf("resolveImageSources: %v", err)
 	}
 
-	// The node is pinned to the NEW version, resolved fresh — not reverted to 0.74.0.
+	if checker.calls != 0 {
+		t.Errorf("expected the selected digest honored without probing, got %d checker calls", checker.calls)
+	}
+	// The node is pinned to exactly the upgrade-selected digest (0.74.2), not reverted to
+	// 0.74.0 and not a re-resolved digest.
 	sv := cn.SoftwareVersion
 	if sv == nil {
 		t.Fatal("expected SoftwareVersion pinned after reconcile")
@@ -2342,10 +2353,10 @@ func TestSourcedUpgrade_ReconcileAfterPatchDoesNotRevert(t *testing.T) {
 	if sv.ImageTag != "0.74.2" {
 		t.Errorf("reverted: image tag = %q, want 0.74.2", sv.ImageTag)
 	}
-	if sv.Digest != altExecuteDigest {
-		t.Errorf("digest = %q, want the freshly resolved %q (stale cache must not win)", sv.Digest, altExecuteDigest)
+	if sv.Digest != executeDigest {
+		t.Errorf("digest = %q, want the upgrade-selected %q", sv.Digest, executeDigest)
 	}
-	// The multi-registry source is retained for future failover.
+	// The multi-registry source is retained for the next upgrade's re-selection.
 	if cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
 		t.Errorf("source not retained after reconcile: %+v", cn.SoftwareVersionSource)
 	}
