@@ -48,43 +48,60 @@ reason about install, upgrade, and registry changes.
 | Registry probing, strategy, fail-closed hash check | `internal/registry/` |
 | Upgrade rebuild of the source + `selected` pin | `internal/controller/networkupgradeexecute_controller.go` (`setSoftwareVersion`, `rebuildSource`) |
 
+## Roles
+
+Two separate parties, in two separate trust domains:
+
+- **Registry ops** — the central team that runs the image registries, publishes images, and
+  holds the registry pull credentials. They never touch a node operator's cluster.
+- **Node operator** — runs one consensus node in their own cluster. They receive credentials
+  out-of-band, create the pull secret, install the node, and run upgrades. The **operator**
+  (the controllers in this repo) and the node's pod live in this cluster.
+
 ## Lifecycle
 
 ```mermaid
 sequenceDiagram
-    actor Ops
-    participant Installer
+    actor RegOps as Registry ops
+    actor NodeOp as Node operator
+    participant Prov as solo-provisioner
+    participant Operator
     participant Reg as Registries
-    participant Prepare as NetworkUpgradePrepare
-    participant Execute as NetworkUpgradeExecute
-    participant Capsule as ConsensusCapsule controller
     participant Kubelet
 
-    Note over Ops,Reg: Install
-    Ops->>Reg: create shared host-keyed pull secret for the registry hosts
-    Installer->>Capsule: ConsensusCapsule with softwareVersionSource (candidates, hashes, secret)
-    Capsule->>Reg: probe candidates and verify layer hashes (fail-closed)
-    Capsule->>Kubelet: deploy the resolved digest
+    Note over RegOps,Kubelet: 1-3. Registries and credentials
+    RegOps->>Reg: set up registries and obtain pull credentials
+    RegOps->>NodeOp: share credentials over a secure channel (e.g. 1Password)
+    NodeOp->>NodeOp: create the pull secret in the cluster (private-registry-creds)
 
-    Note over Reg: New image published to a private registry first
-    Ops->>Reg: push image to the private registry
-    Ops->>Reg: ensure the shared secret covers the private host
+    Note over NodeOp,Kubelet: 4. Install the consensus node
+    NodeOp->>Prov: install consensus node
+    Prov->>Operator: ConsensusCapsule with softwareVersionSource (candidates, hashes, secret)
+    Operator->>Reg: probe candidates and verify layer hashes (fail-closed)
+    Operator->>Kubelet: deploy the resolved digest
 
-    Note over Prepare,Execute: Upgrade
-    Prepare->>Reg: probe candidates, only the private registry serves it
-    Prepare->>Prepare: verify layer hashes and select the private registry (digest D)
-    Execute->>Capsule: rebuild source for the new version and set selected D
-    Capsule->>Kubelet: deploy exactly D from the private registry (no re-probe)
+    Note over RegOps,Reg: New image published to a private registry first
+    RegOps->>Reg: push the new image to the private registry
+    RegOps->>NodeOp: share any new private-host credential (same channel)
+    NodeOp->>NodeOp: update the shared pull secret if needed
 
-    Note over Reg: Later, image promoted to the public registries
-    Ops->>Reg: push image to the public registries
-    Note over Capsule: No automatic change, the node stays on D
+    Note over NodeOp,Kubelet: 5. Network upgrade
+    NodeOp->>Prov: run the upgrade
+    Prov->>Operator: NetworkUpgrade prepare then execute
+    Operator->>Reg: probe candidates, only the private registry serves it
+    Note over Operator: prepare selects the private registry (digest D)
+    Operator->>Operator: rebuild source and set selected D
+    Operator->>Kubelet: deploy exactly D from the private registry (no re-probe)
 
-    Note over Prepare,Execute: Next upgrade
-    Prepare->>Reg: probe candidates, public and private both serve now
-    Prepare->>Prepare: select per strategy and order, e.g. public first
-    Execute->>Capsule: rebuild and set selected to the new digest
-    Capsule->>Kubelet: deploy from public, private is now a dead fallback
+    Note over RegOps,Reg: Later, image promoted to the public registries
+    RegOps->>Reg: push the image to the public registries
+    Note over Operator: no automatic change, the node stays on D
+
+    Note over NodeOp,Kubelet: Next upgrade
+    NodeOp->>Prov: run the upgrade
+    Operator->>Reg: probe candidates, public and private both serve now
+    Note over Operator: selects per strategy and order (e.g. public first)
+    Operator->>Kubelet: deploy from public, private is now a dead fallback
 ```
 
 **The key point to internalize:** after an upgrade pins `selected`, the node stays on that
