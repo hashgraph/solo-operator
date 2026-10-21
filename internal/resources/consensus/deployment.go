@@ -1029,8 +1029,8 @@ func getVolumeNameForPath(path string) string {
 }
 
 // buildBackupUploaderContainer builds the backup uploader container (rclone-based).
-// The backup.sh script inside the image requires BACKUP_UPLOADER_BUCKET_1 (rclone path,
-// e.g. "backups:my-bucket") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
+// The backup.sh script inside the image requires BACKUP_UPLOADER_BUCKET_1 (bare bucket,
+// e.g. "my-bucket" or "my-bucket/folder") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
 // rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
 func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
 	image := common.BuildImage(config.SoftwareVersion)
@@ -1065,11 +1065,11 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 	if cfg := config.Config; cfg != nil {
 		var env []corev1.EnvVar
 
-		// BACKUP_UPLOADER_BUCKET_1 is the rclone destination path: "backups:<bucketName>"
+		// Bare bucket: backup.sh prepends the "backups:" rclone remote itself.
 		if cfg.BucketName != "" {
 			env = append(env, corev1.EnvVar{
 				Name:  "BACKUP_UPLOADER_BUCKET_1",
-				Value: "backups:" + cfg.BucketName,
+				Value: cfg.BucketName,
 			})
 		}
 
