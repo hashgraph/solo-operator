@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -213,6 +214,19 @@ var _ = Describe("NetworkUpgradeExecute Controller", func() {
 
 		sts := &appsv1.StatefulSet{}
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: consensusresources.StatefulSetName(capsule), Namespace: ns}, sts); err == nil {
+			// The fixture STS is not reconciled by the capsule controller (its selector
+			// differs), so roll the template onto the digest-pinned image the execute
+			// patched into the capsule, as a real roll would; the gate checks for it.
+			if sv := capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion; sv != nil && sv.Digest != "" {
+				image := fmt.Sprintf("%s/%s:%s@%s", sv.Repository, sv.ImageName, sv.ImageTag, sv.Digest)
+				sts.Spec.Template.Spec.Containers = []corev1.Container{{
+					Name:  consensusresources.ConsensusContainerName(capsule),
+					Image: image,
+				}}
+				if err := k8sClient.Update(ctx, sts); err != nil {
+					return
+				}
+			}
 			sts.Status.Replicas = 1
 			sts.Status.ReadyReplicas = 1
 			sts.Status.UpdatedReplicas = 1

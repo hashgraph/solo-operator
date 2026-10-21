@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"github.com/automa-saga/errx"
@@ -807,7 +808,8 @@ func (r *NetworkUpgradeExecuteReconciler) applyImagePatch(
 	}
 
 	if img, digest, _, upgrade := applyComponent(operatorv1alpha1.ComponentConsensusNode); upgrade {
-		setSoftwareVersion(&capsule.Spec.PodProperties.Containers.ConsensusNode.SoftwareVersion, img, digest)
+		cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+		setSoftwareVersion(&cn.SoftwareVersion, &cn.SoftwareVersionSource, img, digest)
 	}
 
 	if img, digest, remove, upgrade := applyComponent(operatorv1alpha1.ComponentRecordStreamUploader); remove {
@@ -871,7 +873,8 @@ const (
 // here only needs to confirm the post-upgrade pod exists / has rolled — no per-reading
 // revision stamp is required.
 //
-//   - Active on the fully-rolled post-upgrade revision      → upgradeSucceeded
+//   - Active + ACTIVE on the fully-rolled post-upgrade revision,
+//     whose template runs the selected consensus-node digest → upgradeSucceeded
 //   - CATASTROPHIC_FAILURE once the new-revision pod exists  → upgradeCatastrophic (fast fail)
 //   - NodeActiveTimeout (default 10m) from start elapsed     → upgradeTimedOut (warning, non-terminal)
 //   - otherwise                                              → upgradeWaiting
@@ -911,11 +914,14 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 		return upgradeCatastrophic, nil
 	}
 
-	// Success: the node reached ACTIVE on the fully-rolled post-upgrade revision.
-	// phase==Active already implies the operator saw ACTIVE from a Ready pod on the
-	// current revision, so combined with rolledAndReady a stale reading cannot mark
-	// the upgrade Succeeded.
-	if rolledAndReady && capsule.Status.Phase == operatorv1alpha1.PhaseActive {
+	// Success: the node reached ACTIVE on the fully-rolled post-upgrade revision, and
+	// that revision runs the consensus-node image this execute selected. Revision
+	// equality alone is not enough: a patch that changed nothing produces no new
+	// revision, so the pre-upgrade revision already counts as "rolled".
+	if rolledAndReady &&
+		capsule.Status.Phase == operatorv1alpha1.PhaseActive &&
+		capsule.Status.PlatformStatus == operatorv1alpha1.PlatformStatusActive &&
+		templateRunsSelectedConsensusNode(&sts, execute, capsule) {
 		return upgradeSucceeded, nil
 	}
 
@@ -929,6 +935,32 @@ func (r *NetworkUpgradeExecuteReconciler) checkUpgradeGate(
 	}
 
 	return upgradeWaiting, nil
+}
+
+// templateRunsSelectedConsensusNode reports whether the StatefulSet template's
+// consensus-node container runs the digest selected for this upgrade. applyImagePatch
+// pins that digest (repo/name:tag@digest), so a template without it was never
+// upgraded. An execute that does not upgrade the consensus node passes trivially.
+func templateRunsSelectedConsensusNode(
+	sts *appsv1.StatefulSet,
+	execute *operatorv1alpha1.NetworkUpgradeExecute,
+	capsule *operatorv1alpha1.ConsensusCapsule,
+) bool {
+	selected := execute.Status.SelectedSources
+	if selected == nil {
+		selected = &execute.Spec.SelectedSources
+	}
+	src := selected.Get(operatorv1alpha1.ComponentConsensusNode)
+	if src == nil || src.Digest == "" {
+		return true
+	}
+	name := consensusresources.ConsensusContainerName(capsule)
+	for _, c := range sts.Spec.Template.Spec.Containers {
+		if c.Name == name {
+			return strings.HasSuffix(c.Image, "@"+string(src.Digest))
+		}
+	}
+	return false
 }
 
 func (r *NetworkUpgradeExecuteReconciler) eventf(ctx context.Context, obj *operatorv1alpha1.NetworkUpgradeExecute, eventtype string, reason errx.Reason, format string, args ...any) {
@@ -973,21 +1005,21 @@ func ensureCheetah(ptr **operatorv1alpha1.CheetahUploader, image string, digest 
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.CheetahUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
 }
 
 func ensureStream(ptr **operatorv1alpha1.StreamUploader, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.StreamUploader{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
 }
 
 func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *ptr == nil {
 		*ptr = &operatorv1alpha1.UcSidecar{}
 	}
-	setSoftwareVersion(&(*ptr).SoftwareVersion, image, digest)
+	setSoftwareVersion(&(*ptr).SoftwareVersion, &(*ptr).SoftwareVersionSource, image, digest)
 }
 
 // setSoftwareVersion decomposes the selected image tag into repo/name/tag and pins the
@@ -995,10 +1027,41 @@ func ensureUC(ptr **operatorv1alpha1.UcSidecar, image string, digest operatorv1a
 // digest-pinned reference (repo/name:tag@sha256:...), so the kubelet runs exactly the
 // image that was verified during Prepare. image is always the tag-only ref (ParseImage
 // never sees the digest); digest is carried separately.
-func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, image string, digest operatorv1alpha1.Sha256Digest) {
+//
+// If the container was installed with a SoftwareVersionSource, the source is cleared in
+// the same write. The capsule controller resolves the source and overwrites
+// SoftwareVersion with it, so leaving it set would keep deploying the old image. The
+// source's layer hashes are also specific to the old version, so it cannot be reused for
+// the upgrade image; the pin to the Prepare-verified digest replaces it. Pull policy and
+// pull secrets are carried over so private registries keep working.
+func setSoftwareVersion(sv **operatorv1alpha1.SoftwareVersion, src **operatorv1alpha1.SoftwareVersionSource, image string, digest operatorv1alpha1.Sha256Digest) {
 	if *sv == nil {
 		*sv = &operatorv1alpha1.SoftwareVersion{}
 	}
 	(*sv).Repository, (*sv).ImageName, (*sv).ImageTag = common.ParseImage(image)
 	(*sv).Digest = digest
+
+	if *src == nil {
+		return
+	}
+	old := *src
+	if old.ImagePullPolicy != "" {
+		(*sv).ImagePullPolicy = old.ImagePullPolicy
+	}
+	// Match on repository+name only: the upgrade tag differs from every old candidate's.
+	var secrets []corev1.LocalObjectReference
+	for i := range old.ImageRepositories {
+		c := &old.ImageRepositories[i]
+		if c.Repository == (*sv).Repository && c.ImageName == (*sv).ImageName {
+			secrets = c.ImagePullSecrets
+			break
+		}
+	}
+	if secrets == nil {
+		// The upgrade image comes from a registry not listed in the old source; keep
+		// every secret the source knew about rather than risk an unauthenticated pull.
+		secrets = sourcePullSecretRefs([]sourcedContainer{{source: old}})
+	}
+	(*sv).ImagePullSecrets = secrets
+	*src = nil
 }
