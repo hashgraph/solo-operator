@@ -8,7 +8,7 @@ The pieces involved are the consensus node (CN), the UC sidecar, the operator an
 **This is the marker-file design.** It needs no CN code change: the CN already writes marker files and a
 candidate roster, and everything else happens in the UC, operator and daemon. A possible evolution, where
 the CN also notifies the UC through a signed local API, is described in
-[dab-notification-sinks.md](dab-notification-sinks.md).
+[dab-cn-uc-event-stream.md](dab-cn-uc-event-stream.md).
 
 **Status:** design, partly implemented. See [Implementation status](#implementation-status).
 Statements about the CN were read from `hiero-consensus-node` `main`; anything not verified is
@@ -313,7 +313,7 @@ Existing nodes use the normal upgrade. The new node is set up on its own host by
 `solo-provisioner consensus node join`, and starts from a recent state of the network.
 
 **Both node changes work the same in either transport.** The UC may read the roster from the marker file
-or receive it from the [events API](dab-notification-sinks.md). The operator only sees `spec.artifacts`.
+or receive it from the [events API](dab-cn-uc-event-stream.md). The operator only sees `spec.artifacts`.
 
 **Genesis and joining are different operations.** Genesis creates a network, once. A node joining an existing
 network is not part of it. A network can start with one genesis node and grow only through `NodeCreate`.
