@@ -90,7 +90,7 @@ This design gives the CN a push channel to the UC that is immediate, carries str
 | Delivery latency (event to UC) | **Near real-time** — nanosecond-scale on the loopback stream, bounded by network and processing, versus around 500 ms by polling. This is the main reason for the stream over markers. |
 | Durability | No loss across a single-side restart; CN fsyncs before it sends |
 | Max event size | 1 MiB (the roster, the only large payload, is ≤ 512 KiB) |
-| Retained-event cap | 100 events or 8 MiB, whichever first; then compact, then drop oldest |
+| Retained-event cap | Generous runaway guard (e.g. 100 events or 8 MiB); over it, drop the oldest and alert |
 | Reconnect backoff (UC) | exponential 1 s → 30 s, with jitter |
 | Keepalive | ping every 20 s, 10 s timeout |
 | fsync | per batch, batch window ≤ 50 ms (per-event is fine at this volume) |
@@ -163,9 +163,10 @@ solo-operator already depends on. The only shared artifact is the `.proto`; each
 - **No application-level credit field.** The transport window, the per-event ack, and the bounded disk log
   are enough. This mirrors the block-node publish stream, which relies on gRPC demand plus a per-block ack
   plus a bounded buffer — not a custom credit protocol.
-- **The CN never pauses consensus for this channel.** On overflow it drops (see
-  [Overflow](#overflow-and-compaction)), the opposite of the block buffer, which pauses block production and
-  never drops. Same transport mechanism, opposite overflow policy, because a block is ledger output while a
+- **The CN never pauses consensus for this channel.** When its log is over cap it drops (see
+  [Bounds against a runaway CN](#bounds-against-a-runaway-cn)), the opposite of the block buffer, which pauses
+  block production and never drops. Same transport mechanism, opposite overflow policy, because a block is
+  ledger output while a
   notification is recoverable from state.
 
 ### Trust model
@@ -484,7 +485,7 @@ stateDiagram-v2
     Sent --> Acked: UC Ack received
     Sent --> Persisted: disconnect, resend on reconnect
     Acked --> Pruned: retention or cap
-    Persisted --> Dropped: overflow, compacted or oldest
+    Persisted --> Dropped: over cap, oldest dropped
     Pruned --> [*]
     Dropped --> [*]
 ```
@@ -509,7 +510,7 @@ stateDiagram-v2
 | Adoption at CN start-up | The server and writer must already be up before `initializeStatesApi`, so the adoption event has somewhere to go. Neither needs the platform or the node key. |
 | Duplicates | Expected and harmless: ids are deterministic and the UC dedupes. |
 | Out-of-order | Fine: the UC reconciles to current state, it does not replay a strict sequence. |
-| Overflow | Compact, then drop the oldest, loudly. Never block. |
+| Over cap (runaway CN) | Drop the oldest, loudly, and alert. Never block. |
 | Forged ack | Costs durability only (see [Trust model](#trust-model)). |
 
 ### Resume without a cursor
@@ -570,9 +571,10 @@ The function is pure: same inputs, same id, on every node and after a restart.
 - **Location:** `data/upgrade/uc/` under the CN home
   (`/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/uc/`), on the `upgrade` volume (a PVC on mainnet). It
   sits beside `current/`, never inside it, because the CN wipes `current/` during package extraction.
-- **Format:** an append-only log of length-prefixed protobuf `Event` records, plus a small index (or a
-  compacting rewrite) marking which ids are acked. A simple, robust choice is one file of records plus a
-  sidecar set of acked ids; compaction rewrites the file dropping acked and superseded records.
+- **Format:** the retained set keyed by id. A simple, robust choice is to hold it in memory and rewrite the
+  file on change (write a temp file, `fsync`, atomic rename), since the set is tiny and changes a handful of
+  times per upgrade. An append-only log with a sidecar set of acked ids is the alternative, but it is more
+  machinery than this volume needs.
 - **Write path, off the handle thread:**
 
 ```
@@ -593,19 +595,41 @@ loop:
 
 The CN sends an event only after it is durable, so anything the UC can see is already on the CN's disk.
 
-## Overflow and compaction
+## Bounds against a runaway CN
 
-Events are sparse (about six per upgrade), so overflow means the UC has been gone a long time. Never block.
+Events are sparse (about six per upgrade), and a UC outage cannot flood the log — upgrades stall without the
+UC, so events can't pile up. The case the bounds exist for is a **CN defect** that emits far more than
+expected: a hook looping, catch-up re-running, emission on every round. Three cheap layers contain it, none
+of which touches the handle thread or consensus.
+
+**1. Deterministic IDs absorb the common case for free.** The usual flood bug re-emits the *same* logical
+event, which produces the *same* id. The retained set is keyed by id, so a re-insert is a no-op — no growth,
+no disk churn. Most real flood bugs are caught here with no policy at all.
+
+**2. A bounded in-memory queue protects consensus.** The handle thread does a non-blocking `offer`; if the
+queue is full it drops and increments a metric, and **never blocks**. A flood can never back up into
+transaction handling.
+
+**3. A bounded disk log caps the disk.** For a bug that emits genuinely *distinct* events (distinct id), a
+hard cap keeps the log at a steady size — each over-cap write drops the oldest, so the disk cannot grow
+without limit however fast the CN emits.
 
 ```
 pruneRetained():            # when count or bytes exceed the cap
-    drop acked events, oldest first
-    if still over cap:
-        for each (type, subject) group:
-            keep the newest, drop superseded older events   # compaction
-    if still over cap:
+    drop acked events, oldest first        # confirmed; safe to remove
+    while still over cap:
         drop the oldest unacked, log WARN, metric events.dropped++
 ```
+
+Keep the newest (it reflects current state and is the most useful on reconnect); the oldest is usually
+re-derivable from state anyway. **No compaction** — a flood of distinct events is not "supersession," so
+grouping by `(type, subject)` would add correctness-sensitive logic without helping this case.
+
+**The caps are a runaway guard, not a tuning knob.** Set them generously (the defaults below are ample), so
+they never trip in normal or moderately-abnormal operation. Under a real flood, dropping events is damage
+limitation: a flooding CN is a severe defect, so the goal is a bounded disk and an unaffected node, plus a
+**loud signal** — `events.dropped > 0`, a climbing `log.unackedCount`, and an abnormal emission rate are what
+get the bug fixed.
 
 ## Restart reconcile
 
