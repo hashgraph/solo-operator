@@ -675,10 +675,10 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 				platformStatus = name
 				platformStatusCode = operatorv1alpha1.PlatformStatusCodeForName(name)
 			}
-			// A sourced consensus node stuck in ImagePullBackOff can't pull its pinned
-			// image; mark it so the next reconcile re-resolves the source and fails over to
+			// A sourced container stuck in ImagePullBackOff can't pull its pinned image;
+			// mark it so the next reconcile re-resolves that source and fails over to
 			// another candidate registry.
-			if markConsensusImagePullFailure(capsule, &pod) {
+			if markImagePullFailures(capsule, &pod) {
 				resolvedImagesChanged = true
 				requeue = true
 			}
@@ -693,8 +693,8 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 		case corev1.PodPending:
 			phase = operatorv1alpha1.PhasePending
 			// The pod watch predicate does not forward ImagePullBackOff updates, so re-check
-			// a pulling sourced node until it runs (or the pull failure is detected above).
-			if findResolvedImage(capsule, "consensusNode") != nil {
+			// a pulling sourced pod until it runs (or the pull failure is detected above).
+			if len(sourcedContainers(capsule)) > 0 {
 				requeue = true
 			}
 		default:
@@ -766,28 +766,42 @@ func (r *ConsensusCapsuleReconciler) updateStatus(ctx context.Context, capsule *
 	return ctrl.Result{}, nil
 }
 
-// markConsensusImagePullFailure flips a sourced consensus node's resolved-image entry to
-// PullFailed when the kubelet cannot pull the pinned image (the container is in
-// ImagePullBackOff on the update-revision pod). The next resolveImageSources then
-// re-resolves the source and fails over to another candidate registry. It is a no-op for a
-// container without a source, or one already marked PullFailed, and returns whether it
-// changed the entry.
-func markConsensusImagePullFailure(capsule *operatorv1alpha1.ConsensusCapsule, pod *corev1.Pod) bool {
-	entry := findResolvedImage(capsule, "consensusNode")
-	if entry == nil || entry.Validity == operatorv1alpha1.ImageValidityPullFailed {
+// markImagePullFailures flips a sourced container's resolved-image entry to PullFailed when
+// the kubelet cannot pull its pinned image (the container is in ImagePullBackOff on the
+// update-revision pod). The next resolveImageSources then re-resolves that source and fails
+// over to another candidate registry. It covers every sourced container — the consensus
+// node and each sidecar — by matching a stuck container to its resolved entry by image
+// (both come from the same resolved SoftwareVersion), which avoids depending on each
+// container's name. Returns whether it changed any entry.
+func markImagePullFailures(capsule *operatorv1alpha1.ConsensusCapsule, pod *corev1.Pod) bool {
+	if len(capsule.Status.ResolvedImages) == 0 {
 		return false
 	}
-	name := consensus.ConsensusContainerName(capsule)
+	stuck := map[string]bool{}
 	for i := range pod.Status.ContainerStatuses {
 		cs := &pod.Status.ContainerStatuses[i]
-		if cs.Name == name && cs.State.Waiting != nil && cs.State.Waiting.Reason == "ImagePullBackOff" {
-			updated := *entry
-			updated.Validity = operatorv1alpha1.ImageValidityPullFailed
-			setResolvedImage(capsule, updated)
-			return true
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason == "ImagePullBackOff" {
+			stuck[cs.Name] = true
 		}
 	}
-	return false
+	if len(stuck) == 0 {
+		return false
+	}
+	changed := false
+	for ci := range pod.Spec.Containers {
+		c := &pod.Spec.Containers[ci]
+		if !stuck[c.Name] {
+			continue
+		}
+		for ei := range capsule.Status.ResolvedImages {
+			e := &capsule.Status.ResolvedImages[ei]
+			if e.Image == c.Image && e.Validity != operatorv1alpha1.ImageValidityPullFailed {
+				e.Validity = operatorv1alpha1.ImageValidityPullFailed
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 // rollupRunningPhase determines the phase for a Running pod by layering the live
