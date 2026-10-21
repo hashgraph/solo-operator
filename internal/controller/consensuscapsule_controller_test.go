@@ -1134,3 +1134,40 @@ func TestFinalizeManualStopped(t *testing.T) {
 		}
 	})
 }
+
+func TestMarkImagePullFailures(t *testing.T) {
+	// Two sourced containers; only the sidecar (a non-consensus container) is stuck pulling.
+	capsule := &operatorv1alpha1.ConsensusCapsule{}
+	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{
+		{Container: "consensusNode", Image: "reg/cn:1@sha256:a", Validity: operatorv1alpha1.ImageValidityValid},
+		{Container: "recordsUploader", Image: "reg/up:1@sha256:b", Validity: operatorv1alpha1.ImageValidityValid},
+	}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{Containers: []corev1.Container{
+			{Name: "consensus-node", Image: "reg/cn:1@sha256:a"},
+			{Name: "record-stream-uploader", Image: "reg/up:1@sha256:b"},
+		}},
+		Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+			{Name: "consensus-node", State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			{Name: "record-stream-uploader", State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}}},
+		}},
+	}
+
+	if !markImagePullFailures(capsule, pod) {
+		t.Fatal("expected the sidecar pull failure to be marked")
+	}
+	if e := findResolvedImage(capsule, "recordsUploader"); e == nil || e.Validity != operatorv1alpha1.ImageValidityPullFailed {
+		t.Errorf("sidecar: expected PullFailed, got %+v", e)
+	}
+	if e := findResolvedImage(capsule, "consensusNode"); e == nil || e.Validity != operatorv1alpha1.ImageValidityValid {
+		t.Errorf("consensus node: expected still Valid (it is running), got %+v", e)
+	}
+	// Idempotent once marked.
+	if markImagePullFailures(capsule, pod) {
+		t.Error("expected no change on a second call")
+	}
+	// A capsule with no sourced containers is a no-op.
+	if markImagePullFailures(&operatorv1alpha1.ConsensusCapsule{}, pod) {
+		t.Error("expected no change for a capsule with no resolved images")
+	}
+}

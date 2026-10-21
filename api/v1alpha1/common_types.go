@@ -182,10 +182,31 @@ type SoftwareVersionSource struct {
 	// +kubebuilder:default=IfNotPresent
 	// +optional
 	ImagePullPolicy ImagePullPolicy `json:"imagePullPolicy,omitempty"`
+
+	// Selected is the digest-pinned image chosen by a NetworkUpgradeExecute. When set, the
+	// operator deploys this exact image and skips registry selection and verification — the
+	// upgrade already verified it — while the candidate registries above remain for the next
+	// upgrade's re-selection. Unset on a fresh install, where the operator selects and
+	// verifies across the candidates. The selected image must be one of ImageRepositories.
+	// +optional
+	Selected *SelectedImage `json:"selected,omitempty"`
+}
+
+// SelectedImage is a digest-pinned image chosen by an upgrade: the winning registry's
+// tag-only reference plus the content digest verified during the upgrade's prepare phase.
+type SelectedImage struct {
+	// Image is the winning registry's tag-only reference, e.g.
+	// "ghcr.io/hashgraph/consensus-node:0.74.2". It must match one of the source's
+	// ImageRepositories so the operator can reuse that candidate's pull secrets.
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+
+	// Digest is the verified content digest the image is pinned to.
+	Digest Sha256Digest `json:"digest"`
 }
 
 // ImageValidity represents the validation status of an image
-// +kubebuilder:validation:Enum=Unknown;Valid;Invalid;NotFound
+// +kubebuilder:validation:Enum=Unknown;Valid;Invalid;NotFound;PullFailed
 type ImageValidity string
 
 const (
@@ -193,6 +214,10 @@ const (
 	ImageValidityValid    ImageValidity = "Valid"
 	ImageValidityInvalid  ImageValidity = "Invalid"
 	ImageValidityNotFound ImageValidity = "NotFound"
+	// ImageValidityPullFailed means the pinned image resolved fine but the kubelet could
+	// not pull it (the pod is in ImagePullBackOff). It signals the next reconcile to
+	// re-resolve the source and fail over to another candidate registry.
+	ImageValidityPullFailed ImageValidity = "PullFailed"
 )
 
 // ImageRepositoryStatus represents the status of an image repository

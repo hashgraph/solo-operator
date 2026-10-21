@@ -37,6 +37,11 @@ var (
 	// carry layer hashes (verification is mandatory). Terminal — the operator must fix
 	// the source or use a single softwareVersion instead.
 	errImageSourceInvalid = errNS.NewType("image_source_invalid")
+
+	// errNoValidRegistry: a SoftwareVersionSource could not be resolved because no
+	// candidate registry currently serves a verified image. Temporary — returning it lets
+	// the workqueue rate limiter back off and reset on the next successful resolution.
+	errNoValidRegistry = errNS.NewType("no_valid_registry", errorx.Temporary())
 )
 
 const (

@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -1836,13 +1837,29 @@ func sourcedFor(repo string) *operatorv1alpha1.SoftwareVersionSource {
 	}
 }
 
-// A capsule installed with softwareVersionSource must have the source cleared and the
-// upgrade image pinned on softwareVersion; otherwise the capsule controller keeps
-// resolving the old source and the node never upgrades.
-func TestApplyImagePatch_SourcedConsensusNodeClearsSource(t *testing.T) {
+// deterministicComponent is an execute-spec component for the new version: candidate
+// registries plus per-platform layer hashes, the inputs rebuildSource needs.
+func deterministicComponent(version string, images ...string) operatorv1alpha1.ImageComponentSpec {
+	return operatorv1alpha1.ImageComponentSpec{
+		Version:    version,
+		Registries: registriesFor(images...),
+		Deterministic: operatorv1alpha1.ImageDeterministicSpec{
+			Supported:   true,
+			LayerHashes: map[string][]operatorv1alpha1.Sha256Digest{"linux/amd64": {"aa"}},
+		},
+	}
+}
+
+func compPtr(c operatorv1alpha1.ImageComponentSpec) *operatorv1alpha1.ImageComponentSpec { return &c }
+
+// A capsule installed with softwareVersionSource must have the source rebuilt for the new
+// version (not cleared) and softwareVersion left unset; otherwise the capsule controller
+// keeps resolving the old source and the node never upgrades, and clearing would drop
+// multi-registry failover.
+func TestApplyImagePatch_SourcedConsensusNodeRebuildsSource(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("reg-a/cn:0.74.2")},
+			ConsensusNode: deterministicComponent("0.74.2", "reg-a/cn:0.74.2"),
 		},
 		operatorv1alpha1.SelectedSources{
 			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "reg-a/cn:0.74.2", Digest: executeDigest},
@@ -1857,30 +1874,38 @@ func TestApplyImagePatch_SourcedConsensusNodeClearsSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cn.SoftwareVersionSource != nil {
-		t.Error("expected softwareVersionSource cleared")
+	if cn.SoftwareVersion != nil {
+		t.Error("expected softwareVersion cleared (source-only container)")
 	}
-	sv := cn.SoftwareVersion
-	if sv == nil {
-		t.Fatal("expected SoftwareVersion set")
+	src := cn.SoftwareVersionSource
+	if src == nil {
+		t.Fatal("expected softwareVersionSource rebuilt, not cleared")
 	}
-	if got, want := common.BuildImage(sv), "reg-a/cn:0.74.2@"+string(executeDigest); got != want {
-		t.Errorf("image = %q, want %q", got, want)
+	if len(src.ImageRepositories) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(src.ImageRepositories))
 	}
-	if sv.ImagePullPolicy != "Always" {
-		t.Errorf("pull policy = %q, want Always", sv.ImagePullPolicy)
+	repo := src.ImageRepositories[0]
+	if repo.Repository != "reg-a" || repo.ImageName != "cn" || repo.ImageTag != "0.74.2" {
+		t.Errorf("candidate = %+v, want reg-a/cn:0.74.2", repo)
 	}
-	if len(sv.ImagePullSecrets) != 1 || sv.ImagePullSecrets[0].Name != "sec-reg-a" {
-		t.Errorf("pull secrets = %+v, want only the matching repo's", sv.ImagePullSecrets)
+	if len(repo.ImagePullSecrets) != 1 || repo.ImagePullSecrets[0].Name != "sec-reg-a" {
+		t.Errorf("pull secrets = %+v, want the matching repo's", repo.ImagePullSecrets)
+	}
+	if src.ImagePullPolicy != "Always" {
+		t.Errorf("pull policy = %q, want Always (from the install source)", src.ImagePullPolicy)
+	}
+	if src.Selected == nil || src.Selected.Image != "reg-a/cn:0.74.2" || src.Selected.Digest != executeDigest {
+		t.Errorf("selected pin = %+v, want reg-a/cn:0.74.2 @ %s", src.Selected, executeDigest)
 	}
 }
 
-// When the upgrade image's registry is not a candidate of the old source, all of the
-// source's pull secrets are kept.
-func TestApplyImagePatch_SourcedUnknownRegistryKeepsAllSecrets(t *testing.T) {
+// When the upgrade introduces a registry that was not a candidate of the old source, the
+// rebuilt candidate keeps the union of every old secret (host-keyed, so extras are
+// harmless) rather than risk an unauthenticated pull.
+func TestApplyImagePatch_SourcedUnknownRegistryUnionSecrets(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			ConsensusNode: operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("new-reg/cn:0.74.2")},
+			ConsensusNode: deterministicComponent("0.74.2", "new-reg/cn:0.74.2"),
 		},
 		operatorv1alpha1.SelectedSources{
 			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "new-reg/cn:0.74.2", Digest: executeDigest},
@@ -1894,15 +1919,22 @@ func TestApplyImagePatch_SourcedUnknownRegistryKeepsAllSecrets(t *testing.T) {
 	if err := r.applyImagePatch(execute, capsule); err != nil {
 		t.Fatal(err)
 	}
-	if cn.SoftwareVersionSource != nil || len(cn.SoftwareVersion.ImagePullSecrets) != 2 {
-		t.Errorf("source=%v secrets=%+v", cn.SoftwareVersionSource, cn.SoftwareVersion.ImagePullSecrets)
+	if cn.SoftwareVersion != nil {
+		t.Error("expected softwareVersion cleared")
+	}
+	src := cn.SoftwareVersionSource
+	if src == nil || len(src.ImageRepositories) != 1 {
+		t.Fatalf("expected rebuilt source with 1 candidate, got %+v", src)
+	}
+	if len(src.ImageRepositories[0].ImagePullSecrets) != 2 {
+		t.Errorf("expected union of old secrets (2), got %+v", src.ImageRepositories[0].ImagePullSecrets)
 	}
 }
 
-func TestApplyImagePatch_SourcedUploaderClearsSource(t *testing.T) {
+func TestApplyImagePatch_SourcedUploaderRebuildsSource(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			RecordStreamUploader: &operatorv1alpha1.ImageComponentSpec{Version: "1", Registries: registriesFor("reg-a/up:1")},
+			RecordStreamUploader: compPtr(deterministicComponent("1", "reg-a/up:1")),
 		},
 		operatorv1alpha1.SelectedSources{
 			RecordStreamUploader: &operatorv1alpha1.SelectedSource{Image: "reg-a/up:1", Digest: executeDigest},
@@ -1918,8 +1950,11 @@ func TestApplyImagePatch_SourcedUploaderClearsSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	u := capsule.Spec.PodProperties.Containers.RecordsUploader
-	if u.SoftwareVersionSource != nil || u.SoftwareVersion == nil || u.SoftwareVersion.ImageTag != "1" {
-		t.Errorf("uploader not migrated: %+v", u)
+	if u.SoftwareVersion != nil || u.SoftwareVersionSource == nil {
+		t.Fatalf("uploader source not rebuilt: %+v", u)
+	}
+	if u.SoftwareVersionSource.ImageRepositories[0].ImageTag != "1" {
+		t.Errorf("uploader candidate tag = %q, want 1", u.SoftwareVersionSource.ImageRepositories[0].ImageTag)
 	}
 }
 
@@ -2215,11 +2250,11 @@ func TestTemplateRunsSelectedConsensusNode(t *testing.T) {
 	}
 }
 
-func TestApplyImagePatch_SourcedUCAndBackupClearSource(t *testing.T) {
+func TestApplyImagePatch_SourcedUCAndBackupRebuildSource(t *testing.T) {
 	execute := newExecuteWithImages(
 		operatorv1alpha1.UpgradeImagesSpec{
-			UC:             &operatorv1alpha1.ImageComponentSpec{Version: "2", Registries: registriesFor("reg-a/uc:2")},
-			BackupUploader: &operatorv1alpha1.ImageComponentSpec{Version: "3", Registries: registriesFor("reg-a/bk:3")},
+			UC:             compPtr(deterministicComponent("2", "reg-a/uc:2")),
+			BackupUploader: compPtr(deterministicComponent("3", "reg-a/bk:3")),
 		},
 		operatorv1alpha1.SelectedSources{
 			UC:             &operatorv1alpha1.SelectedSource{Image: "reg-a/uc:2", Digest: executeDigest},
@@ -2235,11 +2270,203 @@ func TestApplyImagePatch_SourcedUCAndBackupClearSource(t *testing.T) {
 	if err := r.applyImagePatch(execute, capsule); err != nil {
 		t.Fatal(err)
 	}
-	if ct.UC.SoftwareVersionSource != nil || ct.UC.SoftwareVersion == nil || ct.UC.SoftwareVersion.ImageTag != "2" {
-		t.Errorf("uc not migrated: %+v", ct.UC)
+	if ct.UC.SoftwareVersion != nil || ct.UC.SoftwareVersionSource == nil || ct.UC.SoftwareVersionSource.ImageRepositories[0].ImageTag != "2" {
+		t.Errorf("uc not rebuilt: %+v", ct.UC)
 	}
-	if ct.BackupUploader.SoftwareVersionSource != nil || ct.BackupUploader.SoftwareVersion == nil || ct.BackupUploader.SoftwareVersion.ImageTag != "3" {
-		t.Errorf("backup uploader not migrated: %+v", ct.BackupUploader)
+	if ct.BackupUploader.SoftwareVersion != nil || ct.BackupUploader.SoftwareVersionSource == nil || ct.BackupUploader.SoftwareVersionSource.ImageRepositories[0].ImageTag != "3" {
+		t.Errorf("backup uploader not rebuilt: %+v", ct.BackupUploader)
+	}
+}
+
+// End-to-end: after execute rebuilds a sourced capsule's source for the new version, a
+// capsule reconcile resolves the rebuilt source and pins the NEW version — it does not
+// revert to the old image (the #1395 regression). A stale resolved-image cache entry for
+// the old version is present to prove the rebuild busts the cache and re-resolves.
+func TestSourcedUpgrade_ReconcileAfterPatchDoesNotRevert(t *testing.T) {
+	// Capsule installed with a source for the old version, already resolved + cached to it.
+	capsule := &operatorv1alpha1.ConsensusCapsule{
+		ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test", Generation: 1},
+	}
+	cn := &capsule.Spec.PodProperties.Containers.ConsensusNode
+	cn.SoftwareVersionSource = &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories: []operatorv1alpha1.ImageRepository{
+			{Repository: "ghcr.io/hashgraph", ImageName: "consensus-node", ImageTag: "0.74.0"},
+		},
+		ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{
+			{OS: "linux", Architecture: "amd64", LayerHashes: []string{"sha256:aaa"}},
+		},
+	}
+	oldHash, err := sourceHash(cn.SoftwareVersionSource)
+	if err != nil {
+		t.Fatalf("sourceHash: %v", err)
+	}
+	capsule.Status.ResolvedImages = []operatorv1alpha1.ResolvedImageStatus{{
+		Container:  "consensusNode",
+		SourceHash: oldHash,
+		Image:      "ghcr.io/hashgraph/consensus-node:0.74.0@" + string(testResolvedDigest),
+		Digest:     testResolvedDigest,
+		Repository: "ghcr.io/hashgraph",
+		Validity:   operatorv1alpha1.ImageValidityValid,
+	}}
+
+	// Execute patches the new version (0.74.2).
+	newComp := deterministicComponent("0.74.2", "ghcr.io/hashgraph/consensus-node:0.74.2")
+	newComp.Deterministic.LayerHashes = map[string][]operatorv1alpha1.Sha256Digest{"linux/amd64": {"sha256:aaa"}}
+	execute := newExecuteWithImages(
+		operatorv1alpha1.UpgradeImagesSpec{ConsensusNode: newComp},
+		operatorv1alpha1.SelectedSources{
+			ConsensusNode: &operatorv1alpha1.SelectedSource{Image: "ghcr.io/hashgraph/consensus-node:0.74.2", Digest: executeDigest},
+		},
+	)
+	if err := (&NetworkUpgradeExecuteReconciler{}).applyImagePatch(execute, capsule); err != nil {
+		t.Fatal(err)
+	}
+	if cn.SoftwareVersion != nil || cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
+		t.Fatalf("execute did not rebuild the source to 0.74.2: %+v", cn)
+	}
+	if cn.SoftwareVersionSource.Selected == nil || cn.SoftwareVersionSource.Selected.Digest != executeDigest {
+		t.Fatalf("execute did not pin the selected digest: %+v", cn.SoftwareVersionSource.Selected)
+	}
+
+	// Capsule reconcile honors the upgrade-selected digest and does NOT re-probe. The fake
+	// checker would return a different digest if called, so it must not be called and the
+	// stale cache entry for 0.74.0 must not win.
+	checker := &fakeImageChecker{fn: func(spec operatorv1alpha1.ImageRegistrySpec) registry.RegistryResult {
+		return registry.RegistryResult{Image: spec.Image, State: registry.StateValid, Digest: altExecuteDigest, LayerHashesVerified: true}
+	}}
+	// Seed the fake client AFTER the patch so Status().Update reloads the rebuilt spec,
+	// not the pre-patch one (client.Status().Update reloads the server's spec).
+	r := newResolveReconciler(checker, capsule)
+	if _, err := r.resolveImageSources(context.Background(), capsule); err != nil {
+		t.Fatalf("resolveImageSources: %v", err)
+	}
+
+	if checker.calls != 0 {
+		t.Errorf("expected the selected digest honored without probing, got %d checker calls", checker.calls)
+	}
+	// The node is pinned to exactly the upgrade-selected digest (0.74.2), not reverted to
+	// 0.74.0 and not a re-resolved digest.
+	sv := cn.SoftwareVersion
+	if sv == nil {
+		t.Fatal("expected SoftwareVersion pinned after reconcile")
+	}
+	if sv.ImageTag != "0.74.2" {
+		t.Errorf("reverted: image tag = %q, want 0.74.2", sv.ImageTag)
+	}
+	if sv.Digest != executeDigest {
+		t.Errorf("digest = %q, want the upgrade-selected %q", sv.Digest, executeDigest)
+	}
+	// The multi-registry source is retained for the next upgrade's re-selection.
+	if cn.SoftwareVersionSource == nil || cn.SoftwareVersionSource.ImageRepositories[0].ImageTag != "0.74.2" {
+		t.Errorf("source not retained after reconcile: %+v", cn.SoftwareVersionSource)
+	}
+}
+
+// Focused rebuildSource unit tests.
+
+func TestRebuildSource_CarriesStrategyAndPolicyFromOld(t *testing.T) {
+	old := sourcedFor("reg-a")
+	old.SelectionStrategy = "Sequential"
+	old.ImagePullPolicy = "Always"
+	comp := deterministicComponent("0.74.2", "reg-a/cn:0.74.2")
+	comp.SelectionStrategy = "Random" // the upgrade must not override the install source's knob
+
+	got, err := rebuildSource(old, comp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SelectionStrategy != "Sequential" {
+		t.Errorf("strategy = %q, want Sequential (from old source)", got.SelectionStrategy)
+	}
+	if got.ImagePullPolicy != "Always" {
+		t.Errorf("pull policy = %q, want Always (from old source)", got.ImagePullPolicy)
+	}
+}
+
+// A matched candidate that is public (no pull secrets) must stay public — it must not
+// inherit the union of other candidates' secrets. Guards against reintroducing the
+// nil-means-no-match fallback bug.
+func TestRebuildSource_MatchedPublicCandidateGetsNoUnion(t *testing.T) {
+	old := &operatorv1alpha1.SoftwareVersionSource{
+		ImageRepositories: []operatorv1alpha1.ImageRepository{
+			{Repository: "pub", ImageName: "cn", ImageTag: "0.74.0"}, // public: no pull secrets
+			{Repository: "priv", ImageName: "cn", ImageTag: "0.74.0", ImagePullSecrets: []corev1.LocalObjectReference{{Name: "sec-priv"}}},
+		},
+		ImageVerificationSpec: []operatorv1alpha1.ImageVerificationSpec{{OS: "linux", Architecture: "amd64", LayerHashes: []string{"aa"}}},
+	}
+	got, err := rebuildSource(old, deterministicComponent("0.74.2", "pub/cn:0.74.2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ImageRepositories[0].ImagePullSecrets) != 0 {
+		t.Errorf("matched public candidate got secrets %+v, want none", got.ImageRepositories[0].ImagePullSecrets)
+	}
+}
+
+func TestRebuildSource_StripsDigestFromRef(t *testing.T) {
+	got, err := rebuildSource(sourcedFor("reg-a"), deterministicComponent("0.74.2", "reg-a/cn:0.74.2@"+string(executeDigest)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := got.ImageRepositories[0]
+	if repo.Repository != "reg-a" || repo.ImageName != "cn" || repo.ImageTag != "0.74.2" {
+		t.Errorf("candidate = %+v, want reg-a/cn:0.74.2 (digest stripped)", repo)
+	}
+}
+
+func TestRebuildSource_FailsClosedOnTaglessRef(t *testing.T) {
+	if _, err := rebuildSource(sourcedFor("reg-a"), deterministicComponent("0.74.2", "reg-a/cn")); err == nil {
+		t.Fatal("expected error for a tagless registry ref")
+	}
+}
+
+func TestRebuildSource_FailsClosedOnEmptyHashes(t *testing.T) {
+	comp := operatorv1alpha1.ImageComponentSpec{Version: "0.74.2", Registries: registriesFor("reg-a/cn:0.74.2")}
+	if _, err := rebuildSource(sourcedFor("reg-a"), comp); err == nil {
+		t.Fatal("expected error when the upgrade component has no layer hashes")
+	}
+}
+
+func TestRebuildSource_PlatformsSortedLayerOrderPreserved(t *testing.T) {
+	comp := deterministicComponent("0.74.2", "reg-a/cn:0.74.2")
+	comp.Deterministic.LayerHashes = map[string][]operatorv1alpha1.Sha256Digest{
+		"linux/arm64": {"c1", "c2"},
+		"linux/amd64": {"a1", "a2"},
+	}
+	got, err := rebuildSource(sourcedFor("reg-a"), comp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ImageVerificationSpec) != 2 {
+		t.Fatalf("expected 2 platforms, got %d", len(got.ImageVerificationSpec))
+	}
+	if got.ImageVerificationSpec[0].Architecture != "amd64" || got.ImageVerificationSpec[1].Architecture != "arm64" {
+		t.Errorf("platform order = [%s, %s], want [amd64, arm64] (sorted)",
+			got.ImageVerificationSpec[0].Architecture, got.ImageVerificationSpec[1].Architecture)
+	}
+	if !reflect.DeepEqual(got.ImageVerificationSpec[0].LayerHashes, []string{"a1", "a2"}) {
+		t.Errorf("amd64 layers = %+v, want [a1 a2] (order preserved)", got.ImageVerificationSpec[0].LayerHashes)
+	}
+}
+
+// Rebuilding then converting back through ToImageComponentSpec round-trips the registries
+// and layer hashes, confirming rebuildSource is the inverse of that conversion.
+func TestRebuildSource_RoundTripsThroughToImageComponentSpec(t *testing.T) {
+	comp := deterministicComponent("0.74.2", "reg-a/cn:0.74.2")
+	comp.Deterministic.LayerHashes = map[string][]operatorv1alpha1.Sha256Digest{
+		"linux/amd64": {"a1", "a2"},
+		"linux/arm64": {"b1"},
+	}
+	got, err := rebuildSource(sourcedFor("reg-a"), comp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	round := got.ToImageComponentSpec()
+	if !reflect.DeepEqual(round.Deterministic.LayerHashes, comp.Deterministic.LayerHashes) {
+		t.Errorf("round-trip layer hashes = %+v, want %+v", round.Deterministic.LayerHashes, comp.Deterministic.LayerHashes)
+	}
+	if len(round.Registries) != 1 || round.Registries[0].Image != "reg-a/cn:0.74.2" {
+		t.Errorf("round-trip registries = %+v, want reg-a/cn:0.74.2", round.Registries)
 	}
 }
 
