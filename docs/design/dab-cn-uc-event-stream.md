@@ -127,8 +127,8 @@ flowchart TB
 
 - **One bidirectional stream per pod.** The UC opens `subscribe`, sends `Hello`, then receives events and
   sends one `Ack` each. The CN sends events and heartbeats. Either side sends at any time.
-- **Reconnect.** If the stream drops, the UC redials with backoff and opens a fresh stream. The CN resends
-  all retained events (see [Resume without a cursor](#resume-without-a-cursor)).
+- **Reconnect.** If the stream drops, the UC redials with backoff and opens a fresh stream. The CN resends its
+  unacked events and the UC dedupes (see [Resume without a cursor](#resume-without-a-cursor)).
 - **Push, not poll.** The UC blocks in the stream's receive call; it wakes only when the CN pushes. This is
   not polling — there is no timer and no idle traffic beyond keepalive pings.
 
@@ -212,8 +212,8 @@ message UcMessage {
   }
 }
 
-// No cursor: on every connect the CN resends all retained events and the UC
-// dedupes by Event.id.
+// No cursor: on every connect the CN resends its unacked events (from its own
+// ack records) and the UC dedupes by Event.id.
 message Hello {
   int64  node_id    = 1;  // the UC's own node id, a sanity check
   string uc_version = 2;
@@ -515,10 +515,14 @@ stateDiagram-v2
 
 ### Resume without a cursor
 
-On every connect the CN resends all retained events and the UC dedupes by `Event.id`. This avoids a cursor
-and the "log epoch" problem: if the CN's log volume were recreated and a sequence restarted from zero, a
-cursor-based UC could skip new events silently. Resending everything is safe because the UC's handlers already
-dedupe, and the retained set is tiny. A cursor can be added later if resend volume ever matters.
+On every connect the CN resends its **unacked** events — the ones it has no ack for in its own log — and the
+UC **dedupes by `Event.id`** as a safety net (an ack may have been in flight when the link dropped). The CN
+decides this from its own records, so the UC never sends a cursor. That avoids the "log epoch" problem: if the
+CN's log volume were recreated and a sequence restarted from zero, a cursor-based UC could skip new events
+silently; here there is no sequence to fall out of step. The retained set is tiny, so the resend is cheap.
+
+The CN keeps a small window of **acked** events too, and resends those only to rebuild a UC that lost its
+inbox (for example an `emptyDir` wiped on pod recreation); a UC with its inbox intact dedupes them away.
 
 ---
 
