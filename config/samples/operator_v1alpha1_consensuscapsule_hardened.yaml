@@ -1,0 +1,24 @@
+apiVersion: operator.solo.hiero.org/v1alpha1
+kind: ConsensusCapsule
+metadata:
+  labels:
+    app.kubernetes.io/name: solo-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: capsule-hardened
+  namespace: default
+spec:
+  orbit: demo-orbit
+  nodeId: 0
+  accountId: 0.0.3
+  weight: 500
+  log4j2ConfigRef: log4j2-sample
+  settingsConfigRef: settings-sample
+  applicationPropertiesRef: app-props-sample
+  # No securityContext: the operator applies its hardened defaults.
+  podProperties:
+    containers:
+      consensusNode:
+        softwareVersion:
+          repository: gcr.io/hedera-registry
+          imageName: consensus-node
+          imageTag: "0.72.1"

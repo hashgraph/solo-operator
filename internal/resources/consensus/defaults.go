@@ -22,6 +22,12 @@ const (
 	// the upgrade PVC (data/upgrade) with the node; fsGroup uses it as well.
 	HederaUID int64 = 2000
 
+	// AlloyUID is the "alloy" user in grafana/alloy; the image itself runs as root.
+	AlloyUID int64 = 473
+
+	// AlloyStoragePath is writable by AlloyUID, unlike the default relative to "/".
+	AlloyStoragePath = "/var/lib/alloy/data"
+
 	// GenesisInitImage is the image used by the genesis-config init container.
 	// It only needs sh and cp.
 	GenesisInitImage = "busybox:1.36.1"
