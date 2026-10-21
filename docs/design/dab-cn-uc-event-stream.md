@@ -87,6 +87,23 @@ sequenceDiagram
   [Resume without a cursor](#resume-without-a-cursor)).
 - **Liveness.** `Heartbeat` (or gRPC keepalive) lets each side notice a half-dead connection and reconnect.
 
+### Flow control
+
+Backpressure is a property of the gRPC/HTTP‑2 wire, handled by each side's own stack — **the UC takes no PBJ
+dependency.** PBJ is the CN's Java runtime; the UC is Go and uses `grpc-go` plus `protobuf-go`, which it
+already depends on. The only shared artifact is the `.proto`; each side generates its own stubs.
+
+- **The UC paces the CN by consuming.** It blocks in `stream.Recv()` (a push wake-up, not a poll), persists
+  and acks the event, then calls `Recv()` again. While the UC is busy, it does not call `Recv()`, the HTTP‑2
+  window is not replenished, and the CN's next send stalls. That is the backpressure, with no idle traffic.
+- **No application-level credit field.** The transport window, the per-event ack, and the bounded disk log
+  are enough. This mirrors the block-node publish stream, which relies on the PBJ `Pipeline` demand, a
+  per-block ack, and a bounded buffer — not a custom credit protocol.
+- **We do not port `BlockBufferService`'s producer backpressure.** That machine (saturation thresholds,
+  pause, recovery) exists to pause block *production* and never drop a block. We must never pause consensus
+  for a side channel, and we *do* drop on overflow (see [Durability](#durability-the-cn-disk-log)). Same
+  transport mechanism, opposite overflow policy.
+
 ### Trust model
 
 - **Loopback only.** The server binds `127.0.0.1` with no Service, no `containerPort` and no `hostNetwork`,
@@ -100,7 +117,7 @@ sequenceDiagram
 
 ### Events and their IDs
 
-**The ID format is `<type>-<nodeRef>-<trigger>`:**
+**The ID format is `<type>-<nodeRef>-<trigger>-<seq>`:**
 
 - **`type`** names the event, lower case, for example `upgradeprepare`.
 - **`nodeRef`** is `n<id>` for a consensus node or `rn<id>` for a registered node. For a DAB event it is the
@@ -108,27 +125,32 @@ sequenceDiagram
   with its own id.
 - **`trigger`** is the `TransactionID` for a transaction-driven event, rendered `<payer>_<sec>.<nanos>`
   (the canonical `@` replaced with `_` to stay name-safe), or `round<N>` for a platform event with no
-  transaction.
+  transaction. When the transaction is an **inner transaction of an atomic batch** its `nonce` is nonzero;
+  append it as `_n<nonce>` so inner transactions stay distinct (`0.0.55_1792400100.010000000_n3`).
+- **`seq`** is a zero-padded tiebreaker, `00` by default. It is the **last** field so the meaningful parts
+  stay up front and it sorts correctly within a group. It only moves past `00` when one transaction raises
+  more than one event of the **same** type for the **same** subject (rare), giving `00`, `01`, …
 
 The id is deterministic: the same transaction or round yields the same id on every node and after a
 restart, so the UC dedupes and the CN re-derives it from state. The id does **not** carry the software
 version, because the CN does not know the target version at prepare time; the version travels in the
-payload and the UC reads it from the package, as today.
+payload and the UC reads it from the package, as today. The upgrade file hash stays in the payload too,
+not the id — the transaction id already makes it unique.
 
 | Event | `type` | Trigger | Example id | Key payload |
 |---|---|---|---|---|
-| Node created | `nodecreate` | DAB txn | `nodecreate-n7-0.0.55_1792400100.010000000` | node id, account, gossip cert fingerprint, gossip endpoints |
-| Node updated | `nodeupdate` | DAB txn | `nodeupdate-n3-0.0.801_1792400050.900000000` | node id, changed fields |
-| Node deleted | `nodedelete` | DAB txn | `nodedelete-n5-0.0.55_1792400100.010000000` | node id |
-| Registered node created | `registerednodecreate` | txn | `registerednodecreate-rn12-0.0.55_1792400200.000000000` | registered node id, block-node endpoints |
-| Registered node updated | `registerednodeupdate` | txn | `registerednodeupdate-rn12-0.0.55_1792400260.000000000` | registered node id, changed endpoints |
-| Registered node deleted | `registerednodedelete` | txn | `registerednodedelete-rn12-0.0.55_1792400300.000000000` | registered node id |
-| Upgrade prepare ready | `upgradeprepare` | `PREPARE_UPGRADE` txn | `upgradeprepare-n5-0.0.2_1792449990.000000007` | upgrade file id and hash, freeze type |
-| Candidate roster ready | `candidaterosterready` | same `PREPARE_UPGRADE` txn | `candidaterosterready-n5-0.0.2_1792449990.000000007` | the roster bytes and sha256 |
-| Upgrade freeze scheduled | `upgradefreeze` | `FREEZE_UPGRADE` txn | `upgradefreeze-n5-0.0.2_1792451000.500000000` | freeze time, upgrade file hash |
-| Upgrade aborted | `upgradeabort` | `FREEZE_ABORT` txn | `upgradeabort-n5-0.0.2_1792451500.700000000` | aborted freeze time |
-| Upgrade frozen | `upgradefrozen` | freeze round (no txn) | `upgradefrozen-n5-round48211397` | freeze round, freeze time |
-| Roster adoption decided | `rosteradoption` | restart round (no txn) | `rosteradoption-n5-round48211398` | result (`adopted` / `rejected` / `none`), round |
+| Node created | `nodecreate` | DAB txn | `nodecreate-n7-0.0.55_1792400100.010000000-00` | node id, account, gossip cert fingerprint, gossip endpoints |
+| Node updated | `nodeupdate` | DAB txn | `nodeupdate-n3-0.0.801_1792400050.900000000-00` | node id, changed fields |
+| Node deleted | `nodedelete` | DAB txn | `nodedelete-n5-0.0.55_1792400100.010000000-00` | node id |
+| Registered node created | `registerednodecreate` | txn | `registerednodecreate-rn12-0.0.55_1792400200.000000000-00` | registered node id, block-node endpoints |
+| Registered node updated | `registerednodeupdate` | txn | `registerednodeupdate-rn12-0.0.55_1792400260.000000000-00` | registered node id, changed endpoints |
+| Registered node deleted | `registerednodedelete` | txn | `registerednodedelete-rn12-0.0.55_1792400300.000000000-00` | registered node id |
+| Upgrade prepare ready | `upgradeprepare` | `PREPARE_UPGRADE` txn | `upgradeprepare-n5-0.0.2_1792449990.000000007-00` | upgrade file id and hash, freeze type |
+| Candidate roster ready | `candidaterosterready` | same `PREPARE_UPGRADE` txn | `candidaterosterready-n5-0.0.2_1792449990.000000007-00` | the roster bytes and sha256 |
+| Upgrade freeze scheduled | `upgradefreeze` | `FREEZE_UPGRADE` txn | `upgradefreeze-n5-0.0.2_1792451000.500000000-00` | freeze time, upgrade file hash |
+| Upgrade aborted | `upgradeabort` | `FREEZE_ABORT` txn | `upgradeabort-n5-0.0.2_1792451500.700000000-00` | aborted freeze time |
+| Upgrade frozen | `upgradefrozen` | freeze round (no txn) | `upgradefrozen-n5-round48211397-00` | freeze round, freeze time |
+| Roster adoption decided | `rosteradoption` | restart round (no txn) | `rosteradoption-n5-round48211398-00` | result (`adopted` / `rejected` / `none`), round |
 
 One transaction can raise more than one event: `PREPARE_UPGRADE` raises both `upgradeprepare` and
 `candidaterosterready`, which share the trigger and differ only by `type`. The DAB events are early
@@ -137,17 +159,29 @@ from the candidate roster at prepare time.
 
 ### Protobuf schema (proposed)
 
-The CN team owns the final package and path. This is the shape the UC expects.
+The CN team owns the final package, path and doc comments. This is the shape the UC expects, written to the
+`hapi/hapi/src/main/proto` conventions: a `uc/` folder, the `com.hedera.node.internal.uc` package (the
+node-internal convention, like `network.proto`), the PBJ java options, enum values prefixed with the enum
+name, a lowerCamelCase rpc, and reuse of `proto.TransactionID` and `proto.Timestamp` from `basic_types.proto`
+rather than hand-rolled equivalents. Line comments are kept here for brevity; the published file uses `/** */`
+doc comments like its neighbours.
 
 ```proto
 syntax = "proto3";
 
-package com.hedera.hapi.node.uc;
+package com.hedera.node.internal.uc;
+
+// SPDX-License-Identifier: Apache-2.0
+import "services/basic_types.proto";  // proto.TransactionID, proto.Timestamp
+
+option java_package = "com.hedera.node.internal.uc.protoc";
+// <<<pbj.java_package = "com.hedera.node.internal.uc">>> This comment is special code for setting PBJ Compiler java package
+option java_multiple_files = true;
 
 // The UC dials the CN and keeps one stream open. The CN sends events; the UC
 // sends one ack per event. Loopback only, no authentication.
-service UcNotification {
-  rpc Subscribe(stream UcMessage) returns (stream CnMessage);
+service UcNotificationService {
+  rpc subscribe (stream UcMessage) returns (stream CnMessage);
 }
 
 message UcMessage {
@@ -176,35 +210,36 @@ message CnMessage {
 }
 
 message Heartbeat {
-  int64 cn_unix_nanos = 1;
+  proto.Timestamp cn_time = 1;
 }
 
 enum EventType {
-  EVENT_TYPE_UNSPECIFIED  = 0;
-  NODE_CREATE             = 1;
-  NODE_UPDATE             = 2;
-  NODE_DELETE             = 3;
-  REGISTERED_NODE_CREATE  = 4;
-  REGISTERED_NODE_UPDATE  = 5;
-  REGISTERED_NODE_DELETE  = 6;
-  UPGRADE_PREPARE         = 7;
-  CANDIDATE_ROSTER_READY  = 8;
-  UPGRADE_FREEZE          = 9;
-  UPGRADE_ABORT           = 10;
-  UPGRADE_FROZEN          = 11;
-  ROSTER_ADOPTION         = 12;
+  EVENT_TYPE_UNSPECIFIED            = 0;
+  EVENT_TYPE_NODE_CREATE            = 1;
+  EVENT_TYPE_NODE_UPDATE            = 2;
+  EVENT_TYPE_NODE_DELETE            = 3;
+  EVENT_TYPE_REGISTERED_NODE_CREATE = 4;
+  EVENT_TYPE_REGISTERED_NODE_UPDATE = 5;
+  EVENT_TYPE_REGISTERED_NODE_DELETE = 6;
+  EVENT_TYPE_UPGRADE_PREPARE        = 7;
+  EVENT_TYPE_CANDIDATE_ROSTER_READY = 8;
+  EVENT_TYPE_UPGRADE_FREEZE         = 9;
+  EVENT_TYPE_UPGRADE_ABORT          = 10;
+  EVENT_TYPE_UPGRADE_FROZEN         = 11;
+  EVENT_TYPE_ROSTER_ADOPTION        = 12;
 }
 
 message Event {
-  uint32    schema_version   = 1;
-  string    id               = 2;  // "<type>-<nodeRef>-<trigger>", deterministic
-  EventType type             = 3;
-  string    software_version = 4;  // the version the CN is running now
-  int64     cn_unix_nanos    = 5;  // wall-clock emit time, for logging only
+  uint32          schema_version   = 1;
+  string          id               = 2;  // "<type>-<nodeRef>-<trigger>-<seq>", deterministic
+  EventType       type             = 3;
+  string          software_version = 4;  // the version the CN is running now
+  proto.Timestamp cn_time          = 5;  // wall-clock emit time, for logging only
+  uint32          seq              = 6;  // 0 unless one txn raises >1 of this type for this subject
 
   // Exactly one identifies the trigger and seeds the id. A payload may repeat it.
-  TransactionId txn_id = 6;  // transaction-driven events
-  uint64        round  = 7;  // platform events (frozen, adoption)
+  proto.TransactionID txn_id = 7;  // transaction-driven events; carries nonce for atomic batches
+  uint64              round  = 8;  // platform events (frozen, adoption)
 
   oneof payload {
     NodeChange           node_change            = 16;
@@ -216,13 +251,6 @@ message Event {
     NowFrozen            now_frozen             = 22;
     RosterAdoption       roster_adoption        = 23;
   }
-}
-
-// Matches HAPI TransactionID (nonce and scheduled omitted for DAB and freeze).
-message TransactionId {
-  string payer             = 1;  // "shard.realm.num", e.g. "0.0.55"
-  int64  valid_start_sec   = 2;
-  int32  valid_start_nanos = 3;
 }
 
 message NodeChange {
@@ -244,33 +272,30 @@ message UpgradePrepare {
 }
 
 message CandidateRoster {
-  bytes  roster = 1;  // the PBJ Network message, the bytes candidate-roster.json holds
+  bytes  roster = 1;  // the serialized Network message, the bytes candidate-roster.json holds
   string sha256 = 2;  // hex
 }
 
 message FreezeScheduled {
-  int64  freeze_time_sec   = 1;
-  int32  freeze_time_nanos = 2;
-  string upgrade_file_hash = 3;
+  proto.Timestamp freeze_time      = 1;
+  string          upgrade_file_hash = 2;
 }
 
 message FreezeAborted {
-  int64 aborted_freeze_time_sec   = 1;
-  int32 aborted_freeze_time_nanos = 2;
+  proto.Timestamp aborted_freeze_time = 1;
 }
 
 message NowFrozen {
-  uint64 freeze_round      = 1;
-  int64  freeze_time_sec   = 2;
-  int32  freeze_time_nanos = 3;
+  uint64          freeze_round = 1;
+  proto.Timestamp freeze_time  = 2;
 }
 
 message RosterAdoption {
   enum Result {
     RESULT_UNSPECIFIED = 0;
-    ADOPTED            = 1;
-    REJECTED           = 2;
-    NONE               = 3;
+    RESULT_ADOPTED     = 1;
+    RESULT_REJECTED    = 2;
+    RESULT_NONE        = 3;
   }
   Result result = 1;
   uint64 round  = 2;
@@ -283,10 +308,15 @@ message Endpoint {
 }
 ```
 
+The roster is carried as `bytes` (the serialized `Network` message) so the UC forwards it verbatim without
+parsing, matching the marker-file design. Reusing the typed `Network` message instead is an option for the CN
+team; see [Open questions](#open-questions).
+
 ### JSON examples
 
-These follow the proto3 JSON mapping (int64 as strings, bytes as base64, enums as names). They are the same
-messages as above, shown for readability; the wire format is protobuf.
+These follow the proto3 JSON mapping: int64 as strings, bytes as base64, enums as their value names,
+`Timestamp` and `TransactionID` as nested objects with zero values omitted. `seq` is a zero-valued `uint32`
+here, so proto3 omits it; the id still ends in `-00`. The wire format is protobuf; these are for reading.
 
 The UC's `Hello` and an `Ack`:
 
@@ -294,7 +324,7 @@ The UC's `Hello` and an `Ack`:
 { "hello": { "nodeId": "5", "ucVersion": "0.76.1" } }
 ```
 ```json
-{ "ack": { "eventId": "upgradeprepare-n5-0.0.2_1792449990.000000007" } }
+{ "ack": { "eventId": "upgradeprepare-n5-0.0.2_1792449990.000000007-00" } }
 ```
 
 `nodecreate` (a DAB early warning; the subject is node 7):
@@ -302,11 +332,14 @@ The UC's `Hello` and an `Ack`:
 ```json
 {
   "schemaVersion": 1,
-  "id": "nodecreate-n7-0.0.55_1792400100.010000000",
-  "type": "NODE_CREATE",
+  "id": "nodecreate-n7-0.0.55_1792400100.010000000-00",
+  "type": "EVENT_TYPE_NODE_CREATE",
   "softwareVersion": "0.76.1",
-  "cnUnixNanos": "1792400101482000000",
-  "txnId": { "payer": "0.0.55", "validStartSec": "1792400100", "validStartNanos": 10000000 },
+  "cnTime": { "seconds": "1792400101", "nanos": 482000000 },
+  "txnId": {
+    "transactionValidStart": { "seconds": "1792400100", "nanos": 10000000 },
+    "accountID": { "accountNum": "55" }
+  },
   "nodeChange": {
     "nodeId": "7",
     "accountId": "0.0.10",
@@ -321,11 +354,14 @@ The UC's `Hello` and an `Ack`:
 ```json
 {
   "schemaVersion": 1,
-  "id": "registerednodecreate-rn12-0.0.55_1792400200.000000000",
-  "type": "REGISTERED_NODE_CREATE",
+  "id": "registerednodecreate-rn12-0.0.55_1792400200.000000000-00",
+  "type": "EVENT_TYPE_REGISTERED_NODE_CREATE",
   "softwareVersion": "0.76.1",
-  "cnUnixNanos": "1792400200250000000",
-  "txnId": { "payer": "0.0.55", "validStartSec": "1792400190", "validStartNanos": 0 },
+  "cnTime": { "seconds": "1792400200", "nanos": 250000000 },
+  "txnId": {
+    "transactionValidStart": { "seconds": "1792400190" },
+    "accountID": { "accountNum": "55" }
+  },
   "registeredNodeChange": {
     "registeredNodeId": "12",
     "blockNodeEndpoint": [ { "domainName": "bn3.example.com", "port": 40840 } ]
@@ -338,11 +374,14 @@ The UC's `Hello` and an `Ack`:
 ```json
 {
   "schemaVersion": 1,
-  "id": "upgradeprepare-n5-0.0.2_1792449990.000000007",
-  "type": "UPGRADE_PREPARE",
+  "id": "upgradeprepare-n5-0.0.2_1792449990.000000007-00",
+  "type": "EVENT_TYPE_UPGRADE_PREPARE",
   "softwareVersion": "0.76.1",
-  "cnUnixNanos": "1792450007482000000",
-  "txnId": { "payer": "0.0.2", "validStartSec": "1792449990", "validStartNanos": 7 },
+  "cnTime": { "seconds": "1792450007", "nanos": 482000000 },
+  "txnId": {
+    "transactionValidStart": { "seconds": "1792449990", "nanos": 7 },
+    "accountID": { "accountNum": "2" }
+  },
   "upgradePrepare": {
     "upgradeFileId": "0.0.150",
     "upgradeFileHash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
@@ -353,13 +392,16 @@ The UC's `Hello` and an `Ack`:
 ```json
 {
   "schemaVersion": 1,
-  "id": "candidaterosterready-n5-0.0.2_1792449990.000000007",
-  "type": "CANDIDATE_ROSTER_READY",
+  "id": "candidaterosterready-n5-0.0.2_1792449990.000000007-00",
+  "type": "EVENT_TYPE_CANDIDATE_ROSTER_READY",
   "softwareVersion": "0.76.1",
-  "cnUnixNanos": "1792450007500000000",
-  "txnId": { "payer": "0.0.2", "validStartSec": "1792449990", "validStartNanos": 7 },
+  "cnTime": { "seconds": "1792450007", "nanos": 500000000 },
+  "txnId": {
+    "transactionValidStart": { "seconds": "1792449990", "nanos": 7 },
+    "accountID": { "accountNum": "2" }
+  },
   "candidateRoster": {
-    "roster": "CrsBCjgK... (base64 of the PBJ Network message)",
+    "roster": "CrsBCjgK... (base64 of the serialized Network message)",
     "sha256": "5b0f3c9a77d14e2a8c61d0b94e1f7a32e9c4d81f05a6b37d2c9e48f1a0b7d635"
   }
 }
@@ -370,23 +412,23 @@ The UC's `Hello` and an `Ack`:
 ```json
 {
   "schemaVersion": 1,
-  "id": "upgradefrozen-n5-round48211397",
-  "type": "UPGRADE_FROZEN",
+  "id": "upgradefrozen-n5-round48211397-00",
+  "type": "EVENT_TYPE_UPGRADE_FROZEN",
   "softwareVersion": "0.76.1",
-  "cnUnixNanos": "1792492204220000000",
+  "cnTime": { "seconds": "1792492204", "nanos": 220000000 },
   "round": "48211397",
-  "nowFrozen": { "freezeRound": "48211397", "freezeTimeSec": "1792492200", "freezeTimeNanos": 0 }
+  "nowFrozen": { "freezeRound": "48211397", "freezeTime": { "seconds": "1792492200" } }
 }
 ```
 ```json
 {
   "schemaVersion": 1,
-  "id": "rosteradoption-n5-round48211398",
-  "type": "ROSTER_ADOPTION",
+  "id": "rosteradoption-n5-round48211398-00",
+  "type": "EVENT_TYPE_ROSTER_ADOPTION",
   "softwareVersion": "0.76.2",
-  "cnUnixNanos": "1792492491903000000",
+  "cnTime": { "seconds": "1792492491", "nanos": 903000000 },
   "round": "48211398",
-  "rosterAdoption": { "result": "ADOPTED", "round": "48211398" }
+  "rosterAdoption": { "result": "RESULT_ADOPTED", "round": "48211398" }
 }
 ```
 
@@ -516,3 +558,10 @@ HIP-1494's two-upgrade pattern applies:
 7. **PCES replay and side effects.** Whether replayed rounds re-run the freeze handlers' event emission, which
    decides how much the restart scan must cover.
 8. **Volume sizing.** The PVC size for `data/upgrade/uc` (tiny, but it needs a floor and the overflow cap).
+9. **Roster as `bytes` or the typed `Network`.** `bytes` lets the UC forward the roster verbatim without
+   parsing (matching the marker-file design); the typed `Network` message is more idiomatic but couples the
+   schema and makes the UC generate that proto. CN team's call.
+10. **Atomic batches.** Confirm whether a DAB or freeze transaction can be an inner transaction of an atomic
+    batch; if so, the `TransactionID` nonce distinguishes them and the id appends `_n<nonce>`.
+11. **Enum verbosity.** House style prefixes every enum value (`EVENT_TYPE_*`), so the JSON `type` is long.
+    Confirm that is acceptable or whether a shorter convention is wanted.
