@@ -4,20 +4,19 @@ A solution design for how the consensus node (CN) notifies the UC sidecar of upg
 address book (DAB) events, over one long-lived gRPC stream, durably enough that a restart on either
 side loses nothing. This channel replaces the marker files the CN writes today.
 
-**Status:** design, ready to implement. Needs a CN code change (the server and the schema) and a UC
+**Status:** Needs a CN code change (the server and the schema) and a UC
 code change (the client). The [marker-file design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) covers the
 operator, firewall and roster-diff work, which does not change with the transport.
 
 ## How to read this document
 
-It is written for two engineers who may not know each other's codebase:
-
-- **Everyone reads Part 1 (the shared contract).** It assumes no prior knowledge of either side.
-- **The CN engineer reads Part 2.** It uses CN terms freely (handle thread, `PlatformStateUpdates`,
+- **Part 1 — the shared contract.** The stream, the protobuf, the event IDs and the failure behaviour. Read
+  this first; it assumes no prior knowledge of either side.
+- **Part 2 — the CN implementation.** Uses CN terms freely (handle thread, `PlatformStateUpdates`,
   `initializeStatesApi`, PCES replay).
-- **The UC engineer reads Part 3.** It uses solo-operator terms freely (`MarkerMonitor`,
+- **Part 3 — the UC implementation.** Uses solo-operator terms freely (`MarkerMonitor`,
   `HandleExecuteImmediate`, daemonkit, the config CRs).
-- The **[Glossary](#glossary)** defines each side's terms for the other.
+- The **[Glossary](#glossary)** defines the CN and UC terms used throughout.
 - Code locations are in the **[Code touchpoints](#appendix-code-touchpoints)** table, by symbol, not line
   number, so they survive refactors.
 
@@ -27,7 +26,8 @@ It is written for two engineers who may not know each other's codebase:
 
 ## Context and problem
 
-A network upgrade and every DAB change (a node added, removed or re-keyed) happen inside the CN. The UC, a
+A network upgrade and every DAB change (a node added, removed or re-keyed, or a registered node created,
+updated or deleted) happen inside the CN. The UC, a
 sidecar container in the same pod, has to react: build the `NetworkUpgrade*` custom resources (CRs) that the
 operator reconciles. Today the CN signals the UC by writing **marker files** into a shared directory, which
 the UC **polls** on an interval (around 500 ms at best). That is slow for an event that should act at once,
