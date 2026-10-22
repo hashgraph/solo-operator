@@ -107,7 +107,30 @@ func Load(path string) (*Config, error) {
 	}
 
 	c.normalize()
+	if err := c.validateNodes(path); err != nil {
+		return nil, err
+	}
 	return &c, nil
+}
+
+func (c *Config) validateNodes(path string) error {
+	for i, node := range c.Nodes {
+		if node == nil {
+			return errx.Decorate(
+				errConfigInvalid.New("config %q: nodes[%d] is empty", path, i),
+				reasonInvalidNode,
+				"Remove the empty entry under nodes: in config.yaml, or fill in its account and host",
+			)
+		}
+		if node.Host == "" {
+			return errx.Decorate(
+				errConfigInvalid.New("config %q: nodes[%d] (account %d) has no host", path, i, node.Account),
+				reasonInvalidNode,
+				"Set host (or the legacy ipv4Addr) on every node in config.yaml",
+			)
+		}
+	}
+	return nil
 }
 
 // normalize fills in defaults and propagates the network's shard/realm onto

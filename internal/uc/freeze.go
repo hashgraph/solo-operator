@@ -31,7 +31,7 @@ func freezeCRName(operationID string) string {
 // consensus node into freeze_scheduled.mf and converts it to UTC time.Time.
 // The CN writes the scheduled freeze time as decimal seconds since Unix epoch.
 func parseFreezeScheduledTime(upgradePath string) (time.Time, error) {
-	data, err := readFileNoFollow(filepath.Join(upgradePath, MarkerFreezeScheduled))
+	data, err := readFileNoFollow(filepath.Join(upgradePath, MarkerFreezeScheduled), maxMarkerFileSize)
 	if err != nil {
 		if isDecorated(err) {
 			return time.Time{}, err

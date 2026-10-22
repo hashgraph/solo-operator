@@ -5,6 +5,7 @@ package commands
 import (
 	"fmt"
 	"io"
+	"time"
 
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 	"github.com/spf13/cobra"
@@ -122,7 +123,7 @@ func freezeUpgradeCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"freeze the network and apply the staged upgrade",
 				func(target *config.Target) (hiero.TransactionInterface, error) {
-					start, err := ops.ParseStartTime(startTime)
+					start, err := ops.ParseStartTime(startTime, time.Now())
 					if err != nil {
 						return nil, err
 					}
@@ -159,7 +160,7 @@ func upgradeTelemetryCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"apply the telemetry upgrade",
 				func(target *config.Target) (hiero.TransactionInterface, error) {
-					start, err := ops.ParseStartTime(startTime)
+					start, err := ops.ParseStartTime(startTime, time.Now())
 					if err != nil {
 						return nil, err
 					}
@@ -194,7 +195,7 @@ func freezeOnlyCmd(resolve SessionFunc, c confirmer) *cobra.Command {
 			return runFreeze(cmd.OutOrStdout(), resolve, c, yes,
 				"freeze the network at the given time",
 				func(*config.Target) (hiero.TransactionInterface, error) {
-					start, err := ops.ParseStartTime(startTime)
+					start, err := ops.ParseStartTime(startTime, time.Now())
 					if err != nil {
 						return nil, err
 					}

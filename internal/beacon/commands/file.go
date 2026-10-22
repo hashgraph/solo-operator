@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,8 @@ import (
 // defaultSoftwareZipName is the conventional package filename under a network's
 // sysfiles/ directory (design §10).
 const defaultSoftwareZipName = "softwareUpgrade.zip"
+
+const defaultMaxPackageSize int64 = 1 << 30
 
 // FileCommands returns the `file` command group for Hedera File Service
 // operations: `file upload` and `file info`, each targeting an HFS file by
@@ -84,6 +87,7 @@ func uploadCmd(resolve SessionFunc) *cobra.Command {
 		expectHashFile  string
 		fromScratch     bool
 		checkpointEvery int
+		maxSize         int64
 	)
 	cmd := &cobra.Command{
 		Use:   "upload",
@@ -98,7 +102,7 @@ func uploadCmd(resolve SessionFunc) *cobra.Command {
 			"for a receipt; --checkpoint-every controls how often the upload awaits a receipt and verifies " +
 			"the on-chain running hash.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runFileUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch, checkpointEvery)
+			return runFileUpload(cmd, resolve, zipPath, fileNum, expectHash, expectHashFile, fromScratch, checkpointEvery, maxSize)
 		},
 	}
 	cmd.Flags().StringVar(&zipPath, "zip", "", "Path to the package zip (default: <config-dir>/sysfiles/"+defaultSoftwareZipName+")")
@@ -109,11 +113,12 @@ func uploadCmd(resolve SessionFunc) *cobra.Command {
 	cmd.Flags().IntVar(&checkpointEvery, "checkpoint-every", ops.DefaultCheckpointEvery,
 		"Await a receipt and verify the on-chain running hash every N appended chunks. Higher is faster on "+
 			"high-latency networks (fewer receipt waits) but re-sends more on a failure; must be >= 1")
+	cmd.Flags().Int64Var(&maxSize, "max-size", defaultMaxPackageSize, "Refuse a package zip larger than this many bytes")
 	cmd.MarkFlagsMutuallyExclusive("expect-hash", "expect-hash-file")
 	return cmd
 }
 
-func runFileUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool, checkpointEvery int) error {
+func runFileUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, fileNum uint64, expectHash, expectHashFile string, fromScratch bool, checkpointEvery int, maxSize int64) error {
 	session, err := resolve()
 	if err != nil {
 		return err
@@ -135,13 +140,9 @@ func runFileUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, file
 	if zipPath == "" {
 		zipPath = filepath.Join(session.ConfigDir, "sysfiles", defaultSoftwareZipName)
 	}
-	data, err := os.ReadFile(zipPath)
+	data, err := readPackage(zipPath, maxSize)
 	if err != nil {
-		return errx.Decorate(
-			errInput.Wrap(err, "read package %q", zipPath),
-			reasonZipReadFailed,
-			fmt.Sprintf("Confirm the package exists at %q, or pass --zip", zipPath),
-		)
+		return err
 	}
 
 	localRaw := ops.HashBytes(data)
@@ -205,6 +206,52 @@ func assertPrivilegedPayer(payer hiero.AccountID) error {
 			"Use a privileged payer with --payer/-p: 2, 50, or 58",
 		)
 	}
+}
+
+func readPackage(path string, maxSize int64) ([]byte, error) {
+	readErr := func(err error) error {
+		return errx.Decorate(
+			errInput.Wrap(err, "read package %q", path),
+			reasonZipReadFailed,
+			fmt.Sprintf("Confirm the package exists at %q, or pass --zip", path),
+		)
+	}
+	tooLarge := func(size int64) error {
+		return errx.Decorate(
+			errInput.New("package %q is at least %d bytes, over the --max-size limit of %d", path, size, maxSize),
+			reasonZipTooLarge,
+			"Confirm --zip points at the deployment package, or raise --max-size if it is legitimately larger",
+		)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, readErr(err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errx.Decorate(
+			errInput.New("package %q is not a regular file (mode %s)", path, info.Mode()),
+			reasonZipNotRegular,
+			"Pass --zip with the path of the package zip file itself",
+		)
+	}
+	if info.Size() > maxSize {
+		return nil, tooLarge(info.Size())
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, readErr(err)
+	}
+	defer func() { _ = f.Close() }()
+	buf := bytes.NewBuffer(make([]byte, 0, info.Size()+1))
+	if _, err := buf.ReadFrom(io.LimitReader(f, maxSize+1)); err != nil {
+		return nil, readErr(err)
+	}
+	if int64(buf.Len()) > maxSize {
+		return nil, tooLarge(int64(buf.Len()))
+	}
+	return buf.Bytes(), nil
 }
 
 // expectedHash resolves the optional expected SHA-384 from the mutually exclusive

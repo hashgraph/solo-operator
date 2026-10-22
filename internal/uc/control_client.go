@@ -16,6 +16,8 @@ import (
 // defaultControlTimeout bounds a single control-socket request.
 const defaultControlTimeout = 5 * time.Second
 
+const maxControlResponseSize = 1 << 20
+
 // ControlClient talks to a running UC sidecar over its daemonkit control socket.
 // It exposes one method per endpoint the server registers — currently GET /health
 // and GET /status — so the `uc` binary (and tests) have the same coverage of the
@@ -84,9 +86,12 @@ func (c *ControlClient) get(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxControlResponseSize+1))
 	if err != nil {
 		return nil, errx.WithReason(errControl.Wrap(err, "read response"), ReasonControlReadFailed)
+	}
+	if len(body) > maxControlResponseSize {
+		return nil, errx.WithReason(errControl.New("response from %s exceeds %d bytes", path, maxControlResponseSize), ReasonControlReadFailed)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, errx.WithReason(

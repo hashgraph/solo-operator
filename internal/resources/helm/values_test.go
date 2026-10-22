@@ -5,8 +5,10 @@ package helm
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -174,6 +176,38 @@ func TestMergeValues_fromSecret(t *testing.T) {
 	}
 	if result["password"] != "s3cr3t" {
 		t.Errorf("expected password=s3cr3t, got %v", result["password"])
+	}
+}
+
+func TestMergeValues_secretParseErrorRedactsContent(t *testing.T) {
+	const marker = "hunter2SECRET"
+	for name, body := range map[string]string{
+		"unknown anchor":   "password: *" + marker + "\n",
+		"invalid map key":  "? [" + marker + ", b]\n: x\n",
+		"non-mapping root": `"` + marker + `"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "secret-values", Namespace: "test-ns"},
+				Data:       map[string][]byte{"values.yaml": []byte(body)},
+			}
+			spec := &operatorv1alpha1.HelmCapsuleSpec{
+				Chart:      operatorv1alpha1.HelmChartSpec{Repo: "oci://example.com", Chart: "test", Version: "1.0.0"},
+				ValuesFrom: []operatorv1alpha1.HelmValuesReference{{Kind: "Secret", Name: "secret-values"}},
+			}
+			c := fake.NewClientBuilder().WithScheme(newTestScheme()).WithObjects(secret).Build()
+
+			_, err := MergeValues(context.Background(), c, "test-ns", spec)
+			if err == nil {
+				t.Fatal("expected parse error, got nil")
+			}
+			if strings.Contains(errx.Format(err), marker) {
+				t.Fatalf("error leaks Secret content: %s", errx.Format(err))
+			}
+			if reason, _ := errx.ReasonOf(err); reason != ReasonValuesBuild {
+				t.Errorf("reason = %q, want %q", reason, ReasonValuesBuild)
+			}
+		})
 	}
 }
 

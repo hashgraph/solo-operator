@@ -152,6 +152,25 @@ func TestUpload_MissingZipReported(t *testing.T) {
 	wantReason(t, err, reasonZipReadFailed)
 }
 
+func TestUpload_OversizedZipRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeZip(t, dir, []byte("0123456789"))
+	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }
+	cmd := uploadCmd(resolve)
+
+	_, err := runCmd(t, cmd, "--max-size", "9")
+	wantReason(t, err, reasonZipTooLarge)
+}
+
+func TestUpload_NonRegularZipRejected(t *testing.T) {
+	dir := t.TempDir()
+	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }
+	cmd := uploadCmd(resolve)
+
+	_, err := runCmd(t, cmd, "--zip", dir)
+	wantReason(t, err, reasonZipNotRegular)
+}
+
 func TestUpload_MutuallyExclusiveHashFlags(t *testing.T) {
 	dir := t.TempDir()
 	resolve := func() (*Session, error) { return offlineSession(t, 2, dir), nil }

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -203,15 +204,7 @@ func TestLoad_NoPassphraseSource(t *testing.T) {
 
 func TestLoad_NeverLogsKeyMaterial(t *testing.T) {
 	// Capture logx output and prove the private key never appears in it.
-	var buf bytes.Buffer
-	restore := logx.As()
-	restoreLevel := zerolog.GlobalLevel()
-	logx.SetLogger(zerolog.New(&buf).Level(zerolog.DebugLevel))
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	t.Cleanup(func() {
-		logx.SetLogger(*restore)
-		zerolog.SetGlobalLevel(restoreLevel)
-	})
+	buf := captureLogs(t)
 
 	dir := t.TempDir()
 	pass := "s3cret"
@@ -232,4 +225,57 @@ func TestLoad_NeverLogsKeyMaterial(t *testing.T) {
 			t.Errorf("log leaked key material or passphrase: %s", out)
 		}
 	}
+}
+
+func TestLoad_WarnsOnPermissiveKeyFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permissions only")
+	}
+	buf := captureLogs(t)
+
+	dir := t.TempDir()
+	pass := "s3cret"
+	writeKey(t, dir, 2, ed25519PEM(t, pass), &pass)
+	for _, name := range []string{"account2.pem", "account2.pass"} {
+		if err := os.Chmod(filepath.Join(dir, name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := New(dir).Load(2); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	out := buf.String()
+	if got := strings.Count(out, string(reasonKeyFilePermissive)); got != 2 {
+		t.Errorf("expected 2 %s warnings (pem + pass), got %d: %s", reasonKeyFilePermissive, got, out)
+	}
+}
+
+func TestLoad_NoWarningForPrivateKeyFiles(t *testing.T) {
+	buf := captureLogs(t)
+
+	dir := t.TempDir()
+	pass := "s3cret"
+	writeKey(t, dir, 2, ed25519PEM(t, pass), &pass)
+
+	if _, err := New(dir).Load(2); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if strings.Contains(buf.String(), string(reasonKeyFilePermissive)) {
+		t.Errorf("unexpected permission warning for 0600 files: %s", buf.String())
+	}
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	restore := logx.As()
+	restoreLevel := zerolog.GlobalLevel()
+	logx.SetLogger(zerolog.New(&buf).Level(zerolog.DebugLevel))
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	t.Cleanup(func() {
+		logx.SetLogger(*restore)
+		zerolog.SetGlobalLevel(restoreLevel)
+	})
+	return &buf
 }

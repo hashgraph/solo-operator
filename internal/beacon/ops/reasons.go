@@ -8,8 +8,9 @@ import "github.com/automa-saga/errx"
 // reason= field so an error, its log line, and any status output share one
 // identifier (see docs/beacon/design.md §8.3 and CLAUDE.md "Error Handling").
 const (
-	reasonInvalidStartTime errx.Reason = "InvalidStartTime"
-	reasonInvalidHash      errx.Reason = "InvalidUpgradeHash"
+	reasonInvalidStartTime   errx.Reason = "InvalidStartTime"
+	reasonStartTimeNotFuture errx.Reason = "StartTimeNotFuture"
+	reasonInvalidHash        errx.Reason = "InvalidUpgradeHash"
 
 	// Special-file upload (design §8.1).
 	reasonEmptyUpload            errx.Reason = "EmptyUpload"

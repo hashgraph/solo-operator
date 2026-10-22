@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/automa-saga/errx"
@@ -61,6 +62,7 @@ func (k *Keystore) Load(account uint64) (hiero.PrivateKey, error) {
 			fmt.Sprintf("Confirm the signing key for account %d exists at %q", account, pemPath),
 		)
 	}
+	warnIfPermissive(pemPath)
 
 	passphrase, err := k.passphrase(account)
 	if err != nil {
@@ -94,6 +96,7 @@ func (k *Keystore) passphrase(account uint64) (string, error) {
 	data, err := os.ReadFile(passPath)
 	switch {
 	case err == nil:
+		warnIfPermissive(passPath)
 		return strings.TrimRight(string(data), "\r\n"), nil
 	case errors.Is(err, os.ErrNotExist):
 		if k.Prompt == nil {
@@ -121,4 +124,20 @@ func Algorithm(key hiero.PrivateKey) string {
 		return "ECDSA_secp256k1"
 	}
 	return "Ed25519"
+}
+
+// Warns rather than fails so existing key setups keep working.
+func warnIfPermissive(path string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm()&0o077 == 0 {
+		return
+	}
+	logx.As().Warn().
+		Str("reason", reasonKeyFilePermissive.String()).
+		Str("path", path).
+		Str("mode", info.Mode().Perm().String()).
+		Msgf("Key material file %s is accessible by group/other; run: chmod 600 %s", path, path)
 }

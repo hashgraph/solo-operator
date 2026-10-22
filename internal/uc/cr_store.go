@@ -61,6 +61,9 @@ var validSteps = map[string]struct{}{
 // fileExt is the on-disk extension for persisted CRs.
 const fileExt = ".yaml"
 
+// etcd rejects objects over ~1.5 MiB.
+const maxPersistedCRSize = 2 << 20
+
 // Persist serializes cr to YAML under the store directory before the K8s API
 // send and returns the file path. It is idempotent: an existing file for the
 // same operationId+step is overwritten (re-detection of the same marker must
@@ -143,19 +146,22 @@ func (s *CRStore) List() ([]PersistedCR, error) {
 			continue
 		}
 		path := filepath.Join(s.dir, e.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
+		data, err := readFileNoFollow(path, maxPersistedCRSize)
+		if err != nil && !isDecorated(err) {
 			return nil, errx.WithReason(errPersist.Wrap(err, "read persisted CR %s", path), ReasonCRPersistReadFailed)
 		}
 		obj := map[string]interface{}{}
-		if err := yaml.Unmarshal(data, &obj); err != nil {
+		if err == nil {
+			err = yaml.Unmarshal(data, &obj)
+		}
+		if err != nil {
 			// A single corrupt file must not halt the whole recovery scan — that would
 			// retry-loop the handler forever. Skip it with a warning so the remaining
 			// CRs still recover; the operator can remove the bad file out-of-band.
 			common.LogErr(
 				logx.As().Warn(),
 				errx.WithHints(
-					errx.WithReason(errPersist.Wrap(err, "unmarshal persisted CR %s", path), ReasonCRPersistCorrupt),
+					errx.WithReason(errPersist.Wrap(err, "decode persisted CR %s", path), ReasonCRPersistCorrupt),
 					"A persisted CR file is corrupt; remove it from --cr-persist-path to let recovery proceed",
 				),
 				ReasonCRPersistCorrupt,

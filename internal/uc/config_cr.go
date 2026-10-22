@@ -32,6 +32,8 @@ const configSubdir = "data/config"
 
 const maxConfigFileSize = 1 << 20 // 1 MiB; CRs are stored in etcd, capped ~1.5MiB per object
 
+const maxMarkerFileSize = 4 << 10
+
 // rejectSymlink rejects path if mode (from Lstat, not Stat) is a symlink —
 // the upgrade package is untrusted, and following one could copy an arbitrary
 // file (e.g. the pod's ServiceAccount token) into a ConsensusConfig CR.
@@ -45,21 +47,21 @@ func rejectSymlink(path string, mode fs.FileMode) error {
 	)
 }
 
-// rejectOversized returns a terminal error if size exceeds maxConfigFileSize.
-func rejectOversized(path string, size int64) error {
-	if size <= maxConfigFileSize {
+// rejectOversized returns a terminal error if size exceeds limit.
+func rejectOversized(path string, size, limit int64) error {
+	if size <= limit {
 		return nil
 	}
 	return errx.WithHints(
-		errx.WithReason(errConfigFileInvalid.New("config file %q is %d bytes, exceeds the %d byte limit", path, size, maxConfigFileSize), ReasonConfigFileTooLarge),
+		errx.WithReason(errConfigFileInvalid.New("file %q is at least %d bytes, exceeds the %d byte limit", path, size, limit), ReasonConfigFileTooLarge),
 		"Reduce the file size or split it before including it in the upgrade package",
 	)
 }
 
-// readFileNoFollow is os.ReadFile but O_NOFOLLOW, so a symlink is rejected
-// instead of silently followed; non-symlink errors are returned unwrapped.
-func readFileNoFollow(path string) ([]byte, error) {
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+// readFileNoFollow is os.ReadFile but O_NOFOLLOW, regular-file only and capped at limit bytes.
+func readFileNoFollow(path string, limit int64) ([]byte, error) {
+	// O_NONBLOCK: opening a FIFO would otherwise block before the IsRegular check.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, errx.WithHints(
@@ -75,10 +77,20 @@ func readFileNoFollow(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectOversized(path, info.Size()); err != nil {
+	if !info.Mode().IsRegular() {
+		return nil, errx.WithHints(
+			errx.WithReason(errConfigFileInvalid.New("%q is not a regular file (mode %s) — refusing to read", path, info.Mode()), ReasonConfigFileNotRegular),
+			"Remove devices, FIFOs and sockets from the upgrade package; only regular files are accepted",
+		)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
 		return nil, err
 	}
-	return io.ReadAll(f)
+	if err := rejectOversized(path, int64(len(data)), limit); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // isDecorated reports whether err already carries an errx reason.
@@ -201,7 +213,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		if err := rejectSymlink(absPath, info.Mode()); err != nil {
 			return nil, err
 		}
-		if err := rejectOversized(absPath, info.Size()); err != nil {
+		if err := rejectOversized(absPath, info.Size(), maxConfigFileSize); err != nil {
 			return nil, err
 		}
 		if _, skip := ignoredConfigFilenames[name]; skip {
@@ -241,7 +253,7 @@ func scanConfigFiles(upgradePath string) ([]scannedFile, error) {
 		if err := rejectSymlink(path, info.Mode()); err != nil {
 			return nil, err
 		}
-		if err := rejectOversized(path, info.Size()); err != nil {
+		if err := rejectOversized(path, info.Size(), maxConfigFileSize); err != nil {
 			return nil, err
 		}
 		files = append(files, scannedFile{absPath: path, entry: configFileKinds[name]})
@@ -263,7 +275,7 @@ func configCRName(operationID string, entry kindEntry) string {
 // for cascade deletion. The file is read here, one CR at a time, so content is
 // never buffered across multiple files simultaneously.
 func buildConfigCR(cfg ProvisionerProxyConfig, operationID string, sf scannedFile) (*unstructured.Unstructured, error) {
-	data, err := readFileNoFollow(sf.absPath)
+	data, err := readFileNoFollow(sf.absPath, maxConfigFileSize)
 	if err != nil {
 		if isDecorated(err) {
 			return nil, err
@@ -405,7 +417,7 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 		return nil, nil
 	}
 	path := filepath.Join(p.cfg.UpgradePath, blockNodesSubdir, fmt.Sprintf("block-nodes-%d.json", p.cfg.NodeID))
-	info, err := os.Lstat(path) // not Stat: don't follow a symlink
+	data, err := readFileNoFollow(path, maxConfigFileSize)
 	if err != nil {
 		if os.IsNotExist(err) {
 			logx.As().Info().Str("reason", ReasonConfigDirAbsent.String()).
@@ -413,19 +425,6 @@ func (p *ProvisionerProxy) deployBlockNodesConfigCR(ctx context.Context, operati
 				Msg("Skipping: no per-node block-node config in upgrade package")
 			return nil, nil
 		}
-		return nil, errx.WithHints(
-			errx.WithReason(errPersist.Wrap(err, "read block-node config %s", path), ReasonUpgradePathUnreadable),
-			"Confirm the upgrade package was extracted correctly and block-nodes/config/ is readable",
-		)
-	}
-	if err := rejectSymlink(path, info.Mode()); err != nil {
-		return nil, err
-	}
-	if err := rejectOversized(path, info.Size()); err != nil {
-		return nil, err
-	}
-	data, err := readFileNoFollow(path)
-	if err != nil {
 		if isDecorated(err) {
 			return nil, err
 		}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -251,7 +252,7 @@ func TestReadFileNoFollow_RejectsSymlinkSwappedInAfterScan(t *testing.T) {
 		t.Fatalf("swap in symlink: %v", err)
 	}
 
-	_, err := readFileNoFollow(path)
+	_, err := readFileNoFollow(path, maxConfigFileSize)
 	if err == nil {
 		t.Fatal("expected error for symlink swapped in after scan, got nil")
 	}
@@ -392,6 +393,30 @@ func TestScanConfigFiles_rootFileSymlinkRejected(t *testing.T) {
 	}
 	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileSymlink {
 		t.Fatalf("reason: got %q, want %q", reason, ReasonConfigFileSymlink)
+	}
+}
+
+func TestReadFileNoFollow_RejectsFIFO(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "VERSION")
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Skipf("mkfifo unsupported: %v", err)
+	}
+
+	_, err := readFileNoFollow(path, maxMarkerFileSize)
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileNotRegular {
+		t.Fatalf("reason: got %q (err %v), want %q", reason, err, ReasonConfigFileNotRegular)
+	}
+}
+
+func TestReadFileNoFollow_RejectsOverLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "VERSION")
+	if err := os.WriteFile(path, make([]byte, maxMarkerFileSize+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := readFileNoFollow(path, maxMarkerFileSize)
+	if reason, _ := errx.ReasonOf(err); reason != ReasonConfigFileTooLarge {
+		t.Fatalf("reason: got %q (err %v), want %q", reason, err, ReasonConfigFileTooLarge)
 	}
 }
 

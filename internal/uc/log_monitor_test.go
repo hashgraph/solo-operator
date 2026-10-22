@@ -5,6 +5,7 @@ package uc
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,16 @@ func TestParsePlatformStatusLog(t *testing.T) {
 			"empty newStatus",
 			`2024-07-01 00:00:00.000  123 INFO  PLATFORM_STATUS <main> {"oldStatus":"ACTIVE","newStatus":""}`,
 			0, "", false,
+		},
+		{
+			"unrecognised newStatus is canonicalized",
+			`2024-07-01 00:00:00.000  123 INFO  PLATFORM_STATUS <main> {"oldStatus":"ACTIVE","newStatus":"NOT_A_STATUS"}`,
+			operatorv1alpha1.PlatformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown, true,
+		},
+		{
+			"control characters in newStatus are canonicalized",
+			`2024-07-01 00:00:00.000  123 INFO  PLATFORM_STATUS <main> {"oldStatus":"ACTIVE","newStatus":"ACT\u0000IVE\u0007"}`,
+			operatorv1alpha1.PlatformStatusCodeUnknown, operatorv1alpha1.PlatformStatusUnknown, true,
 		},
 	}
 	for _, tc := range cases {
@@ -174,6 +185,94 @@ func TestLogMonitor_Persistence(t *testing.T) {
 	snap := mon2.Snapshot()
 	if snap == nil || snap.Code != 6 || snap.Status != "FREEZE_COMPLETE" {
 		t.Errorf("after restart: snapshot = %+v, want code=6 status=FREEZE_COMPLETE", snap)
+	}
+}
+
+func TestLogMonitor_SkipsOverlongLine(t *testing.T) {
+	mon, logFile := newTailMonitor(t)
+
+	appendLog(t, logFile, strings.Repeat("x", 2*maxLogLineSize)+"\n"+
+		`PLATFORM_STATUS {"oldStatus":"STARTING_UP","newStatus":"ACTIVE"}`+"\n")
+	mon.poll()
+
+	if snap := mon.Snapshot(); snap == nil || snap.Status != operatorv1alpha1.PlatformStatusActive {
+		t.Fatalf("snapshot after over-long line = %+v, want ACTIVE", snap)
+	}
+	assertOffsetAtEOF(t, mon, logFile)
+}
+
+func TestLogMonitor_OverlongUnterminatedLineSpansPolls(t *testing.T) {
+	mon, logFile := newTailMonitor(t)
+
+	appendLog(t, logFile, strings.Repeat("x", 2*maxLogLineSize))
+	mon.poll()
+	assertOffsetAtEOF(t, mon, logFile)
+
+	appendLog(t, logFile, `tail PLATFORM_STATUS {"oldStatus":"STARTING_UP","newStatus":"ACTIVE"}`+"\n")
+	mon.poll()
+	if snap := mon.Snapshot(); snap != nil {
+		t.Fatalf("remainder of a skipped line must not be parsed, got %+v", snap)
+	}
+
+	appendLog(t, logFile, `PLATFORM_STATUS {"oldStatus":"STARTING_UP","newStatus":"BEHIND"}`+"\n")
+	mon.poll()
+	if snap := mon.Snapshot(); snap == nil || snap.Status != operatorv1alpha1.PlatformStatusBehind {
+		t.Fatalf("snapshot = %+v, want BEHIND", snap)
+	}
+	assertOffsetAtEOF(t, mon, logFile)
+}
+
+func TestLogMonitor_PartialLineDeferredToNextPoll(t *testing.T) {
+	mon, logFile := newTailMonitor(t)
+
+	appendLog(t, logFile, "first line\r\n"+`PLATFORM_STATUS {"oldStatus":"STARTING_UP",`)
+	mon.poll()
+	if got, want := mon.offset, int64(len("first line\r\n")); got != want {
+		t.Fatalf("offset after partial line = %d, want %d", got, want)
+	}
+
+	appendLog(t, logFile, `"newStatus":"ACTIVE"}`+"\r\n")
+	mon.poll()
+	if snap := mon.Snapshot(); snap == nil || snap.Status != operatorv1alpha1.PlatformStatusActive {
+		t.Fatalf("snapshot after completing line = %+v, want ACTIVE", snap)
+	}
+	assertOffsetAtEOF(t, mon, logFile)
+}
+
+func TestLogMonitor_LoadPersistedRederivesName(t *testing.T) {
+	dir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.CRPersistPath = dir
+	mon := NewLogMonitor(cfg)
+	if err := os.WriteFile(mon.persistPath, []byte(`{"code":2,"status":"ACT\u0000IVE"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mon.loadPersisted()
+	if snap := mon.Snapshot(); snap == nil || snap.Code != 2 || snap.Status != operatorv1alpha1.PlatformStatusActive {
+		t.Fatalf("restored snapshot = %+v, want code=2 status=ACTIVE", snap)
+	}
+}
+
+func newTailMonitor(t *testing.T) (mon *LogMonitor, logFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	logFile = filepath.Join(dir, "swirlds.log")
+	writeLog(t, logFile, "")
+	cfg := DefaultConfig()
+	cfg.ConsensusLogFile = logFile
+	cfg.CRPersistPath = dir
+	return NewLogMonitor(cfg), logFile
+}
+
+func assertOffsetAtEOF(t *testing.T, mon *LogMonitor, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mon.offset != info.Size() {
+		t.Fatalf("offset = %d, want file size %d", mon.offset, info.Size())
 	}
 }
 

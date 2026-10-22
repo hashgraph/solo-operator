@@ -12,6 +12,7 @@ const (
 	reasonConfigParse          errx.Reason = "ConfigInvalid"
 	reasonUnknownNode          errx.Reason = "UnknownNode"
 	reasonNoNodes              errx.Reason = "NoNodes"
+	reasonInvalidNode          errx.Reason = "InvalidNode"
 	reasonNodeIPWithoutAccount errx.Reason = "NodeIPWithoutAccount"
 	reasonUnknownPayer         errx.Reason = "UnknownPayer"
 	reasonInvalidAccountID     errx.Reason = "InvalidAccountID"
