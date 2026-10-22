@@ -299,6 +299,9 @@ message UpgradePrepare {
 message CandidateRoster {
   bytes  roster = 1;  // the serialized Network message, the bytes candidate-roster.json holds
   string sha256 = 2;  // hex
+  // When the roster takes effect. Unset = at the next upgrade (pair with that upgrade's
+  // upgradeprepare). Set = a scheduled change with no upgrade (future no-freeze path).
+  proto.Timestamp applies_at = 3;
 }
 
 message FreezeScheduled {
@@ -352,7 +355,8 @@ see [Open questions](#open-questions).
 - **`seq`** is the event's **0-based position in the CN's emission order for its trigger**, zero-padded, and the
   **last** field. The CN assigns it as it emits a trigger's events, so it is deterministic and the CN owns the
   order explicitly — nothing is derived from the `EventType` numbering. A trigger that raises one event is `00`;
-  `PREPARE_UPGRADE`, which emits prepare then candidate-roster, gives `00` then `01`.
+  `PREPARE_UPGRADE` emits the **candidate roster first** (`00`), then prepare (`01`), so the data lands before
+  the trigger to act on it.
 
 The ID is deterministic: the same transaction or round yields the same ID on every node and after a restart,
 so the UC dedupes and the CN re-derives it. The software version and the upgrade file hash travel in the
@@ -372,8 +376,8 @@ freeze before frozen regardless of how the bytes happen to arrive (see
 | Registered node created | `registerednodecreate` | txn | `registerednodecreate-rn12-0.0.55_1792400200.000000000-00` | registered node id, block-node endpoints |
 | Registered node updated | `registerednodeupdate` | txn | `registerednodeupdate-rn12-0.0.55_1792400260.000000000-00` | registered node id, changed endpoints |
 | Registered node deleted | `registerednodedelete` | txn | `registerednodedelete-rn12-0.0.55_1792400300.000000000-00` | registered node id |
-| Upgrade prepare ready | `upgradeprepare` | `PREPARE_UPGRADE` txn | `upgradeprepare-n5-0.0.2_1792449990.000000007-00` | upgrade file id and hash, freeze type |
-| Candidate roster ready | `candidaterosterready` | same `PREPARE_UPGRADE` txn | `candidaterosterready-n5-0.0.2_1792449990.000000007-00` | the roster bytes and sha256 |
+| Upgrade prepare ready | `upgradeprepare` | `PREPARE_UPGRADE` txn | `upgradeprepare-n5-0.0.2_1792449990.000000007-01` | upgrade file id and hash, freeze type |
+| Candidate roster ready | `candidaterosterready` | same `PREPARE_UPGRADE` txn | `candidaterosterready-n5-0.0.2_1792449990.000000007-00` | the roster bytes, sha256, and `applies_at` |
 | Upgrade freeze scheduled | `upgradefreeze` | `FREEZE_UPGRADE` txn | `upgradefreeze-n5-0.0.2_1792451000.500000000-00` | freeze time, upgrade file hash |
 | Upgrade aborted | `upgradeabort` | `FREEZE_ABORT` txn | `upgradeabort-n5-0.0.2_1792451500.700000000-00` | aborted freeze time |
 | Upgrade frozen | `upgradefrozen` | freeze round (no txn) | `upgradefrozen-n5-round48211397-00` | freeze round, freeze time |
@@ -396,7 +400,7 @@ still ends in `-00`. The wire format is protobuf; these are for reading.
 { "hello": { "nodeId": "5", "ucVersion": "0.76.1" } }
 ```
 ```json
-{ "ack": { "eventId": "upgradeprepare-n5-0.0.2_1792449990.000000007-00" } }
+{ "ack": { "eventId": "upgradeprepare-n5-0.0.2_1792449990.000000007-01" } }
 ```
 
 `nodecreate` (early warning; subject is node 7):
@@ -426,7 +430,7 @@ still ends in `-00`. The wire format is protobuf; these are for reading.
 ```json
 {
   "schemaVersion": 1,
-  "id": "upgradeprepare-n5-0.0.2_1792449990.000000007-00",
+  "id": "upgradeprepare-n5-0.0.2_1792449990.000000007-01",
   "type": "EVENT_TYPE_UPGRADE_PREPARE",
   "softwareVersion": "0.76.1",
   "cnTime": { "seconds": "1792450007", "nanos": 482000000 },
@@ -545,7 +549,7 @@ wrong. Three layers keep delivery ordered, none of them a cursor:
 **Breaking ties.** Distinct transactions get distinct consensus timestamps, so two events share a
 `consensus_time` only when they come from the **same** trigger — `upgradeprepare` and `candidaterosterready`
 from one `PREPARE_UPGRADE`. The full ordering key is **`(consensus_time, seq)`**, where `seq` is the CN's
-emission index for that trigger (prepare `0`, candidate-roster `1`). The CN maintains this order as it emits,
+emission index for that trigger (candidate-roster `0`, prepare `1`). The CN maintains this order as it emits,
 so it is explicit and deterministic — it is **not** derived from the `EventType` numbering, which the CN team
 can renumber freely. Every node emits a trigger's events in the same order, so resend and reconcile replay it
 the same way. This particular tie is benign anyway — the UC holds the Prepare CR until both prepare and roster
@@ -797,22 +801,33 @@ handleEvent(e, stream):
 
 | Event | UC action |
 |---|---|
-| `upgradeprepare` + `candidaterosterready` | Build one `NetworkUpgradePrepare` CR. **Hold until both arrive** (or the wait ends), because the Prepare spec is immutable — create once, with the roster in `spec.artifacts`. |
+| `candidaterosterready` | **Store** the roster, keyed by its operation; no CR yet. It arrives before `upgradeprepare`, so it is pre-positioned. |
+| `upgradeprepare` | Build the `NetworkUpgradePrepare` CR **once**, with the stored roster in `spec.artifacts` (the Prepare spec is immutable, so it must be complete at creation). |
 | `upgradefreeze` | Build `NetworkUpgradeFreeze`. |
 | `upgradeabort` | Build `NetworkUpgradeFreezeAbort`. |
 | `upgradefrozen` | Build `NetworkUpgradeExecute`. |
 | `rosteradoption` | Record the adoption result on the UC pod condition (today's `roster_adoption` path), for the operator to proxy. |
 | `nodecreate/update/delete`, `registerednode*` | Early-warning signal; no CR by itself. Surface for the operator's roster-diff and firewall pre-checks. |
 
-The roster comes from the `candidaterosterready` payload, checked against its `sha256`, not from a file. When
-no stream event arrives (marker-only mode, or a lost connection before the CN is ready), the UC falls back to
-reading `candidate-roster.json`, as today.
+**The roster is pre-positioned, not awaited on a timer.** The CN emits `candidaterosterready` before
+`upgradeprepare`, and the durable channel redelivers it until acked, so by the time the UC handles
+`upgradeprepare` it normally already holds the roster. If it does not (a stream hiccup mid-trigger), the UC
+holds `upgradeprepare` and retries — it never times out waiting, because delivery is guaranteed. The only
+genuine-absence case (the CN produced no roster at all) falls back to the marker-file policy: proceed with a
+warning, or hold if `--candidate-roster-required`. The roster is taken from the `candidaterosterready` payload,
+checked against its `sha256`; in marker-only mode the UC reads `candidate-roster.json` as today.
 
-**Apply in order, and hold on a missing prerequisite.** The UC processes events in `consensus_time` order. For
-the upgrade chain it checks the prerequisite CR before acting: `upgradefreeze` waits until the Prepare CR for
-its operation exists, `upgradefrozen` until the Freeze CR exists. If the prerequisite is missing, the UC
-leaves the event persisted and retries rather than creating a downstream CR early. This is a safety net on top
-of the CN's ordering, so a stray reorder can never produce a Freeze CR without a Prepare CR.
+**When a roster is not tied to an upgrade.** A `candidaterosterready` carries `applies_at`. Unset means it
+applies at the next upgrade, and the UC pairs it with that upgrade's `upgradeprepare` as above. Set means a
+scheduled roster change with no upgrade — for example a daily DAB roster update — which the UC stores and
+applies at `applies_at` through the no-freeze path. That path is not yet designed (see the marker-file
+design's future section); `applies_at` is the field that will carry it.
+
+**Apply in order, and hold on a missing prerequisite.** The UC processes events in `consensus_time` order and
+checks each event's prerequisite before acting: `upgradeprepare` needs the stored roster, `upgradefreeze` the
+Prepare CR for its operation, `upgradefrozen` the Freeze CR. If the prerequisite is missing, the UC leaves the
+event persisted and retries rather than acting early. This is a safety net on top of the CN's ordering, so a
+stray reorder can never create a Prepare CR without its roster or a Freeze CR without a Prepare CR.
 
 ## Observability (UC)
 
