@@ -259,6 +259,7 @@ message Event {
   proto.Timestamp consensus_time   = 9;  // ORDERING KEY: consensus time of the txn, or the round's
                                          // consensus time for round-based events. Monotonic and
                                          // deterministic across nodes and restarts. Not cn_time.
+                                         // Ties (same txn) break by (type, seq).
 
   // Exactly one identifies the trigger and seeds the id. A payload may repeat it.
   proto.TransactionID txn_id = 7;  // transaction-driven events; carries nonce for atomic batches
@@ -537,6 +538,15 @@ wrong. Three layers keep delivery ordered, none of them a cursor:
    upgrade chain, holds an event whose prerequisite CR is not yet present (an `upgradefreeze` waits until the
    Prepare CR for its operation exists) and retries, rather than creating a downstream CR early. This covers
    any residual reordering without trusting arrival order.
+
+**Breaking ties.** Distinct transactions get distinct consensus timestamps, so two events share a
+`consensus_time` only when they come from the **same** transaction — `upgradeprepare` and
+`candidaterosterready` from one `PREPARE_UPGRADE`. The full ordering key is therefore `(consensus_time, type,
+seq)`: the `EventType` number orders different types from one transaction (the enum is numbered so
+`UPGRADE_PREPARE` precedes `CANDIDATE_ROSTER_READY`), and `seq` orders same-type events. The CN emits a
+transaction's events in this order deterministically, so every node agrees and resend and reconcile replay it
+the same way. This particular tie is benign anyway — the UC holds the Prepare CR until both prepare and roster
+arrive — so the tiebreaker is really about keeping the CN's emission stable rather than about correctness.
 
 ### Resume without a cursor
 
