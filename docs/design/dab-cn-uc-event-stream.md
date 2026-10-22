@@ -558,10 +558,9 @@ arrive — so the tiebreaker is really about keeping the CN's emission stable ra
 ### Resume without a cursor
 
 On every connect the CN resends its **unacked** events — the ones it has no ack for in its own outbox — and the
-UC **dedupes by `Event.id`** as a safety net (an ack may have been in flight when the link dropped). The CN
-decides this from its own records, so the UC never sends a cursor. That avoids the "epoch" problem: if the
-CN's outbox volume were recreated and a sequence restarted from zero, a cursor-based UC could skip new events
-silently; here there is no sequence to fall out of step. The retained set is tiny, so the resend is cheap.
+UC **dedupes by `Event.id`** as a safety net (an ack may have been in flight when the link dropped). The UC
+never tracks a resume position; the CN decides what to resend from its own records, and the retained set is
+tiny, so the resend is cheap.
 
 The CN keeps a small window of **acked** events too, and resends those only to rebuild a UC that lost its
 inbox (for example an `emptyDir` wiped on pod recreation); a UC with its inbox intact dedupes them away.
@@ -991,11 +990,12 @@ rebuild a trigger's events in the same canonical order to reproduce them. The fu
 re-emits events "now", so their wall-clock times collapse to the restart moment. `consensus_time` is fixed in
 state, monotonic and identical on every node, so it is the only sound ordering key.
 
-**Why resend on reconnect instead of a cursor?**
+**Why resend on reconnect instead of using a cursor?**
 
-A cursor (the UC telling the CN "I'm at position N") breaks if the CN's outbox volume is recreated and a
-sequence restarts from zero — the UC could skip events silently. Instead the CN resends its unacked events
-from its own records and the UC dedupes by `Event.id`. The set is tiny, so the resend is cheap.
+A cursor would have the UC track a resume position and the CN send only what is newer. Resend-plus-dedupe is
+simpler: the CN resends its unacked events, the UC drops duplicates by `Event.id`, and neither side tracks a
+position. The event volume is tiny, so resending costs nothing, and because the IDs are stable it stays correct
+even if the CN's storage is recreated.
 
 ## References
 
