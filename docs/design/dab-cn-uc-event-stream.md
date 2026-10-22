@@ -160,9 +160,8 @@ solo-operator already depends on. The only shared artifact is the `.proto`; each
 
 - **The UC paces the CN by consuming.** It receives an event, persists and acks it, then receives the next.
   While it is busy it does not receive, the HTTP/2 window is not replenished, and the CN's next send waits.
-- **No application-level credit field.** The transport window, the per-event ack, and the bounded disk log
-  are enough. This mirrors the block-node publish stream, which relies on gRPC demand plus a per-block ack
-  plus a bounded buffer — not a custom credit protocol.
+  The transport window, the per-event ack and the bounded disk log give enough backpressure; there is no
+  application-level credit field.
 - **The CN never pauses consensus for this channel.** When its log is over cap it drops (see
   [Bounds against a runaway CN](#bounds-against-a-runaway-cn)), the opposite of the block buffer, which pauses
   block production and never drops. Same transport mechanism, opposite overflow policy, because a block is
