@@ -138,8 +138,7 @@ names which addresses need the gossip port reachable at each phase. The operator
 **backend-agnostic** — it never produces nftables/iptables/cloud rules and never tracks what is
 applied. Translating intent into real rules, applying them idempotently and keeping the applied-rule
 state is the **`solo-provisioner` CLI's** job; the daemon only invokes it. See the
-[FirewallPlan reference](#firewallplan-detail). The detailed field layout is still being finalised on
-the firewall-plan track.
+[FirewallPlan reference](#firewallplan-detail) for the fields.
 
 ## When the operator acts
 
@@ -468,8 +467,9 @@ path for a removed node, moving a state for a new node — works the same.
 
 ## FirewallPlan detail
 
-> **Being finalised (firewall-plan track).** The field layout below is the current shape and may
-> change. The **responsibility split is settled**; the plan's exact format is not.
+The `FirewallPlan` type carries a logical `rule` handle, three `address:port` membership lists and
+two digests. The responsibility split below is the contract — the operator owns none of the rule
+mechanics.
 
 **Who owns what.**
 
@@ -483,14 +483,16 @@ path for a removed node, moving a state for a new node — works the same.
   inventory, convergence on a retry, and rollback of its own partial changes. This state is never
   visible to the operator.
 
-`FirewallPlan` expresses the intent as three **complete** membership lists (not diffs), so the CLI
-converges on whichever it is handed:
+The operator writes a logical `rule` handle (the CLI maps it to concrete rules and owns the protocol)
+and three **complete** membership lists of `address:port` entries — not diffs, so the CLI converges
+on whichever it is handed. The port rides each entry, so a per-node gossip port stays with its
+address.
 
 | List | Contents | Applied |
 |---|---|---|
-| `rollback` | Addresses of the roster in use before this upgrade | On abort |
-| `transition` | Union of in-use and candidate addresses | Before the restart |
-| `target` | Candidate addresses only | After the Execute CR succeeds |
+| `rollback` | The roster's gossip `address:port` entries in use before this upgrade | On abort |
+| `transition` | Union of the in-use and candidate entries | Before the restart |
+| `target` | Candidate entries only | After the Execute CR succeeds |
 
 `digest` is a cheap change-detector for the handoff; the authoritative applied state lives in the
 CLI. `rosterDigest` ties the plan to one roster.
