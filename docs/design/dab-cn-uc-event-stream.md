@@ -960,6 +960,43 @@ Referenced by symbol, not line number. Verified as of **hiero-consensus-node `ma
 | Metrics server | `internal/uc/metrics_server.go` | Prometheus endpoint (port 9990) |
 | Data volume root | `internal/resources/consensus/defaults.go` | `UCDataPath` (`/opt/solo/weaver/uc`) |
 
+## FAQ
+
+Short answers to questions that come up about the design. These record current thinking, not final rules.
+
+**How is an event's `seq` assigned, and what is "emission order"?**
+
+Every event comes from one *trigger* — a transaction (its consensus timestamp) or a round. The CN applies
+transactions on a single handle thread in consensus order; handling one trigger may fire several events, and
+the `emit(...)` calls happen in a fixed code order. That order is the "emission order". `seq` is just a counter
+scoped to the trigger:
+
+```
+onTrigger(consensus_time):     # one transaction or one round
+    i = 0
+    for each event the handler emits, in code order:
+        event.seq = i
+        i = i + 1
+```
+
+So `PREPARE_UPGRADE` emits the candidate roster (`seq 0`) then prepare (`seq 1`); a trigger that emits one
+event gets `seq 0`, and the counter resets for the next trigger. It is deterministic because every node runs
+the same handler code on the same trigger, so the `seq` values match everywhere — and restart-reconcile must
+rebuild a trigger's events in the same canonical order to reproduce them. The full order is
+`(consensus_time, seq)`.
+
+**Why order by `consensus_time` and not `cn_time`?**
+
+`cn_time` is wall-clock emit time, useful for logging. It cannot order events across a restart: reconcile
+re-emits events "now", so their wall-clock times collapse to the restart moment. `consensus_time` is fixed in
+state, monotonic and identical on every node, so it is the only sound ordering key.
+
+**Why resend on reconnect instead of a cursor?**
+
+A cursor (the UC telling the CN "I'm at position N") breaks if the CN's outbox volume is recreated and a
+sequence restarts from zero — the UC could skip events silently. Instead the CN resends its unacked events
+from its own records and the UC dedupes by `Event.id`. The set is tiny, so the resend is cheap.
+
 ## References
 
 - [Marker-file design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) — the companion design: operator, firewall and roster diff.
