@@ -2,80 +2,64 @@
 
 package v1alpha1
 
-// FirewallProto is the L4 protocol a firewall allow rule matches. It mirrors the
-// protocols solo-provisioner's host firewall accepts (`network firewall create-allow-rule --proto`).
-// +kubebuilder:validation:Enum=tcp;udp
-type FirewallProto string
-
-const (
-	FirewallProtoTCP FirewallProto = "tcp"
-	FirewallProtoUDP FirewallProto = "udp"
-)
-
-// FirewallPlan is the operator-computed host firewall change for one upgrade: the
-// membership the named allow rule must hold at each stage of the upgrade, so the
-// provisioner daemon applies it with `network firewall set` and holds no roster
-// logic of its own.
+// FirewallPlan is the operator's declaration of the host-firewall intent for one
+// upgrade: which peer gossip addresses a named allow rule must admit at each stage.
+// It is intent, not a concrete firewall rule. The operator is backend-agnostic: it
+// never produces nftables/iptables/cloud rules and never tracks what is applied.
+// Translating the intent into real rules, resolving any hostnames, applying them
+// idempotently and keeping the applied-rule state is the solo-provisioner CLI's job;
+// the provisioner daemon only invokes the CLI and holds no roster logic of its own.
 //
-// The operator computes it in NetworkUpgradePrepare.status by diffing the
-// candidate roster (spec.artifacts) against the last-applied roster, and copies it
-// verbatim into NetworkUpgradeExecute.status when the Execute CR is created. The
-// daemon only reads it.
+// The operator computes it in NetworkUpgradePrepare.status by diffing the candidate
+// roster (spec.artifacts) against the last-applied roster, and copies it verbatim
+// into NetworkUpgradeExecute.status when the Execute CR is created.
 //
-// Each list is the complete desired membership of the rule, never a diff. `set`
-// replaces the whole list atomically and is idempotent, so a retry or a daemon
-// restart converges on the same state without drift.
+// Each list is the complete desired membership for a stage, never a diff, so the CLI
+// converges on whichever list it is handed; a retry or a daemon restart reaches the
+// same state without drift.
 //
-// Entries are IP addresses, CIDRs or FQDNs, as the host firewall accepts. The
-// operator must reject unspecified, loopback and multicast addresses before it
-// writes the plan: the daemon applies whatever the plan names. A node's gossip
-// endpoint is set by that node's own admin key, so this list is attacker-influenced
-// input to every peer's firewall and is limited to the gossip port(s) below.
+// Entries are "address:port", where address is an IPv4 or an FQDN taken from the
+// roster's gossip endpoints and port is a single port or an inclusive range
+// ("50111-50112"). A node's gossip endpoint is set by that node's own admin key, so
+// an entry is attacker-influenced input to every peer's firewall: the operator must
+// reject unspecified, loopback and multicast addresses before it writes the plan.
 type FirewallPlan struct {
-	// Rule is the named allow rule on the host firewall. It must not be one of the
-	// reserved blocks (mgmt, blocked, in_cluster).
+	// Rule is the logical allow rule the CLI maps to concrete host-firewall rules. The
+	// CLI owns the rule's protocol and rejects names that collide with its own reserved
+	// blocks; the operator only names the set.
 	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9_-]{0,31}$`
-	// +kubebuilder:validation:XValidation:rule="!(self in ['mgmt','blocked','in_cluster'])",message="rule must not be a reserved firewall block"
 	Rule string `json:"rule"`
 
-	// Proto is the protocol the rule's ports match. Defaults to tcp.
-	// +optional
-	// +kubebuilder:default=tcp
-	Proto FirewallProto `json:"proto,omitempty"`
-
-	// Ports are the destination ports (or inclusive ranges like "50111-50112")
-	// the rule admits. Taken from the roster's gossip endpoints.
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=16
-	// +kubebuilder:validation:items:Pattern=`^[0-9]{1,5}(-[0-9]{1,5})?$`
-	Ports []string `json:"ports"`
-
 	// Rollback is the membership before this upgrade (the active roster's gossip
-	// addresses). The daemon restores it if the upgrade is aborted.
+	// addresses). The CLI restores it if the upgrade is aborted.
 	// +kubebuilder:validation:MaxItems=256
-	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:MaxLength=266
+	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$`
 	Rollback []string `json:"rollback"`
 
-	// Transition is the membership to install before the node restarts: the union
-	// of the active and candidate rosters, so a peer can reach a changed address
-	// and the old one still works until the upgrade has succeeded.
+	// Transition is the membership to install before the node restarts: the union of
+	// the active and candidate rosters, so a peer can reach a changed address while the
+	// old one still works until the upgrade has succeeded.
 	// +kubebuilder:validation:MaxItems=256
-	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:MaxLength=266
+	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$`
 	Transition []string `json:"transition"`
 
-	// Target is the final membership, applied once the Execute CR has succeeded:
-	// the candidate roster's gossip addresses only.
+	// Target is the final membership, applied once the Execute CR has succeeded: the
+	// candidate roster's gossip addresses only.
 	// +kubebuilder:validation:MaxItems=256
-	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:MaxLength=266
+	// +kubebuilder:validation:items:Pattern=`^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$`
 	Target []string `json:"target"`
 
-	// RosterDigest is the sha256 of the candidate-roster artifact the plan was
-	// computed from, tying the plan to exactly one roster.
+	// RosterDigest is the sha256 of the candidate-roster artifact the plan was computed
+	// from, tying the plan to exactly one roster.
 	RosterDigest Sha256Digest `json:"rosterDigest"`
 
-	// Digest is the sha256 over the canonical form of the fields above. The daemon
-	// records the last digest it applied and skips the change when it matches, so
-	// a re-delivered plan is a no-op.
+	// Digest is the sha256 over the canonical form of the fields above. It is a cheap
+	// skip-hint so the daemon can avoid a no-op CLI call; it is not the correctness
+	// mechanism. The authoritative applied state lives in the CLI, which converges on
+	// the plan each time it runs.
 	Digest Sha256Digest `json:"digest"`
 }
 
@@ -86,9 +70,10 @@ const (
 	// reason of NoChange when the roster implies no firewall change).
 	CondFirewallPlanComputed = "FirewallPlanComputed"
 
-	// CondFirewallApplied is set on NetworkUpgradeExecute by the provisioner daemon.
-	// Its reason records the stage last applied: Transition, Target or RolledBack.
-	// Status False is a terminal failure for the Execute CR, like DaemonResult=False.
+	// CondFirewallApplied is set on NetworkUpgradeExecute by the provisioner daemon
+	// after it invokes the CLI. Its reason records the stage last applied: Transition,
+	// Target or RolledBack. Status False is a terminal failure for the Execute CR, like
+	// DaemonResult=False.
 	CondFirewallApplied = "FirewallApplied"
 )
 
