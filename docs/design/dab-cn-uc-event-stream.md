@@ -255,15 +255,16 @@ message Event {
   EventType       type             = 3;
   string          software_version = 4;  // the version the CN is running now
   proto.Timestamp cn_time          = 5;  // wall-clock emit time, for logging only
-  uint32          seq              = 6;  // 0 unless one txn raises >1 of this type for this subject
-  proto.Timestamp consensus_time   = 9;  // ORDERING KEY: consensus time of the txn, or the round's
-                                         // consensus time for round-based events. Monotonic and
-                                         // deterministic across nodes and restarts. Not cn_time.
-                                         // Ties (same txn) break by (type, seq).
+  uint32          seq              = 6;  // 0-based emission index within this trigger; the CN assigns it in
+                                         // emit order. Not derived from EventType. (consensus_time, seq) is
+                                         // the total order.
+  proto.Timestamp consensus_time   = 9;  // ORDERING KEY: consensus time of the txn, or the round's consensus
+                                         // time when there is no txn. Monotonic and deterministic across
+                                         // nodes and restarts. Not cn_time. Ties (same trigger) break by seq.
 
   // Exactly one identifies the trigger and seeds the id. A payload may repeat it.
   proto.TransactionID txn_id = 7;  // transaction-driven events; carries nonce for atomic batches
-  uint64              round  = 8;  // platform events (frozen, adoption)
+  uint64              round  = 8;  // events with no txn: the round they were emitted in (frozen, adoption)
 
   oneof payload {
     NodeChange           node_change            = 16;
@@ -345,11 +346,13 @@ see [Open questions](#open-questions).
   **subject** (the node that changed); for an upgrade event it is the **emitting** node, which each CN fills
   with its own id.
 - **`trigger`** is the `TransactionID` for a transaction-driven event, rendered `<payer>_<sec>.<nanos>` (the
-  canonical `@` replaced with `_` to stay name-safe), or `round<N>` for a platform event with no transaction.
-  For an **inner transaction of an atomic batch** the nonzero `nonce` is appended as `_n<nonce>`.
-- **`seq`** is a zero-padded tiebreaker, `00` by default, and the **last** field so the meaningful parts stay
-  up front and it sorts correctly within a group. It moves past `00` only when one transaction raises more
-  than one event of the **same** type for the **same** subject.
+  canonical `@` replaced with `_` to stay name-safe). An event with **no transaction** is anchored to the round
+  it is emitted in, rendered `round<N>` — there is always a current round, so every event has a trigger. For an
+  **inner transaction of an atomic batch** the nonzero `nonce` is appended as `_n<nonce>`.
+- **`seq`** is the event's **0-based position in the CN's emission order for its trigger**, zero-padded, and the
+  **last** field. The CN assigns it as it emits a trigger's events, so it is deterministic and the CN owns the
+  order explicitly — nothing is derived from the `EventType` numbering. A trigger that raises one event is `00`;
+  `PREPARE_UPGRADE`, which emits prepare then candidate-roster, gives `00` then `01`.
 
 The ID is deterministic: the same transaction or round yields the same ID on every node and after a restart,
 so the UC dedupes and the CN re-derives it. The software version and the upgrade file hash travel in the
@@ -540,11 +543,11 @@ wrong. Three layers keep delivery ordered, none of them a cursor:
    any residual reordering without trusting arrival order.
 
 **Breaking ties.** Distinct transactions get distinct consensus timestamps, so two events share a
-`consensus_time` only when they come from the **same** transaction — `upgradeprepare` and
-`candidaterosterready` from one `PREPARE_UPGRADE`. The full ordering key is therefore `(consensus_time, type,
-seq)`: the `EventType` number orders different types from one transaction (the enum is numbered so
-`UPGRADE_PREPARE` precedes `CANDIDATE_ROSTER_READY`), and `seq` orders same-type events. The CN emits a
-transaction's events in this order deterministically, so every node agrees and resend and reconcile replay it
+`consensus_time` only when they come from the **same** trigger — `upgradeprepare` and `candidaterosterready`
+from one `PREPARE_UPGRADE`. The full ordering key is **`(consensus_time, seq)`**, where `seq` is the CN's
+emission index for that trigger (prepare `0`, candidate-roster `1`). The CN maintains this order as it emits,
+so it is explicit and deterministic — it is **not** derived from the `EventType` numbering, which the CN team
+can renumber freely. Every node emits a trigger's events in the same order, so resend and reconcile replay it
 the same way. This particular tie is benign anyway — the UC holds the Prepare CR until both prepare and roster
 arrive — so the tiebreaker is really about keeping the CN's emission stable rather than about correctness.
 
