@@ -759,7 +759,7 @@ acks, then feeds the existing handlers, which already dedupe by `operationId` an
 
 Downstream, the `NetworkUpgrade*` CRs the UC creates are reconciled by the operator — the roster diff, the
 firewall plan and the key rotation. That work is covered by the companion
-[DAB operator and firewall design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md)
+[DAB operator and firewall design](https://github.com/hashgraph/solo-operator/pull/1437)
 and does not change with this transport. The UC forwards events and builds CRs; it does not interpret the
 roster itself.
 
@@ -1015,7 +1015,7 @@ The event volume is tiny, so resending costs nothing.
 
 ## References
 
-- [DAB operator and firewall design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) — the companion design: operator, firewall, roster diff and key rotation.
+- [DAB operator and firewall design](https://github.com/hashgraph/solo-operator/pull/1437) — the companion design: operator, firewall, roster diff and key rotation.
 - [HIP-1494](https://hips.hedera.com/hip/hip-1494) — upgrade package.
 - [HIP-1495](https://hips.hedera.com/hip/hip-1495) — Kubernetes-native deployment.
 - [HIP-1496](https://hips.hedera.com/hip/hip-1496) — network upgrade process.
