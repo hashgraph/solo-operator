@@ -256,6 +256,9 @@ message Event {
   string          software_version = 4;  // the version the CN is running now
   proto.Timestamp cn_time          = 5;  // wall-clock emit time, for logging only
   uint32          seq              = 6;  // 0 unless one txn raises >1 of this type for this subject
+  proto.Timestamp consensus_time   = 9;  // ORDERING KEY: consensus time of the txn, or the round's
+                                         // consensus time for round-based events. Monotonic and
+                                         // deterministic across nodes and restarts. Not cn_time.
 
   // Exactly one identifies the trigger and seeds the id. A payload may repeat it.
   proto.TransactionID txn_id = 7;  // transaction-driven events; carries nonce for atomic batches
@@ -350,6 +353,12 @@ see [Open questions](#open-questions).
 The ID is deterministic: the same transaction or round yields the same ID on every node and after a restart,
 so the UC dedupes and the CN re-derives it. The software version and the upgrade file hash travel in the
 payload, not the ID.
+
+**Ordering.** The ID identifies an event; it does not order it. Every event also carries `consensus_time` —
+the consensus timestamp of its triggering transaction, or the round's consensus time for a round-based event.
+That is the ordering key: monotonic, deterministic, and the same on every node, so prepare sorts before
+freeze before frozen regardless of how the bytes happen to arrive (see
+[Ordering and out-of-order delivery](#ordering-and-out-of-order-delivery)).
 
 | Event | `type` | Trigger | Example id | Key payload |
 |---|---|---|---|---|
@@ -507,9 +516,27 @@ stateDiagram-v2
 | CN restarting | The outbox plus the state scan rebuild the events with the same ids. The UC dedupes the resend. |
 | Adoption at CN start-up | The server and writer must already be up before `initializeStatesApi`, so the adoption event has somewhere to go. Neither needs the platform or the node key. |
 | Duplicates | Expected and harmless: ids are deterministic and the UC dedupes. |
-| Out-of-order | Fine: the UC reconciles to current state, it does not replay a strict sequence. |
+| Out-of-order | A single stream preserves send order; on resend and reconcile the CN orders by `consensus_time`; the UC also holds an event whose prerequisite is missing (see [Ordering](#ordering-and-out-of-order-delivery)). |
 | Over cap (runaway CN) | Drop the oldest, loudly, and alert. Never block. |
 | Forged ack | Costs durability only (see [Trust model](#trust-model)). |
+
+### Ordering and out-of-order delivery
+
+Order matters: the upgrade events form a chain (`upgradeprepare` → `upgradefreeze` → `upgradefrozen` →
+`rosteradoption`), and creating a downstream CR before its upstream one — a Freeze CR with no Prepare CR — is
+wrong. Three layers keep delivery ordered, none of them a cursor:
+
+1. **A single stream preserves order.** gRPC over HTTP/2 delivers one stream's messages in send order, and the
+   CN sends in emit order (the handle thread enqueues in consensus order). So on a healthy connection the UC
+   receives prepare before freeze before frozen.
+2. **The CN orders by `consensus_time` on resend and reconcile.** After a reconnect it replays its outbox in
+   `consensus_time` order; after a restart it emits the events it rebuilds from state in that order too. This
+   is why the key is the **consensus** timestamp and not `cn_time`: reconstructed events are emitted "now", so
+   their wall-clock times collapse and cannot order them, while `consensus_time` is fixed in state.
+3. **The UC enforces prerequisites as a safety net.** It applies events in `consensus_time` order and, for the
+   upgrade chain, holds an event whose prerequisite CR is not yet present (an `upgradefreeze` waits until the
+   Prepare CR for its operation exists) and retries, rather than creating a downstream CR early. This covers
+   any residual reordering without trusting arrival order.
 
 ### Resume without a cursor
 
@@ -655,6 +682,10 @@ onStart():                              # before initializeStatesApi
 An abort and the DAB events are not in state, so the outbox is their only record; if the outbox is lost, the UC's
 own "scheduled then neither scheduled nor frozen" inference still catches an abort.
 
+When the stream reconnects after this, the CN sends the outbox in **`consensus_time` order**, so a UC that
+missed events during the restart still receives them prepare-before-freeze (see
+[Ordering](#ordering-and-out-of-order-delivery)).
+
 ## Threading and start-up order
 
 - **Handle thread:** only `queue.offer`. No IO, no lock held across the stream.
@@ -764,6 +795,12 @@ The roster comes from the `candidaterosterready` payload, checked against its `s
 no stream event arrives (marker-only mode, or a lost connection before the CN is ready), the UC falls back to
 reading `candidate-roster.json`, as today.
 
+**Apply in order, and hold on a missing prerequisite.** The UC processes events in `consensus_time` order. For
+the upgrade chain it checks the prerequisite CR before acting: `upgradefreeze` waits until the Prepare CR for
+its operation exists, `upgradefrozen` until the Freeze CR exists. If the prerequisite is missing, the UC
+leaves the event persisted and retries rather than creating a downstream CR early. This is a safety net on top
+of the CN's ordering, so a stray reorder can never produce a Freeze CR without a Prepare CR.
+
 ## Observability (UC)
 
 The UC has its own Prometheus endpoint (its metrics server, port 9990), separate from the CN's platform
@@ -839,8 +876,10 @@ HIP-1494's two-upgrade pattern:
 ## Open questions
 
 1. **Ownership and schema.** Who builds the CN server and owns the `.proto`, and which release carries it.
-2. **TransactionID at emit time.** Confirm a handler can read the `TransactionID` when it emits a
-   transaction-driven event, and the round for the two platform events (it is in state).
+2. **TransactionID and consensus time at emit.** Confirm a handler can read the `TransactionID` and the
+   **consensus timestamp** when it emits a transaction-driven event, and the round plus the round's consensus
+   time for the two platform events (both should be in state). `consensus_time` is the ordering key, so it
+   must be available for every event.
 3. **Re-derivable ids for prepare and abort.** Their trigger time is not in state, so a lost outbox plus a restart
    scan could re-emit them with a different id. The UC guard (ignore a prepare when a non-terminal operation
    already exists for the same upgrade file hash) covers this; confirm it is enough, or store the prepare's
