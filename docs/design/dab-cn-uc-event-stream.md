@@ -5,8 +5,7 @@ address book (DAB) events, over one long-lived gRPC stream, durably enough that 
 side loses nothing. This channel replaces the marker files the CN writes today.
 
 **Status:** Needs a CN code change (the server and the schema) and a UC
-code change (the client). The [marker-file design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) covers the
-operator, firewall and roster-diff work, which does not change with the transport.
+code change (the client).
 
 ## How to read this document
 
@@ -49,7 +48,7 @@ This design gives the CN a push channel to the UC that is immediate, carries str
 
 ## Non-goals
 
-- Changing the operator, the firewall plan or the roster diff (see the marker-file design).
+- Changing the operator, the firewall plan or the roster diff (see the DAB operator and firewall design).
 - Carrying the block stream or any consensus data. This is a side channel for upgrade and DAB events only.
 - A fleet-wide aggregation service. Each UC talks only to its own CN.
 - Authentication or encryption (see [Trust model](#trust-model) for why).
@@ -337,7 +336,7 @@ message Endpoint {
 ```
 
 The roster travels as `bytes` (the serialized `Network` message) so the UC forwards it verbatim without
-parsing, matching the marker-file design. Reusing the typed `Network` message is an option for the CN team;
+parsing, matching the DAB operator and firewall design. Reusing the typed `Network` message is an option for the CN team;
 see [Open questions](#open-questions).
 
 ## Events and their IDs
@@ -758,6 +757,12 @@ This part assumes familiarity with solo-operator's `internal/uc`. Symbols are in
 The UC gains a gRPC client event source beside `MarkerMonitor`. It receives events, stores each durably,
 acks, then feeds the existing handlers, which already dedupe by `operationId` and persist before acting.
 
+Downstream, the `NetworkUpgrade*` CRs the UC creates are reconciled by the operator — the roster diff, the
+firewall plan and the key rotation. That work is covered by the companion
+[DAB operator and firewall design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md)
+and does not change with this transport. The UC forwards events and builds CRs; it does not interpret the
+roster itself.
+
 ## Client lifecycle
 
 ```
@@ -1010,7 +1015,7 @@ The event volume is tiny, so resending costs nothing.
 
 ## References
 
-- [Marker-file design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) — the companion design: operator, firewall and roster diff.
+- [DAB operator and firewall design](https://github.com/hashgraph/solo-operator/blob/feat/dab-firewall-plan/docs/design/dab-key-rotation-and-firewall-marker-file.md) — the companion design: operator, firewall, roster diff and key rotation.
 - [HIP-1494](https://hips.hedera.com/hip/hip-1494) — upgrade package.
 - [HIP-1495](https://hips.hedera.com/hip/hip-1495) — Kubernetes-native deployment.
 - [HIP-1496](https://hips.hedera.com/hip/hip-1496) — network upgrade process.
