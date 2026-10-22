@@ -62,8 +62,8 @@ This design gives the CN a push channel to the UC that is immediate, carries str
 | UC | — | Upgrade Coordinator, the sidecar container beside the CN (Go, part of solo-operator). |
 | Event | both | One notification the CN sends the UC (a DAB change, an upgrade step, an adoption result). |
 | Trigger | both | What caused an event: a transaction, or a consensus round. Seeds the event ID. |
-| Outbox / disk log | both | The CN's on-disk record of events, kept until the UC acks them. |
-| Inbox | both | The UC's on-disk record of received events, for replay after a UC restart. |
+| Outbox | CN | The CN's durable store of emitted events, kept until the UC acks them. A mounted volume: a PVC in cluster-only mode, a hostPath mount on mainnet. |
+| Inbox | UC | The UC's durable store of received events, for replay after a UC restart. Same volume model as the outbox. |
 | Marker file | CN | The legacy signal: a small file the CN writes and the UC polls for. |
 | Handle thread | CN | The single thread that applies transactions in consensus order. Must never block. |
 | PCES replay | CN | On restart, the CN re-applies rounds after the last saved state from the pre-consensus event stream. |
@@ -80,7 +80,7 @@ This design gives the CN a push channel to the UC that is immediate, carries str
 2. Each event carries a deterministic ID and a typed payload.
 3. The UC acknowledges an event only after it has stored it durably.
 4. The CN keeps an unacked event and redelivers it after any disconnect.
-5. After a CN restart, the CN reproduces any event that state still implies but the log is missing.
+5. After a CN restart, the CN reproduces any event that state still implies but the outbox is missing.
 6. The marker files keep working until configuration turns them off.
 
 **Non-functional** (proposed defaults; tune per environment)
@@ -106,7 +106,7 @@ flowchart TB
     subgraph pod[Consensus pod]
         subgraph cn[CN container]
             H[Handle thread] -->|enqueue| W[Writer thread]
-            W -->|append + fsync| LOG[("data/upgrade/uc")]
+            W -->|append + fsync| OUT[("outbox: data/upgrade/uc")]
             W --> SRV[gRPC server on 127.0.0.1]
         end
         subgraph uc[UC container]
@@ -120,8 +120,8 @@ flowchart TB
 ```
 
 - The CN **serves**; the UC **connects**. The port is bound to `127.0.0.1` only.
-- The CN's log lives on the `upgrade` volume; the UC's inbox on the `uc-data` volume. Both are PVCs on
-  mainnet, so they survive a pod restart.
+- The CN's outbox lives on the `upgrade` volume; the UC's inbox on the `uc-data` volume. Both are mounted
+  volumes — a PVC in cluster-only mode, a hostPath mount on mainnet — so they survive a pod restart.
 
 ## The connection
 
@@ -137,17 +137,17 @@ sequenceDiagram
     autonumber
     participant UC as UC client
     participant CN as CN server
-    participant LOG as CN disk log
+    participant OUT as CN outbox
 
     UC->>CN: open subscribe stream
     UC->>CN: Hello
-    CN->>LOG: read retained events
-    CN-->>UC: Event, each retained one
+    CN->>OUT: read unacked events
+    CN-->>UC: Event, each unacked one
     UC->>UC: persist to inbox, then process
     UC-->>CN: Ack event_id
-    CN->>LOG: mark acked
+    CN->>OUT: mark acked
     Note over UC,CN: later, when a new event occurs
-    CN->>LOG: append then fsync, off the handle thread
+    CN->>OUT: append then fsync, off the handle thread
     CN-->>UC: Event
     UC-->>CN: Ack event_id
 ```
@@ -160,9 +160,9 @@ solo-operator already depends on. The only shared artifact is the `.proto`; each
 
 - **The UC paces the CN by consuming.** It receives an event, persists and acks it, then receives the next.
   While it is busy it does not receive, the HTTP/2 window is not replenished, and the CN's next send waits.
-  The transport window, the per-event ack and the bounded disk log give enough backpressure; there is no
+  The transport window, the per-event ack and the bounded outbox give enough backpressure; there is no
   application-level credit field.
-- **The CN never pauses consensus for this channel.** When its log is over cap it drops (see
+- **The CN never pauses consensus for this channel.** When its outbox is over cap it drops (see
   [Bounds against a runaway CN](#bounds-against-a-runaway-cn)), the opposite of the block buffer, which pauses
   block production and never drops. Same transport mechanism, opposite overflow policy, because a block is
   ledger output while a
@@ -348,9 +348,8 @@ see [Open questions](#open-questions).
   than one event of the **same** type for the **same** subject.
 
 The ID is deterministic: the same transaction or round yields the same ID on every node and after a restart,
-so the UC dedupes and the CN re-derives it. The ID does **not** carry the software version (the CN does not
-know the target version at prepare time) nor the upgrade file hash (the transaction id already makes it
-unique); both travel in the payload.
+so the UC dedupes and the CN re-derives it. The software version and the upgrade file hash travel in the
+payload, not the ID.
 
 | Event | `type` | Trigger | Example id | Key payload |
 |---|---|---|---|---|
@@ -505,7 +504,7 @@ stateDiagram-v2
 | Situation | Behaviour |
 |---|---|
 | UC down or restarting | The CN keeps every unacked event on disk and resends on reconnect. Delivery is delayed, not lost. |
-| CN restarting | The disk log plus the state scan rebuild the events with the same ids. The UC dedupes the resend. |
+| CN restarting | The outbox plus the state scan rebuild the events with the same ids. The UC dedupes the resend. |
 | Adoption at CN start-up | The server and writer must already be up before `initializeStatesApi`, so the adoption event has somewhere to go. Neither needs the platform or the node key. |
 | Duplicates | Expected and harmless: ids are deterministic and the UC dedupes. |
 | Out-of-order | Fine: the UC reconciles to current state, it does not replay a strict sequence. |
@@ -514,10 +513,10 @@ stateDiagram-v2
 
 ### Resume without a cursor
 
-On every connect the CN resends its **unacked** events — the ones it has no ack for in its own log — and the
+On every connect the CN resends its **unacked** events — the ones it has no ack for in its own outbox — and the
 UC **dedupes by `Event.id`** as a safety net (an ack may have been in flight when the link dropped). The CN
-decides this from its own records, so the UC never sends a cursor. That avoids the "log epoch" problem: if the
-CN's log volume were recreated and a sequence restarted from zero, a cursor-based UC could skip new events
+decides this from its own records, so the UC never sends a cursor. That avoids the "epoch" problem: if the
+CN's outbox volume were recreated and a sequence restarted from zero, a cursor-based UC could skip new events
 silently; here there is no sequence to fall out of step. The retained set is tiny, so the resend is cheap.
 
 The CN keeps a small window of **acked** events too, and resends those only to rebuild a UC that lost its
@@ -569,14 +568,14 @@ function eventId(type, nodeRef, trigger, seq):
 `pad9` zero-pads nanoseconds to 9 digits; `pad2` pads the sequence to 2. `nodeRef` is `n<id>` or `rn<id>`.
 The function is pure: same inputs, same id, on every node and after a restart.
 
-## The disk log
+## The outbox
 
 - **Location:** `data/upgrade/uc/` under the CN home
-  (`/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/uc/`), on the `upgrade` volume (a PVC on mainnet). It
+  (`/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/uc/`), on the `upgrade` volume (a mounted volume: a PVC in cluster-only mode, a hostPath mount on mainnet). It
   sits beside `current/`, never inside it, because the CN wipes `current/` during package extraction.
 - **Format:** the retained set keyed by id. A simple, robust choice is to hold it in memory and rewrite the
   file on change (write a temp file, `fsync`, atomic rename), since the set is tiny and changes a handful of
-  times per upgrade. An append-only log with a sidecar set of acked ids is the alternative, but it is more
+  times per upgrade. An append-only file with a sidecar set of acked ids is the alternative, but it is more
   machinery than this volume needs.
 - **Write path, off the handle thread:**
 
@@ -589,8 +588,8 @@ onEmit(event):
 loop:
     batch = queue.drainUpTo(N, within = fsyncWindow)   # e.g. 50 ms
     for e in batch:
-        log.appendRecord(serialize(e))
-    log.fsync()                 # one fsync per batch
+        outbox.appendRecord(serialize(e))
+    outbox.fsync()                 # one fsync per batch
     for e in batch:
         retained.add(e)
         server.offerToConnectedStream(e)   # send only after durable
@@ -600,7 +599,7 @@ The CN sends an event only after it is durable, so anything the UC can see is al
 
 ## Bounds against a runaway CN
 
-Events are sparse (about six per upgrade), and a UC outage cannot flood the log — upgrades stall without the
+Events are sparse (about six per upgrade), and a UC outage cannot flood the outbox — upgrades stall without the
 UC, so events can't pile up. The case the bounds exist for is a **CN defect** that emits far more than
 expected: a hook looping, catch-up re-running, emission on every round. Three cheap layers contain it, none
 of which touches the handle thread or consensus.
@@ -613,8 +612,8 @@ no disk churn. Most real flood bugs are caught here with no policy at all.
 queue is full it drops and increments a metric, and **never blocks**. A flood can never back up into
 transaction handling.
 
-**3. A bounded disk log caps the disk.** For a bug that emits genuinely *distinct* events (distinct id), a
-hard cap keeps the log at a steady size — each over-cap write drops the oldest, so the disk cannot grow
+**3. A bounded outbox caps the disk.** For a bug that emits genuinely *distinct* events (distinct id), a
+hard cap keeps the outbox at a steady size — each over-cap write drops the oldest, so the disk cannot grow
 without limit however fast the CN emits.
 
 ```
@@ -631,29 +630,29 @@ grouping by `(type, subject)` would add correctness-sensitive logic without help
 **The caps are a runaway guard, not a tuning knob.** Set them generously (the defaults below are ample), so
 they never trip in normal or moderately-abnormal operation. Under a real flood, dropping events is damage
 limitation: a flooding CN is a severe defect, so the goal is a bounded disk and an unaffected node, plus a
-**loud signal** — `events.dropped > 0`, a climbing `log.unackedCount`, and an abnormal emission rate are what
+**loud signal** — `events.dropped > 0`, a climbing `outbox.unackedCount`, and an abnormal emission rate are what
 get the bug fixed.
 
 ## Restart reconcile
 
 A plain restart has no marker re-run, and PCES only replays rounds after the last saved state, so an event
-from an earlier round would not re-fire. The reconcile closes that gap from the log plus state.
+from an earlier round would not re-fire. The reconcile closes that gap from the outbox plus state.
 
 ```
 onStart():                              # before initializeStatesApi
-    retained = log.loadAll()            # ids the log already has
+    retained = outbox.loadAll()            # ids the outbox already has
     facts = readFactsFromState()        # prepared file hash, candidate roster,
                                         # freezeTime, lastFrozenTime, latestFreezeRound
     for f in facts:
         id = eventId(f.type, f.nodeRef, f.trigger, 0)
         if id not in retained:
             e = buildEvent(f)
-            log.appendRecord(serialize(e)); log.fsync()
+            outbox.appendRecord(serialize(e)); outbox.fsync()
             retained.add(e)
     startServer()                       # listening before the adoption hook can fire
 ```
 
-An abort and the DAB events are not in state, so the log is their only record; if the log is lost, the UC's
+An abort and the DAB events are not in state, so the outbox is their only record; if the outbox is lost, the UC's
 own "scheduled then neither scheduled nor frozen" inference still catches an abort.
 
 ## Threading and start-up order
@@ -670,7 +669,7 @@ Follow the existing CN metrics pattern: a dedicated holder class (like `BlockStr
 through the platform `Metrics` API, with a category, grouped names, `Counter` / `LongGauge` / `DoubleGauge`,
 each with a description, and **states encoded as a gauge** (as the block buffer encodes back-pressure state).
 
-Proposed holder `UcNotificationMetrics`, category `ucNotification`, groups `stream` and `log`:
+Proposed holder `UcNotificationMetrics`, category `ucNotification`, groups `stream` and `outbox`:
 
 | Metric | Type | Meaning |
 |---|---|---|
@@ -681,10 +680,10 @@ Proposed holder `UcNotificationMetrics`, category `ucNotification`, groups `stre
 | `ucNotification.events.sent` | Counter | events pushed to the UC |
 | `ucNotification.events.acked` | Counter | acks received |
 | `ucNotification.events.dropped` | Counter | events dropped on overflow |
-| `ucNotification.log.unackedCount` | LongGauge | unacked events on disk |
-| `ucNotification.log.bytes` | LongGauge | disk-log size |
-| `ucNotification.log.oldestUnackedAgeSeconds` | LongGauge | age of the oldest unacked event |
-| `ucNotification.log.writeFailures` | Counter | fsync or append failures |
+| `ucNotification.outbox.unackedCount` | LongGauge | unacked events on disk |
+| `ucNotification.outbox.bytes` | LongGauge | outbox size |
+| `ucNotification.outbox.oldestUnackedAgeSeconds` | LongGauge | age of the oldest unacked event |
+| `ucNotification.outbox.writeFailures` | Counter | fsync or append failures |
 
 These flow out through the CN's existing metrics path (the Alloy sidecar), like every other CN metric.
 
@@ -695,7 +694,7 @@ These flow out through the CN's existing metrics path (the Alloy sidecar), like 
 | `notification.stream.enabled` | `false` | serve the stream and emit events |
 | `notification.markers.enabled` | `true` | write the marker files, as today; set `false` to retire them |
 | `notification.uc.port` | TBD | loopback port for the server |
-| `notification.uc.logDir` | `data/upgrade/uc` | disk-log directory |
+| `notification.uc.outboxDir` | `data/upgrade/uc` | outbox directory |
 | `notification.uc.retainedMaxEvents` | 100 | overflow cap by count |
 | `notification.uc.retainedMaxBytes` | 8 MiB | overflow cap by size |
 | `notification.uc.fsyncWindowMillis` | 50 | writer batch window |
@@ -746,7 +745,7 @@ handleEvent(e, stream):
     process(e)                    # existing handlers; idempotent by operationId
 ```
 
-- **Inbox:** `/opt/solo/weaver/uc/events/` on the `uc-data` volume (a PVC on mainnet), beside the existing
+- **Inbox:** `/opt/solo/weaver/uc/events/` on the `uc-data` volume (a mounted volume: a PVC in cluster-only mode, a hostPath mount on mainnet), beside the existing
   `crs/` persistence. A UC restart replays the inbox, so an acked event is never lost.
 - **Dedup:** by `Event.id`. This is a new, finer check than the existing `operationId` dedup; both apply.
 
@@ -808,8 +807,8 @@ and the CN logs a warning. Nothing is removed from the marker path until step 4.
 1. **Now:** `stream.enabled=false`, `markers.enabled=true` — today's behaviour.
 2. **Roll out:** `stream.enabled=true`, `markers.enabled=true` — both run; the stream is primary and the
    markers are the safety net. The UC dedupes across the two.
-3. **Per environment, once proven:** `markers.enabled=false` — stream only. Needs the UC inbox, the CN disk
-   log and restart reconcile (all above), and a check that nothing else reads the markers — some are part of
+3. **Per environment, once proven:** `markers.enabled=false` — stream only. Needs the UC inbox, the CN outbox
+   and restart reconcile (all above), and a check that nothing else reads the markers — some are part of
    the CN's own upgrade handling.
 4. **Later:** delete the marker-writing code and the `markers.enabled` flag.
 
@@ -832,8 +831,8 @@ HIP-1494's two-upgrade pattern:
 |---|---|
 | UC serves HTTP, CN POSTs (earlier proposal) | The CN as client needed an HMAC and rotation for auth; the stream plus loopback trust is simpler and gives durable redelivery. |
 | Shared secret + HMAC | Unnecessary once the channel is loopback-only and all pod containers are trusted. |
-| A cursor / sequence number | A recreated log volume could make the UC skip events. Resend-all + dedupe-by-id avoids it. |
-| App-level credit flow control | gRPC transport demand plus ack plus a bounded log already suffice (see [Flow control](#flow-control)). |
+| A cursor / sequence number | A recreated outbox volume could make the UC skip events. Resending unacked + dedupe-by-id avoids it. |
+| App-level credit flow control | gRPC transport demand plus ack plus a bounded outbox already suffice (see [Flow control](#flow-control)). |
 | Port `BlockBufferService` backpressure | It pauses the producer and never drops — wrong for a non-consensus side channel. |
 | Keep marker files only | Slow (polling), no payload, cannot report the adoption decision. |
 
@@ -842,7 +841,7 @@ HIP-1494's two-upgrade pattern:
 1. **Ownership and schema.** Who builds the CN server and owns the `.proto`, and which release carries it.
 2. **TransactionID at emit time.** Confirm a handler can read the `TransactionID` when it emits a
    transaction-driven event, and the round for the two platform events (it is in state).
-3. **Re-derivable ids for prepare and abort.** Their trigger time is not in state, so a lost log plus a restart
+3. **Re-derivable ids for prepare and abort.** Their trigger time is not in state, so a lost outbox plus a restart
    scan could re-emit them with a different id. The UC guard (ignore a prepare when a non-terminal operation
    already exists for the same upgrade file hash) covers this; confirm it is enough, or store the prepare's
    consensus time in state.
@@ -853,7 +852,7 @@ HIP-1494's two-upgrade pattern:
 6. **Port and versioning.** The loopback port, and how the service and `schema_version` evolve.
 7. **PCES replay and side effects.** Whether replayed rounds re-run the hooks, which sets how much the restart
    scan must cover.
-8. **Volume sizing.** The PVC size for `data/upgrade/uc` and the UC inbox (tiny, but with a floor and the cap).
+8. **Volume sizing.** The volume size for the outbox (`data/upgrade/uc`) and the UC inbox (tiny, but with a floor and the cap).
 9. **Roster as `bytes` or typed `Network`.** `bytes` forwards verbatim; `Network` is more idiomatic but couples
    the schema and makes the UC generate that proto. CN team's call.
 10. **Atomic batches.** Confirm whether a DAB or freeze transaction can be an inner transaction of a batch; if
