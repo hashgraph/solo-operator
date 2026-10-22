@@ -992,10 +992,21 @@ state, monotonic and identical on every node, so it is the only sound ordering k
 
 **Why resend on reconnect instead of using a cursor?**
 
-A cursor would have the UC track a resume position and the CN send only what is newer. Resend-plus-dedupe is
-simpler: the CN resends its unacked events, the UC drops duplicates by `Event.id`, and neither side tracks a
-position. The event volume is tiny, so resending costs nothing, and because the IDs are stable it stays correct
-even if the CN's storage is recreated.
+A *cursor* is a resume position — the UC would tell the CN "I have everything up to N, send me what comes
+after." It needs an ever-increasing sequence number, and it has a failure mode: if the CN's outbox storage is
+wiped and the sequence restarts from zero, the UC (still at N) treats the new low-numbered events as
+already-seen and skips them silently. The usual fix is an *epoch* — a generation id bumped on every reset —
+which is extra machinery.
+
+We don't use a cursor at all, so we never need an epoch:
+
+- Event IDs are **content-derived and stable** — `<type>-<nodeRef>-<trigger>-<seq>`, built from the
+  transaction or round, not a running counter.
+- On reconnect the CN just **resends its unacked events**, and the UC **dedupes by `Event.id`**.
+- If the outbox is wiped and recreated, the same events get the **same IDs**, so dedup still works and nothing
+  is skipped. There's no sequence to reset, so there's no epoch to manage.
+
+The event volume is tiny, so resending costs nothing.
 
 ## References
 
