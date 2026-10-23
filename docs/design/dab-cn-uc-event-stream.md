@@ -246,6 +246,7 @@ enum EventType {
   EVENT_TYPE_UPGRADE_ABORT          = 10;
   EVENT_TYPE_UPGRADE_FROZEN         = 11;
   EVENT_TYPE_ROSTER_ADOPTION        = 12;
+  EVENT_TYPE_TELEMETRY_UPGRADE      = 13;  // rolling infrastructure upgrade (TELEMETRY_UPGRADE freeze)
 }
 
 message Event {
@@ -274,6 +275,7 @@ message Event {
     FreezeAborted        freeze_aborted         = 21;
     NowFrozen            now_frozen             = 22;
     RosterAdoption       roster_adoption        = 23;
+    TelemetryUpgrade     telemetry_upgrade      = 24;
   }
 }
 
@@ -326,6 +328,14 @@ message RosterAdoption {
   }
   Result result = 1;
   uint64 round  = 2;
+}
+
+message TelemetryUpgrade {
+  string          upgrade_file_id   = 1;  // e.g. "0.0.150"
+  string          upgrade_file_hash = 2;  // hex
+  proto.Timestamp start_time        = 3;  // required by TELEMETRY_UPGRADE
+  // Scope and components are in infrastructure-versions.yaml inside the package, not the event.
+  // The UC reads it to decide whether its node is in scope; the daemon reads it to apply.
 }
 
 message Endpoint {
@@ -381,6 +391,7 @@ freeze before frozen regardless of how the bytes happen to arrive (see
 | Upgrade aborted | `upgradeabort` | `FREEZE_ABORT` txn | `upgradeabort-n5-0.0.2_1792451500.700000000-00` | aborted freeze time |
 | Upgrade frozen | `upgradefrozen` | freeze round (no txn) | `upgradefrozen-n5-round48211397-00` | freeze round, freeze time |
 | Roster adoption decided | `rosteradoption` | restart round (no txn) | `rosteradoption-n5-round48211398-00` | result (`adopted`/`rejected`/`none`), round |
+| Infrastructure upgrade | `telemetryupgrade` | `TELEMETRY_UPGRADE` txn | `telemetryupgrade-n5-0.0.2_1792460000.000000003-00` | upgrade file id and hash, start time |
 
 One transaction can raise more than one event: `PREPARE_UPGRADE` raises both `upgradeprepare` and
 `candidaterosterready`, which share the trigger and differ only by `type`. The DAB events are early warnings,
@@ -812,6 +823,7 @@ handleEvent(e, stream):
 | `upgradefrozen` | Build `NetworkUpgradeExecute`. |
 | `rosteradoption` | Record the adoption result on the UC pod condition (today's `roster_adoption` path), for the operator to proxy. |
 | `nodecreate/update/delete`, `registerednode*` | Early-warning signal; no CR by itself. Surface for the operator's roster-diff and firewall pre-checks. |
+| `telemetryupgrade` | Read `infrastructure-versions.yaml` from the package; if this node is in `scope` (absent = all), build a `NetworkTelemetryUpgrade` CR; otherwise no-op. See [Rolling infrastructure upgrade](#rolling-infrastructure-upgrade-telemetry_upgrade). |
 
 **The roster is pre-positioned, not awaited on a timer.** The CN emits `candidaterosterready` before
 `upgradeprepare`, and the durable channel redelivers it until acked, so by the time the UC handles
@@ -858,6 +870,85 @@ metrics. Mirror the same counters in Prometheus idiom:
 ---
 
 # Part 4 — Cross-cutting
+
+## Rolling infrastructure upgrade (`TELEMETRY_UPGRADE`)
+
+Infrastructure — the host, the cluster, the `solo-provisioner` binaries and the sidecars — is upgraded
+separately from the consensus software, node by node, without freezing the network. It reuses the
+`TELEMETRY_UPGRADE` freeze transaction, which the CN documents as upgrading "auxiliary services and containers
+... without impacting the node or network processing."
+
+### Trigger and roles
+
+- The **council** uploads the package to `0.0.150` and sends a `TELEMETRY_UPGRADE` freeze transaction, exactly
+  as for a network upgrade. `start_time` is required (300–3600 s ahead).
+- The transaction is **network-wide** — the freeze body has no node field — so every CN extracts the package
+  and emits a `telemetryupgrade` event. Which nodes actually upgrade comes from the package, not the
+  transaction.
+- The **council is the coordinator.** It rolls the upgrade by scoping each transaction to a subset of nodes
+  and sending the batches in sequence, watching health between them — the same out-of-band process it uses
+  for a network upgrade. There is no in-system rollout controller.
+- `TELEMETRY_UPGRADE` is **mutually exclusive** with a software upgrade: it must not be sent between
+  `PREPARE_UPGRADE` and `FREEZE_UPGRADE`, and if sent after a `PREPARE_UPGRADE` it resets the prepared upgrade
+  (they share `current/`). `FREEZE_ABORT` cancels a scheduled one before `start_time`.
+
+### The manifest: `infrastructure-versions.yaml` with `scope`
+
+The package's existing `manifests/infrastructure-versions.yaml` (HIP-1494) gains an optional `scope` field. The
+component sections (`provisioner`, `cluster`, `host`) are unchanged, under the same **"absent = no change"**
+rule:
+
+```yaml
+schemaVersion: 1
+scope:                 # NEW (HIP-1494 update): which nodes this upgrade applies to — the council's batch.
+  nodes: [3, 7]        # Absent = all nodes, so the software-upgrade path is unaffected.
+provisioner:           # non-disruptive: solo-provisioner CLI / daemon
+  daemon: { version: 1.4.0, algorithm: sha256, checksum: "..." }
+cluster:               # non-disruptive: Helm charts (alloy, metallb, ...)
+  - { name: alloy, version: 0.9.1 }
+host:                  # DISRUPTIVE: cri-o, kubelet, kubeadm — a cluster upgrade that restarts the CN
+  - { name: kubelet, version: 1.33.4 }
+```
+
+- **One manifest, not two.** `scope` is optional and **absent means all nodes**, so a software upgrade (which
+  omits it) is unchanged and a telemetry upgrade sets it to the council's batch. This needs a **HIP-1494
+  update** to add `scope` to the manifest schema.
+- **Targeting** is `scope.nodes`: a node not listed treats the event as a no-op.
+- **Disruption class falls out of the section:** `provisioner` and `cluster` keep the CN running; a populated
+  `host` section is a cluster upgrade that restarts the CN, so that node goes offline for its slot.
+
+### Flow
+
+1. The council sends `TELEMETRY_UPGRADE` with a package scoped to a batch of nodes.
+2. Every CN extracts the package and emits `telemetryupgrade`.
+3. Each node's UC reads `infrastructure-versions.yaml`; if its node is in `scope` (absent = all) it builds a
+   **`NetworkTelemetryUpgrade`** CR, otherwise it does nothing.
+4. The CR drives the **existing daemon handoff** (`ReadyForProvisionerDaemon` → the daemon applies the
+   manifest → `PendingInfraUpgrade` → done), reusing the daemon's `infra-versions-placement` step and the
+   `PendingInfraUpgrade` phase and un-stubbing the `infra-upgrade-detect` step that is a no-op today. In
+   cluster-only mode the operator/UC proxy does the work instead of the daemon.
+5. For a **disruptive** (`host`) upgrade the operator takes the node offline for its slot and waits for it to
+   return `ACTIVE`; for a **non-disruptive** upgrade the CN keeps running throughout.
+6. The council watches the batch reach health, then sends the next scoped transaction.
+
+### Reuse
+
+Most of the execution already exists in solo-weaver, wired into the software-upgrade handoff: the
+`infrastructure-versions.yaml` schema, the `PendingInfraUpgrade` phase and `ReasonDaemonInfraUpgradeFailed`,
+the `infra-versions-placement` step, and a stubbed `infra-upgrade-detect`. This feature adds the `scope` field
+on `infrastructure-versions.yaml`, the `telemetryupgrade` event, the `NetworkTelemetryUpgrade` CR, the UC
+handling, and the un-stubbed daemon step — so the **same handoff** serves a scoped, non-freeze,
+council-sequenced rollout.
+
+### HIP updates this needs
+
+- **HIP-1494** (deployment package): add the `scope` field to the `infrastructure-versions.yaml` schema.
+- **HIP-1495** (deployment profiles): add the `NetworkTelemetryUpgrade` CR to the CRD set, and describe this
+  **rolling, non-freeze, council-scoped** telemetry upgrade. HIP-1495 today states that "infrastructure and CN
+  upgrades execute in a single freeze window"; this path is the alternative for infra-only upgrades, so that
+  section needs to admit the node-by-node, no-freeze model.
+- **HIP-1496** (network upgrade protocol): no change — the telemetry upgrade reuses the Execute handoff phases
+  but is triggered by `TELEMETRY_UPGRADE`, outside the prepare/freeze protocol 1496 defines.
 
 ## Retiring the marker files
 
@@ -930,6 +1021,13 @@ HIP-1494's two-upgrade pattern:
     so, the `TransactionID` nonce distinguishes them and the id appends `_n<nonce>`.
 11. **Enum verbosity.** House style prefixes every enum value (`EVENT_TYPE_*`), so the JSON `type` is long.
     Confirm that is acceptable.
+12. **`NetworkTelemetryUpgrade` CR.** Define its spec/status and confirm it reuses the Execute handoff phases
+    (`ReadyForProvisionerDaemon` → `PendingInfraUpgrade`), with cluster-only driven through the operator/UC
+    proxy as the software upgrade is. Also un-stub the daemon's `infra-upgrade-detect`.
+13. **Disruptive host upgrade.** Confirm the operator takes the CN offline for a `host`-section upgrade and
+    brings it back to `ACTIVE`, and that the council keeps >2/3 up by scoping batches accordingly.
+14. **`infrastructure-versions.yaml` scope read.** Confirm the UC can read the scoped manifest from the package
+    (as it reads `candidate-roster.json`) to decide eligibility, rather than the CN carrying scope in the event.
 
 ## Appendix: Code touchpoints
 
@@ -945,6 +1043,8 @@ Referenced by symbol, not line number. Verified as of **hiero-consensus-node `ma
 | Hook C — roster adoption | `hedera-node/hedera-roster-service-impl/.../schemas/V0540RosterSchema.java` | `restart` adoption decision |
 | Hook D — node DAB | `hedera-node/hedera-addressbook-service-impl/.../handlers/` | `NodeCreateHandler`, `NodeUpdateHandler`, `NodeDeleteHandler` |
 | Hook D — registered node | `hedera-node/hedera-addressbook-service-impl/.../handlers/` | `RegisteredNodeCreateHandler`, `RegisteredNodeUpdateHandler`, `RegisteredNodeDeleteHandler` |
+| Hook E — telemetry upgrade | `hedera-node/hedera-network-admin-service-impl/.../handlers/` | `FreezeHandler` `TELEMETRY_UPGRADE` case; `ReadableFreezeUpgradeActions.extractTelemetryUpgrade` → `execute_telemetry.mf` |
+| FreezeType enum | `hapi/.../proto/services/freeze_type.proto` | `TELEMETRY_UPGRADE = 5` |
 | Start-up order | `hedera-node/hedera-app/.../ServicesMain.java` | `initializeStatesApi` must follow server start |
 | Restart catch-up (markers) | same as Hook A | `catchUpOnMissedSideEffects` |
 | Metrics pattern to mirror | `hedera-node/hedera-app/.../metrics/BlockStreamMetrics.java` | holder class, category, `getOrCreate` |
@@ -963,6 +1063,15 @@ Referenced by symbol, not line number. Verified as of **hiero-consensus-node `ma
 | Node identity / config | `internal/uc/config.go` | `Config.NodeID`, `Config.CapsuleName` |
 | Metrics server | `internal/uc/metrics_server.go` | Prometheus endpoint (port 9990) |
 | Data volume root | `internal/resources/consensus/defaults.go` | `UCDataPath` (`/opt/solo/weaver/uc`) |
+
+**Infrastructure upgrade (solo-weaver)**
+
+| Piece | Path | Symbol |
+|---|---|---|
+| Infra manifest schema | `pkg/manifests/infrastructure_versions.go` | `InfrastructureVersions` (`provisioner`, `host`, `cluster`) |
+| Infra-versions placement | `internal/daemon/consensus/infraversions.go` | places the manifest at the trusted host location |
+| Infra-upgrade step (stub) | `internal/daemon/consensus/upgrade_steps.go` | `stepInfraUpgradeDetect`, `infraUpgradeRequired` (returns false today) |
+| Infra-upgrade phase | `internal/consensus/phase.go` | `PhasePendingInfraUpgrade`, `ReasonDaemonInfraUpgradeFailed` |
 
 ## FAQ
 
