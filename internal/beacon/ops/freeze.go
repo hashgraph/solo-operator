@@ -78,14 +78,21 @@ func FreezeAbort() *hiero.FreezeTransaction {
 }
 
 // ParseStartTime parses yahcli's UTC start-time literal (yyyy-MM-dd.HH:mm:ss)
-// into a time.Time. The result is in UTC.
-func ParseStartTime(s string) (time.Time, error) {
+// into a time.Time and rejects one not after now. The result is in UTC.
+func ParseStartTime(s string, now time.Time) (time.Time, error) {
 	t, err := time.Parse(StartTimeLayout, strings.TrimSpace(s))
 	if err != nil {
 		return time.Time{}, errx.Decorate(
 			errValidation.Wrap(err, "parse start time %q", s),
 			reasonInvalidStartTime,
 			fmt.Sprintf("Use a UTC time in the form %s, e.g. 2026-08-01.14:30:00", "yyyy-MM-dd.HH:mm:ss"),
+		)
+	}
+	if !t.After(now) {
+		return time.Time{}, errx.Decorate(
+			errValidation.New("start time %s is not in the future (now %s)", t.Format(StartTimeLayout), now.UTC().Format(StartTimeLayout)),
+			reasonStartTimeNotFuture,
+			"Pass a --start-time later than the current UTC time, leaving enough lead time for the transaction to reach consensus",
 		)
 	}
 	return t, nil

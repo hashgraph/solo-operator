@@ -187,6 +187,27 @@ func TestCRStoreListIgnoresForeignAndPartialFiles(t *testing.T) {
 	}
 }
 
+func TestCRStoreListSkipsOversizedFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewCRStore(dir)
+	const opID = "upgrade-20260415T143000Z"
+	if _, err := s.Persist(opID, operatorv1alpha1.StepPrepare, sampleCR(opID, operatorv1alpha1.StepPrepare)); err != nil {
+		t.Fatalf("Persist: %v", err)
+	}
+	oversized := filepath.Join(dir, opID+"."+operatorv1alpha1.StepFreeze+fileExt)
+	if err := os.WriteFile(oversized, make([]byte, maxPersistedCRSize+1), 0o640); err != nil {
+		t.Fatalf("seed oversized: %v", err)
+	}
+
+	got, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0].Step != operatorv1alpha1.StepPrepare {
+		t.Fatalf("List = %+v, want only the valid prepare CR", got)
+	}
+}
+
 func TestCRStoreListMissingDirIsEmpty(t *testing.T) {
 	s := NewCRStore(filepath.Join(t.TempDir(), "does-not-exist"))
 	got, err := s.List()

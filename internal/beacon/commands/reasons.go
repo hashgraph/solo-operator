@@ -13,6 +13,8 @@ const (
 
 	// Special-file upload (design §8.1, §15 Q1).
 	reasonZipReadFailed        errx.Reason = "ZipReadFailed"
+	reasonZipNotRegular        errx.Reason = "ZipNotRegular"
+	reasonZipTooLarge          errx.Reason = "ZipTooLarge"
 	reasonExpectHashReadFailed errx.Reason = "ExpectHashReadFailed"
 	reasonExpectHashInvalid    errx.Reason = "ExpectHashInvalid"
 	reasonExpectedHashMismatch errx.Reason = "ExpectedHashMismatch"

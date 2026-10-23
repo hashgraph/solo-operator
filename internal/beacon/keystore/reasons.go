@@ -13,4 +13,5 @@ const (
 	reasonKeyDecodeFailed    errx.Reason = "KeyDecodeFailed"
 	reasonNoPassphraseSource errx.Reason = "NoPassphraseSource"
 	reasonKeyLoaded          errx.Reason = "KeyLoaded"
+	reasonKeyFilePermissive  errx.Reason = "KeyFilePermissive"
 )

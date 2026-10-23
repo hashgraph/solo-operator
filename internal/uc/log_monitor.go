@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,6 +31,9 @@ const (
 	logMonitorName    = "log-monitor"
 	logPersistFile    = "log-monitor-status.json"
 	platformStatusTag = "PLATFORM_STATUS"
+
+	maxLogLineSize    = 1 << 20
+	maxLogPersistSize = 4 << 10
 )
 
 // LogStatusSnapshot is an atomically-published view of the latest platform
@@ -56,6 +60,9 @@ type LogMonitor struct {
 
 	persistPath string
 	offset      int64
+
+	lineReader *bufio.Reader
+	skipping   bool
 }
 
 // NewLogMonitor constructs a log monitor.
@@ -63,6 +70,7 @@ func NewLogMonitor(cfg Config) *LogMonitor {
 	return &LogMonitor{
 		cfg:         cfg,
 		persistPath: filepath.Join(cfg.CRPersistPath, logPersistFile),
+		lineReader:  bufio.NewReaderSize(nil, maxLogLineSize),
 	}
 }
 
@@ -111,7 +119,7 @@ func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
 
 // loadPersisted restores the sticky status from the persist file.
 func (m *LogMonitor) loadPersisted() {
-	data, err := os.ReadFile(m.persistPath)
+	data, err := readFileNoFollow(m.persistPath, maxLogPersistSize)
 	if err != nil {
 		return
 	}
@@ -119,13 +127,15 @@ func (m *LogMonitor) loadPersisted() {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return
 	}
-	if state.Status != "" {
-		m.snapshot.Store(&LogStatusSnapshot{Code: state.Code, Status: state.Status})
-		logx.As().Info().
-			Str("reason", ReasonLogMonitorRestored.String()).
-			Int32("code", state.Code).Str("status", state.Status).
-			Msg("Restored persisted platform status")
+	if state.Status == "" {
+		return
 	}
+	status := nameForCode(state.Code)
+	m.snapshot.Store(&LogStatusSnapshot{Code: state.Code, Status: status})
+	logx.As().Info().
+		Str("reason", ReasonLogMonitorRestored.String()).
+		Int32("code", state.Code).Str("status", status).
+		Msg("Restored persisted platform status")
 }
 
 // seedFromTail scans the tail of the current log file for the most recent
@@ -156,23 +166,13 @@ func (m *LogMonitor) seedFromTail() {
 
 	lastCode := operatorv1alpha1.PlatformStatusCodeUnknown
 	var lastName string
-	var bytesRead int64
-	firstLine := true
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		bytesRead += int64(len(scanner.Bytes())) + 1
-		if firstLine && start > 0 {
-			firstLine = false
-			continue // discard partial line from mid-file seek
-		}
-		firstLine = false
-		code, name, ok := parsePlatformStatusLog(scanner.Text())
-		if ok {
+	m.skipping = start > 0 // discard partial line from mid-file seek
+	bytesRead := m.scanLines(f, func(line string) {
+		if code, name, ok := parsePlatformStatusLog(line); ok {
 			lastCode = code
 			lastName = name
 		}
-	}
+	})
 
 	if lastName != "" {
 		m.updateStatus(lastCode, lastName)
@@ -201,6 +201,7 @@ func (m *LogMonitor) poll() {
 	// Detect rotation: file shrank.
 	if info.Size() < m.offset {
 		m.offset = 0
+		m.skipping = false
 	}
 
 	if info.Size() == m.offset {
@@ -211,18 +212,43 @@ func (m *LogMonitor) poll() {
 		return
 	}
 
-	var bytesRead int64
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		bytesRead += int64(len(scanner.Bytes())) + 1
-		code, name, ok := parsePlatformStatusLog(scanner.Text())
-		if ok {
+	m.offset += m.scanLines(f, func(line string) {
+		if code, name, ok := parsePlatformStatusLog(line); ok {
 			m.updateStatus(code, name)
 		}
-	}
+	})
+}
 
-	m.offset += bytesRead
+func (m *LogMonitor) scanLines(r io.Reader, fn func(line string)) int64 {
+	m.lineReader.Reset(r)
+	var consumed int64
+	for {
+		chunk, err := m.lineReader.ReadSlice('\n')
+		switch {
+		case err == nil:
+			consumed += int64(len(chunk))
+			if m.skipping {
+				m.skipping = false
+				continue
+			}
+			fn(strings.TrimRight(string(chunk), "\r\n"))
+		case errors.Is(err, bufio.ErrBufferFull):
+			consumed += int64(len(chunk))
+			if !m.skipping {
+				m.skipping = true
+				logx.As().Warn().
+					Str("reason", ReasonLogLineTooLong.String()).
+					Str("file", m.cfg.ConsensusLogFile).
+					Int("limit", maxLogLineSize).
+					Msg("Skipping consensus log line longer than the limit")
+			}
+		default:
+			if m.skipping {
+				consumed += int64(len(chunk))
+			}
+			return consumed
+		}
+	}
 }
 
 // updateStatus publishes the new status and persists it.
@@ -315,6 +341,7 @@ func parsePlatformStatusLog(line string) (code int32, name string, ok bool) {
 		return 0, "", false
 	}
 
+	// Never pass a raw log-supplied name on to the pod-condition patch.
 	code = operatorv1alpha1.PlatformStatusCodeForName(payload.NewStatus)
-	return code, payload.NewStatus, true
+	return code, nameForCode(code), true
 }

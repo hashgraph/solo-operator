@@ -103,7 +103,7 @@ func TestFreezeUpgrade_InvalidHashRejectedAfterResolve(t *testing.T) {
 	}
 	cmd := freezeUpgradeCmd(resolve, ttyConfirmer("yes\n"))
 
-	_, err := runCmd(t, cmd, "--start-time", "2026-08-01.14:30:00", "--upgrade-zip-hash", "nothex")
+	_, err := runCmd(t, cmd, "--start-time", "2099-08-01.14:30:00", "--upgrade-zip-hash", "nothex")
 	wantReason(t, err, errx.Reason("InvalidUpgradeHash"))
 }
 
@@ -115,6 +115,16 @@ func TestFreezeOnly_InvalidStartTimeRejected(t *testing.T) {
 
 	_, err := runCmd(t, cmd, "--start-time", "not-a-time")
 	wantReason(t, err, errx.Reason("InvalidStartTime"))
+}
+
+func TestFreezeOnly_PastStartTimeRejected(t *testing.T) {
+	resolve := func() (*Session, error) {
+		return &Session{Target: &config.Target{}}, nil
+	}
+	cmd := freezeOnlyCmd(resolve, ttyConfirmer("yes\n"))
+
+	_, err := runCmd(t, cmd, "--start-time", "2000-01-01.00:00:00")
+	wantReason(t, err, errx.Reason("StartTimeNotFuture"))
 }
 
 // TestBuildersComposeFileIDUnderShardRealm guards that the command's update-file

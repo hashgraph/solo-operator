@@ -302,16 +302,19 @@ func loadValuesReference(ctx context.Context, c client.Client, namespace string,
 		return map[string]interface{}{}, nil
 	}
 
-	jsonBytes, err := yaml.YAMLToJSON(raw)
-	if err != nil {
+	var out map[string]interface{}
+	if err := yaml.Unmarshal(raw, &out); err != nil {
+		if ref.Kind == "Secret" {
+			// The parser cause is omitted: it can quote Secret content.
+			return nil, errx.WithHints(
+				errx.WithReason(errValuesBuild.New("values in Secret %s key %q are not a valid YAML mapping", ref.Name, key), ReasonValuesBuild),
+				"Fix the YAML in the referenced Secret so it parses; parser detail is withheld because it can echo Secret content",
+			)
+		}
 		return nil, errx.WithHints(
-			errx.WithReason(errValuesBuild.Wrap(err, "converting values to JSON"), ReasonValuesBuild),
+			errx.WithReason(errValuesBuild.Wrap(err, "parsing values"), ReasonValuesBuild),
 			"Fix the YAML in the referenced ConfigMap/Secret so it parses",
 		)
-	}
-	var out map[string]interface{}
-	if err := json.Unmarshal(jsonBytes, &out); err != nil {
-		return nil, errx.WithReason(errValuesBuild.Wrap(err, "unmarshalling values"), ReasonValuesBuild)
 	}
 	return out, nil
 }

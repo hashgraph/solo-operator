@@ -144,7 +144,8 @@ func TestPrepareAndFreezeUpgrade_ShareHash(t *testing.T) {
 }
 
 func TestParseStartTime(t *testing.T) {
-	got, err := ParseStartTime("2026-08-01.14:30:00")
+	now := startAt.Add(-time.Minute)
+	got, err := ParseStartTime("2026-08-01.14:30:00", now)
 	if err != nil {
 		t.Fatalf("ParseStartTime: %v", err)
 	}
@@ -156,9 +157,19 @@ func TestParseStartTime(t *testing.T) {
 	}
 
 	t.Run("rejects wrong format", func(t *testing.T) {
-		_, err := ParseStartTime("2026-08-01T14:30:00Z")
+		_, err := ParseStartTime("2026-08-01T14:30:00Z", now)
 		wantReason(t, err, reasonInvalidStartTime)
 	})
+
+	for name, now := range map[string]time.Time{
+		"rejects past":  startAt.Add(time.Minute),
+		"rejects equal": startAt,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := ParseStartTime("2026-08-01.14:30:00", now)
+			wantReason(t, err, reasonStartTimeNotFuture)
+		})
+	}
 }
 
 func TestParseUpgradeHash(t *testing.T) {
