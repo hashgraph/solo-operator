@@ -257,7 +257,7 @@ func parseVersionFile(upgradePath string) (version string, mtime time.Time, foun
 		}
 		return "", time.Time{}, false, errx.WithReason(errPersist.Wrap(err, "stat VERSION file"), ReasonUpgradePathUnreadable)
 	}
-	data, err := readFileNoFollow(path)
+	data, err := readFileNoFollow(path, maxMarkerFileSize)
 	if err != nil {
 		if isDecorated(err) {
 			return "", time.Time{}, false, err

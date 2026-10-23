@@ -338,7 +338,10 @@ func TestPlatformStatusConditionPatch_PreservesKubeletConditions(t *testing.T) {
 		t.Fatalf("marshal pod: %v", err)
 	}
 
-	patch := platformStatusConditionPatch(operatorv1alpha1.PlatformStatusActive, 2, "2026-07-18T00:00:00Z")
+	patch, err := platformStatusConditionPatch(operatorv1alpha1.PlatformStatusActive, 2, "2026-07-18T00:00:00Z")
+	if err != nil {
+		t.Fatalf("build patch: %v", err)
+	}
 	mergedBytes, err := strategicpatch.StrategicMergePatch(origBytes, patch, corev1.Pod{})
 	if err != nil {
 		t.Fatalf("strategic merge: %v", err)
@@ -379,6 +382,17 @@ func TestPlatformStatusConditionPatch_PreservesKubeletConditions(t *testing.T) {
 // TestPlatformStatusMonitor_LogFallbackWhenMetricsDown verifies that when the
 // metrics endpoint is unreachable but the log monitor has a known status, the
 // pod condition reflects the log-derived status instead of UNKNOWN.
+func TestPlatformStatusConditionPatch_ValidJSONForControlChars(t *testing.T) {
+	name := "RUN\x00\aNING\xff\""
+	patch, err := platformStatusConditionPatch(name, 2, "2026-07-18T00:00:00Z")
+	if err != nil {
+		t.Fatalf("build patch: %v", err)
+	}
+	if !json.Valid(patch) {
+		t.Fatalf("patch is not valid JSON: %s", patch)
+	}
+}
+
 func TestPlatformStatusMonitor_LogFallbackWhenMetricsDown(t *testing.T) {
 	var metricCode atomic.Int64
 	metricCode.Store(2) // ACTIVE

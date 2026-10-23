@@ -3,6 +3,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -232,4 +233,20 @@ func TestLoad_Errors(t *testing.T) {
 		_, err := Load(filepath.Join("testdata", "does-not-exist.yaml"))
 		wantReason(t, err, reasonConfigRead)
 	})
+
+	for name, body := range map[string]string{
+		"null node":           "name: n\nnodes: [null]\n",
+		"null among valid":    "name: n\nnodes:\n  - null\n  - {account: 3, host: 10.0.0.1}\n",
+		"node without host":   "name: n\nnodes:\n  - {account: 3}\n",
+		"node with null host": "name: n\nnodes:\n  - {account: 3, host: null}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			wantReason(t, err, reasonInvalidNode)
+		})
+	}
 }

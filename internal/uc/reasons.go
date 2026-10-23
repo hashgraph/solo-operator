@@ -129,6 +129,7 @@ const (
 	ReasonConfigFileUnrecognised errx.Reason = "ConfigFileUnrecognised"
 	ReasonConfigFileIgnored      errx.Reason = "ConfigFileIgnored"
 	ReasonConfigFileSymlink      errx.Reason = "ConfigFileSymlink"
+	ReasonConfigFileNotRegular   errx.Reason = "ConfigFileNotRegular"
 	ReasonConfigFileTooLarge     errx.Reason = "ConfigFileTooLarge"
 	ReasonConfigCRCreateFailed   errx.Reason = "ConfigCRCreateFailed"
 	ReasonConfigCRGetFailed      errx.Reason = "ConfigCRGetFailed"
@@ -143,6 +144,7 @@ const (
 	ReasonLogMonitorRestored errx.Reason = "LogMonitorRestored"
 	ReasonLogStatusChanged   errx.Reason = "LogStatusChanged"
 	ReasonLogFileUnreadable  errx.Reason = "LogFileUnreadable"
+	ReasonLogLineTooLong     errx.Reason = "LogLineTooLong"
 
 	// Metrics server.
 	ReasonMetricsServerStarted errx.Reason = "MetricsServerStarted"

@@ -4,6 +4,7 @@ package uc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -227,11 +228,14 @@ func (m *PlatformStatusMonitor) scrape(ctx context.Context) (code int32, name st
 // sample absent). The condition is not a readiness gate, so its status never affects
 // pod readiness.
 func (m *PlatformStatusMonitor) patch(ctx context.Context, name string, code int32) error {
-	patch := platformStatusConditionPatch(name, code, time.Now().UTC().Format(time.RFC3339))
+	patch, err := platformStatusConditionPatch(name, code, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return errx.WithReason(errCRBuild.Wrap(err, "build pod %s status condition patch", m.cfg.PodName), ReasonPlatformStatusPatchFailed)
+	}
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 	resource := m.client.Resource(podGVR).Namespace(m.cfg.Namespace)
-	_, err := resource.Patch(ctx, m.cfg.PodName, types.StrategicMergePatchType, patch,
+	_, err = resource.Patch(ctx, m.cfg.PodName, types.StrategicMergePatchType, patch,
 		metav1.PatchOptions{}, "status")
 	if err != nil {
 		return errx.WithHints(
@@ -249,15 +253,15 @@ func (m *PlatformStatusMonitor) patch(ctx context.Context, name string, code int
 // JSON merge patch would replace the whole conditions array and break the pod. The
 // reason carries the raw state name (machine-readable), the message a human detail
 // line including the numeric code, and status is Unknown for UNKNOWN, True otherwise.
-func platformStatusConditionPatch(name string, code int32, lastTransition string) []byte {
+// Uses encoding/json, not %q: Go escapes such as \x00 are not valid JSON.
+func platformStatusConditionPatch(name string, code int32, lastTransition string) ([]byte, error) {
 	condStatus := corev1.ConditionTrue
 	if name == operatorv1alpha1.PlatformStatusUnknown {
 		condStatus = corev1.ConditionUnknown
 	}
-	message := fmt.Sprintf("Platform status %s (code %d)", name, code)
-	return []byte(fmt.Sprintf(
-		`{"status":{"conditions":[{"type":%q,"status":%q,"reason":%q,"message":%q,"lastTransitionTime":%q}]}}`,
-		operatorv1alpha1.PodConditionPlatformStatus, condStatus, name, message, lastTransition))
+	conds := upsertCondition(nil, string(operatorv1alpha1.PodConditionPlatformStatus), metav1.ConditionStatus(condStatus),
+		name, fmt.Sprintf("Platform status %s (code %d)", name, code), lastTransition)
+	return json.Marshal(map[string]interface{}{"status": map[string]interface{}{"conditions": conds}})
 }
 
 // recordTransition writes the transition to the structured logs and the JSONL

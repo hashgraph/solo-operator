@@ -49,7 +49,7 @@ type infraVersionEntry struct {
 // absence means no infra upgrade is declared.
 func parseInfraVersionsManifest(upgradePath string) (*infraVersionsManifest, error) {
 	path := filepath.Join(upgradePath, manifestsSubdir, infraVersionsFile)
-	data, err := readFileNoFollow(path)
+	data, err := readFileNoFollow(path, maxConfigFileSize)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -111,7 +111,7 @@ type componentsManifest struct {
 // known schemaVersion are silently ignored (sigs.k8s.io/yaml does not reject
 // them), per HIP-1494's backwards-compatibility rule.
 func parseComponentsManifest(path string) (*componentsManifest, error) {
-	data, err := readFileNoFollow(path)
+	data, err := readFileNoFollow(path, maxConfigFileSize)
 	if err != nil {
 		if isDecorated(err) {
 			return nil, err
