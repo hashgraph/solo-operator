@@ -121,6 +121,17 @@ const (
 	ReasonUpgradePackageDiscarded            errx.Reason = "UpgradePackageDiscarded"
 	ReasonUpgradePackageRotateFailed         errx.Reason = "UpgradePackageRotateFailed"
 
+	// Candidate roster artifact (execute_immediate.mf).
+	ReasonCandidateRosterMissing  errx.Reason = "CandidateRosterMissing"
+	ReasonCandidateRosterStale    errx.Reason = "CandidateRosterStale"
+	ReasonCandidateRosterInvalid  errx.Reason = "CandidateRosterInvalid"
+	ReasonCandidateRosterAttached errx.Reason = "CandidateRosterAttached"
+
+	// Roster adoption result (parsed from the consensus log after an upgrade restart).
+	ReasonRosterAdoptionDetected    errx.Reason = "RosterAdoptionDetected"
+	ReasonRosterRejected            errx.Reason = "RosterRejected"
+	ReasonRosterAdoptionPatchFailed errx.Reason = "RosterAdoptionPatchFailed"
+
 	// Config-CR RBAC preflight (cluster-only).
 	ReasonConfigCRAccessDenied errx.Reason = "ConfigCRAccessDenied"
 

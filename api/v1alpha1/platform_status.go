@@ -74,3 +74,27 @@ func PlatformStatusCodeForName(name string) int32 {
 	}
 	return PlatformStatusCodeUnknown
 }
+
+// PodConditionRosterAdoption is the custom pod condition type the UC sidecar
+// maintains on its OWN pod to report what the consensus node decided about the
+// candidate roster at its last upgrade restart. Like PodConditionPlatformStatus it is
+// informational only (not a readiness gate) and the operator proxies it; the UC never
+// patches the ConsensusCapsule.
+//
+// Encoding: reason = RosterAdoptionAdopted, RosterAdoptionRejected or
+// RosterAdoptionNone (machine-readable); message = a human detail line with the log
+// round and time; lastTransitionTime = when the UC observed it. The result comes from
+// the consensus node's log, so a condition that is absent means "unknown", never
+// "adopted".
+const PodConditionRosterAdoption corev1.PodConditionType = "operator.solo.hiero.org/roster-adoption"
+
+// Roster adoption results carried in the reason of PodConditionRosterAdoption.
+const (
+	// RosterAdoptionAdopted: the CN replaced its active roster with the candidate.
+	RosterAdoptionAdopted = "Adopted"
+	// RosterAdoptionRejected: the CN kept the old roster because its TSS readiness
+	// check refused the candidate.
+	RosterAdoptionRejected = "Rejected"
+	// RosterAdoptionNone: the CN had no candidate roster to adopt.
+	RosterAdoptionNone = "NoCandidate"
+)

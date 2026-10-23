@@ -22,6 +22,15 @@ type NetworkUpgradePrepareSpec struct {
 	ConsensusCapsule string `json:"consensusCapsule"`
 
 	Images UpgradeImagesSpec `json:"images"`
+
+	// Artifacts are opaque files the UC read from the node's upgrade state, such as
+	// the candidate roster exported at PREPARE_UPGRADE. The UC does not interpret
+	// them; the operator does. Absent when the node exported nothing.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=8
+	Artifacts []UpgradeArtifact `json:"artifacts,omitempty"`
 }
 
 type NetworkUpgradePrepareStatus struct {
@@ -38,6 +47,10 @@ type NetworkUpgradePrepareStatus struct {
 	Conditions []Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	// +optional
 	SelectedSources *SelectedSources `json:"selectedSources,omitempty"`
+	// FirewallPlan is the host firewall change the operator computed from the
+	// candidate roster. The operator copies it into the Execute CR's status.
+	// +optional
+	FirewallPlan *FirewallPlan `json:"firewallPlan,omitempty"`
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }

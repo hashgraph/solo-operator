@@ -30,10 +30,20 @@ const (
 const (
 	DefaultUpgradePath         = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/current"
 	DefaultPreviousUpgradePath = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/previous"
+	// DefaultCandidateRosterPath is where the consensus node is expected to export
+	// candidate-roster.json (set networkAdmin.candidateRosterExportFile to the
+	// matching in-pod path, data/upgrade/candidate-roster.json). It sits beside
+	// current/ and previous/, not inside current/, because the node wipes current/
+	// when it extracts the upgrade package.
+	DefaultCandidateRosterPath = "/opt/hgcapp/services-hedera/HapiApp2.0/data/upgrade/candidate-roster.json"
 	DefaultEventsPath          = "/opt/solo/weaver/uc/events"
 	DefaultCRPersistPath       = "/opt/solo/weaver/uc/crs"
 	DefaultBackupPath          = "/opt/solo/weaver/uc/backup"
 	DefaultSocketPath          = "/opt/solo/weaver/uc/uc.sock"
+
+	// DefaultCandidateRosterWait bounds the wait for candidate-roster.json after
+	// execute_immediate.mf is seen.
+	DefaultCandidateRosterWait = 15 * time.Second
 
 	// DefaultPollInterval is the normal marker-file polling cadence. It drops to
 	// FreezePollInterval after freeze_scheduled.mf is seen, then reverts.
@@ -147,6 +157,18 @@ type Config struct {
 	// ConfigCRDeployTimeout is the total budget for the config-CR deployment step
 	// (scan + create + wait for Valid=True). Env: UC_CONFIG_CR_DEPLOY_TIMEOUT.
 	ConfigCRDeployTimeout time.Duration
+	// CandidateRosterPath is the candidate-roster.json the consensus node exports at
+	// PREPARE_UPGRADE; the UC forwards it verbatim in the Prepare CR. Empty disables
+	// the feature. Env: UC_CANDIDATE_ROSTER_PATH.
+	CandidateRosterPath string
+	// CandidateRosterWait is how long the UC waits for the roster file after seeing
+	// execute_immediate.mf. The node writes the marker when the package is extracted,
+	// which can precede the roster export by a moment. Env: UC_CANDIDATE_ROSTER_WAIT.
+	CandidateRosterWait time.Duration
+	// CandidateRosterRequired makes a missing or invalid roster hold the Prepare CR
+	// back (retried each poll tick) instead of creating it without the roster.
+	// Env: UC_CANDIDATE_ROSTER_REQUIRED.
+	CandidateRosterRequired bool
 	// HandoffDeadline is the total budget for the provisioner handoff, measured
 	// from when the CR entered ReadyForProvisionerDaemon across all retries; when
 	// exceeded, a transient failure is reported as DaemonResult=False (reason
@@ -165,6 +187,8 @@ func DefaultConfig() Config {
 		LogPollInterval:       DefaultLogPollInterval,
 		UpgradePath:           DefaultUpgradePath,
 		PreviousUpgradePath:   DefaultPreviousUpgradePath,
+		CandidateRosterPath:   DefaultCandidateRosterPath,
+		CandidateRosterWait:   DefaultCandidateRosterWait,
 		EventsPath:            DefaultEventsPath,
 		CRPersistPath:         DefaultCRPersistPath,
 		BackupPath:            DefaultBackupPath,
@@ -297,6 +321,12 @@ func (c Config) Validate() error {
 		return errx.WithHints(
 			errx.WithReason(errConfigInvalid.New("config-cr-deploy-timeout %s must be positive", c.ConfigCRDeployTimeout), ReasonConfigInvalid),
 			"Set --config-cr-deploy-timeout to a positive duration (e.g. 20m)",
+		)
+	}
+	if c.CandidateRosterWait < 0 {
+		return errx.WithHints(
+			errx.WithReason(errConfigInvalid.New("candidate-roster-wait %s must not be negative", c.CandidateRosterWait), ReasonConfigInvalid),
+			"Set --candidate-roster-wait to zero or a positive duration (e.g. 15s)",
 		)
 	}
 	if c.HandoffDeadline <= c.ConfigCRDeployTimeout {

@@ -242,6 +242,34 @@ type OrbitConsensus struct {
 	// +optional
 	FeatureGates *ConsensusFeatureGates `json:"featureGates,omitempty"`
 
+	// CanAdoptRosterFromVersion is the first consensus-node package version whose
+	// candidate roster the consensus node is expected to adopt. Version means
+	// images.consensusNode.version in the upgrade package's consensus-node-components.yaml,
+	// compared as a semantic version. It is set once and never needs updating per upgrade.
+	//
+	// For an upgrade to a version at or above this one, the operator acts on the roster: it
+	// swaps the node's signing key to the staged Secret that matches the roster's
+	// certificate, computes the firewall plan and applies it. For any lower version, or when
+	// this is empty (the default), the operator only logs a warning when the roster changes
+	// this node or the firewall, keeps the old key and changes no firewall rules.
+	//
+	// It mirrors the CN's own canAdoptRoster check (TSS readiness). Set it only for versions
+	// where the candidate will be adopted: the TSS gate is off (both tss.hintsEnabled and
+	// tss.historyEnabled are false, or the network has no TSS ledger id yet), or TSS
+	// readiness is always complete before the council freezes the network. Do not derive it
+	// from genesis.addressBook.ledgerId, which is the HAPI ledger id, not the TSS one.
+	//
+	// This is configuration, not a feature gate: it describes the deployed network and is
+	// not removed on a schedule. Whoever enables roster automation (solo-provisioner or an
+	// upgrade job) sets it; the operator only reads it. Because it holds for every later
+	// upgrade, it cannot notice a single upgrade whose candidate the CN refuses: the UC's
+	// roster-adoption result is the safety net, and a wrong setting leaves a node on a new
+	// key against a roster the CN refused. To switch automation off, clear it or raise it.
+	// +kubebuilder:validation:Pattern=`^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$`
+	// +kubebuilder:validation:MaxLength=64
+	// +optional
+	CanAdoptRosterFromVersion string `json:"canAdoptRosterFromVersion,omitempty"`
+
 	// Genesis contains genesis-specific configuration
 	Genesis OrbitGenesis `json:"genesis"`
 }

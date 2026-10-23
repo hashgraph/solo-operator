@@ -43,6 +43,9 @@ type LogStatusSnapshot struct {
 type logPersistedState struct {
 	Code   int32  `json:"code"`
 	Status string `json:"status"`
+	// Roster is the last roster adoption result seen in the log, if any. Optional so a
+	// state file written before this field existed still loads.
+	Roster *RosterAdoption `json:"roster,omitempty"`
 }
 
 // LogMonitor tails the consensus node's log file for PLATFORM_STATUS
@@ -52,6 +55,7 @@ type LogMonitor struct {
 	cfg Config
 
 	snapshot        atomic.Pointer[LogStatusSnapshot]
+	rosterSnapshot  atomic.Pointer[RosterAdoption]
 	connectivityErr atomic.Pointer[daemonkit.StatusError]
 
 	persistPath string
@@ -76,6 +80,12 @@ func (m *LogMonitor) ConnectivityError() *daemonkit.StatusError {
 // been observed.
 func (m *LogMonitor) Snapshot() *LogStatusSnapshot {
 	return m.snapshot.Load()
+}
+
+// RosterAdoption returns the latest roster adoption result seen in the log, or nil if
+// none has been observed. A nil result means "unknown", never "adopted".
+func (m *LogMonitor) RosterAdoption() *RosterAdoption {
+	return m.rosterSnapshot.Load()
 }
 
 func (m *LogMonitor) Run(ctx context.Context) (retErr error) {
@@ -118,6 +128,9 @@ func (m *LogMonitor) loadPersisted() {
 	var state logPersistedState
 	if err := json.Unmarshal(data, &state); err != nil {
 		return
+	}
+	if state.Roster != nil && state.Roster.Result != "" {
+		m.rosterSnapshot.Store(state.Roster)
 	}
 	if state.Status != "" {
 		m.snapshot.Store(&LogStatusSnapshot{Code: state.Code, Status: state.Status})
@@ -172,6 +185,7 @@ func (m *LogMonitor) seedFromTail() {
 			lastCode = code
 			lastName = name
 		}
+		m.observeRosterLine(scanner.Text())
 	}
 
 	if lastName != "" {
@@ -220,6 +234,7 @@ func (m *LogMonitor) poll() {
 		if ok {
 			m.updateStatus(code, name)
 		}
+		m.observeRosterLine(scanner.Text())
 	}
 
 	m.offset += bytesRead
@@ -249,11 +264,40 @@ func (m *LogMonitor) updateStatus(code int32, name string) {
 }
 
 func (m *LogMonitor) persist(code int32, name string) {
-	data, err := json.Marshal(logPersistedState{Code: code, Status: name})
+	data, err := json.Marshal(logPersistedState{Code: code, Status: name, Roster: m.rosterSnapshot.Load()})
 	if err != nil {
 		return
 	}
 	_ = os.WriteFile(m.persistPath, data, 0o644)
+}
+
+// observeRosterLine records a roster adoption result if the line carries one. A result
+// that matches the one already held is ignored, so re-reading the same line (after a
+// restart seeds from the log tail) neither re-warns nor re-persists.
+func (m *LogMonitor) observeRosterLine(line string) {
+	a, ok := parseRosterAdoptionLog(line)
+	if !ok {
+		return
+	}
+	if prev := m.rosterSnapshot.Load(); prev != nil && prev.equal(a) {
+		return
+	}
+	m.rosterSnapshot.Store(&a)
+
+	ev := logx.As().Info()
+	if a.Result == operatorv1alpha1.RosterAdoptionRejected {
+		ev = logx.As().Warn().Str("reason", ReasonRosterRejected.String())
+	} else {
+		ev = ev.Str("reason", ReasonRosterAdoptionDetected.String())
+	}
+	ev.Str("result", a.Result).Int64("round", a.Round).Msg(a.message())
+
+	// Persist the whole state, keeping the platform status already held.
+	code, name := operatorv1alpha1.PlatformStatusCodeUnknown, ""
+	if snap := m.snapshot.Load(); snap != nil {
+		code, name = snap.Code, snap.Status
+	}
+	m.persist(code, name)
 }
 
 // LogFileMtime returns the mtime of the configured consensus log file in unix

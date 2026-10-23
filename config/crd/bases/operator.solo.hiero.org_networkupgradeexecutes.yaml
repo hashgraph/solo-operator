@@ -815,6 +815,72 @@ spec:
                   - type
                   type: object
                 type: array
+              firewallPlan:
+                description: |-
+                  FirewallPlan is copied verbatim from the Prepare CR's status when this CR is
+                  created. The provisioner daemon only reads it; it reports progress through the
+                  FirewallApplied condition.
+                properties:
+                  digest:
+                    description: |-
+                      Digest is the sha256 over the canonical form of the fields above. It is a cheap
+                      skip-hint so the daemon can avoid a no-op CLI call; it is not the correctness
+                      mechanism. The authoritative applied state lives in the CLI, which converges on
+                      the plan each time it runs.
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  rollback:
+                    description: |-
+                      Rollback is the membership before this upgrade (the active roster's gossip
+                      addresses). The CLI restores it if the upgrade is aborted.
+                    items:
+                      maxLength: 266
+                      pattern: ^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$
+                      type: string
+                    maxItems: 256
+                    type: array
+                  rosterDigest:
+                    description: |-
+                      RosterDigest is the sha256 of the candidate-roster artifact the plan was computed
+                      from, tying the plan to exactly one roster.
+                    pattern: ^sha256:[a-f0-9]{64}$
+                    type: string
+                  rule:
+                    description: |-
+                      Rule is the logical allow rule the CLI maps to concrete host-firewall rules. The
+                      CLI owns the rule's protocol and rejects names that collide with its own reserved
+                      blocks; the operator only names the set.
+                    pattern: ^[a-z][a-z0-9_-]{0,31}$
+                    type: string
+                  target:
+                    description: |-
+                      Target is the final membership, applied once the Execute CR has succeeded: the
+                      candidate roster's gossip addresses only.
+                    items:
+                      maxLength: 266
+                      pattern: ^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$
+                      type: string
+                    maxItems: 256
+                    type: array
+                  transition:
+                    description: |-
+                      Transition is the membership to install before the node restarts: the union of
+                      the active and candidate rosters, so a peer can reach a changed address while the
+                      old one still works until the upgrade has succeeded.
+                    items:
+                      maxLength: 266
+                      pattern: ^[a-zA-Z0-9.-]+:[0-9]{1,5}(-[0-9]{1,5})?$
+                      type: string
+                    maxItems: 256
+                    type: array
+                required:
+                - digest
+                - rollback
+                - rosterDigest
+                - rule
+                - target
+                - transition
+                type: object
               nodeUpgradeStartTime:
                 format: date-time
                 type: string
