@@ -5,6 +5,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/automa-saga/errx"
 	appsv1 "k8s.io/api/apps/v1"
@@ -703,8 +704,12 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(ctx context.Context, sts
 		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventSidecarDisabled,
 			"Removed backupUploader from StatefulSet: enabled=false")
 	default:
+		var nodeVersion string
+		if sv := containers.ConsensusNode.SoftwareVersion; sv != nil {
+			nodeVersion = sv.ImageTag
+		}
 		sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers,
-			r.buildBackupUploaderContainer(containers.BackupUploader))
+			r.buildBackupUploaderContainer(containers.BackupUploader, nodeVersion))
 	}
 
 	switch {
@@ -1032,7 +1037,9 @@ func getVolumeNameForPath(path string) string {
 // The backup.sh script inside the image requires BACKUP_UPLOADER_BUCKET_1 (bare bucket,
 // e.g. "my-bucket" or "my-bucket/folder") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
 // rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
-func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader) corev1.Container {
+// nodeVersion feeds BACKUP_UPLOADER_CN_VERSION, which backup.sh writes as VERSION
+// because HapiApp2.0/VERSION lives only in the consensus node image.
+func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader, nodeVersion string) corev1.Container {
 	image := common.BuildImage(config.SoftwareVersion)
 
 	name := config.Name
@@ -1058,13 +1065,25 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		container.Resources = *config.Resources
 	}
 
-	if len(config.AdditionalVolumeMounts) > 0 {
-		container.VolumeMounts = config.AdditionalVolumeMounts
+	// backup.sh reads these fixed paths; a user mount at the same mountPath replaces the default.
+	container.VolumeMounts = []corev1.VolumeMount{
+		{Name: VolumeTypeSaved, MountPath: HapiBase + "/data/saved", ReadOnly: true},
+		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},
+	}
+	for _, m := range config.AdditionalVolumeMounts {
+		if i := slices.IndexFunc(container.VolumeMounts, func(d corev1.VolumeMount) bool { return d.MountPath == m.MountPath }); i >= 0 {
+			container.VolumeMounts[i] = m
+		} else {
+			container.VolumeMounts = append(container.VolumeMounts, m)
+		}
+	}
+
+	var env []corev1.EnvVar
+	if nodeVersion != "" {
+		env = append(env, corev1.EnvVar{Name: "BACKUP_UPLOADER_CN_VERSION", Value: nodeVersion})
 	}
 
 	if cfg := config.Config; cfg != nil {
-		var env []corev1.EnvVar
-
 		// Bare bucket: backup.sh prepends the "backups:" rclone remote itself.
 		if cfg.BucketName != "" {
 			env = append(env, corev1.EnvVar{
@@ -1082,10 +1101,6 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 			env = append(env, corev1.EnvVar{Name: "RCLONE_CONFIG_BACKUPS_TYPE", Value: "gcs"})
 		}
 
-		if len(env) > 0 {
-			container.Env = env
-		}
-
 		// Credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
 		if cfg.EnvFromSecret != "" {
 			container.EnvFrom = []corev1.EnvFromSource{
@@ -1095,6 +1110,7 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 			}
 		}
 	}
+	container.Env = env
 
 	return container
 }

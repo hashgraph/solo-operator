@@ -721,7 +721,8 @@ type StreamUploader struct {
 	// +optional
 	Config *StreamUploaderConfig `json:"config,omitempty"`
 
-	// AdditionalVolumeMounts for the uploader
+	// AdditionalVolumeMounts for the uploader, appended to the default saved and stats
+	// mounts; a mount with the same mountPath replaces the default.
 	// +optional
 	AdditionalVolumeMounts []corev1.VolumeMount `json:"additionalVolumeMounts,omitempty"`
 }
