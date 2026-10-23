@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/automa-saga/errx"
 )
 
 // serveOnSocket starts an HTTP server on a Unix socket in a temp dir and returns
@@ -71,6 +73,17 @@ func TestControlClientNon200(t *testing.T) {
 	}
 	if err := c.Health(context.Background()); err == nil {
 		t.Fatal("Health on 500 = nil error, want error")
+	}
+}
+
+func TestControlClientTooLarge(t *testing.T) {
+	sock := serveOnSocket(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(make([]byte, maxControlResponseSize+1))
+	}))
+
+	_, err := NewControlClient(sock).Status(context.Background())
+	if reason, _ := errx.ReasonOf(err); reason != ReasonControlReadFailed {
+		t.Fatalf("reason = %q (err %v), want %q", reason, err, ReasonControlReadFailed)
 	}
 }
 
