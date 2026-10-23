@@ -938,8 +938,8 @@ func TestBuildStatefulSet_BackupUploaderWiring(t *testing.T) {
 	if !reflect.DeepEqual(c.VolumeMounts, want) {
 		t.Errorf("backup-uploader mounts:\n got %+v\nwant %+v", c.VolumeMounts, want)
 	}
-	if !slices.Contains(c.Env, corev1.EnvVar{Name: "BACKUP_UPLOADER_NODE_VERSION", Value: "v0.77.2"}) {
-		t.Errorf("expected BACKUP_UPLOADER_NODE_VERSION=v0.77.2, got %v", c.Env)
+	if !slices.Contains(c.Env, corev1.EnvVar{Name: "BACKUP_UPLOADER_CN_VERSION", Value: "v0.77.2"}) {
+		t.Errorf("expected BACKUP_UPLOADER_CN_VERSION=v0.77.2, got %v", c.Env)
 	}
 }
 
