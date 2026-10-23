@@ -2,7 +2,7 @@
 
 module github.com/hashgraph/solo-operator
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/automa-saga/daemonkit v0.4.0
