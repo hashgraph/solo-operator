@@ -33,7 +33,7 @@ func NewBlockNodesConfigReconciler(c client.Client, scheme *runtime.Scheme) *Blo
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=blocknodesconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=blocknodesconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=blocknodesconfigs/status,verbs=get;update;patch
 
 func (r *BlockNodesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

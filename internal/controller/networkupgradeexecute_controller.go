@@ -107,7 +107,7 @@ func (r *NetworkUpgradeExecuteReconciler) WithAllowedRegistryHosts(hosts []strin
 	return r
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeexecutes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch

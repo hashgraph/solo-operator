@@ -112,7 +112,7 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 }
 
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch,roleName=manager-role
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete

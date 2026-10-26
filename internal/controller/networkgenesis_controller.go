@@ -40,7 +40,7 @@ func NewNetworkGenesisReconciler(c client.Client, scheme *runtime.Scheme) *Netwo
 	return &NetworkGenesisReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch,roleName=manager-role

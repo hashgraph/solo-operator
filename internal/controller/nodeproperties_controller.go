@@ -33,7 +33,7 @@ func NewNodePropertiesReconciler(c client.Client, scheme *runtime.Scheme) *NodeP
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodepropertiesconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodepropertiesconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodepropertiesconfigs/status,verbs=get;update;patch
 
 func (r *NodePropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

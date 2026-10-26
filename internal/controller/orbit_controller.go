@@ -38,7 +38,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 	return &OrbitReconciler{Client: c, Scheme: scheme}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch;create;update;patch;delete,roleName=manager-role
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch;update,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/status,verbs=get;update;patch,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/finalizers,verbs=update,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;delete
@@ -56,6 +56,7 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=applicationoverrideproperties,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkgeneses,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=blocknodesconfigs,verbs=get;list;watch;delete
 
 func (r *OrbitReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	orbitObj := &operatorv1alpha1.Orbit{}
@@ -168,6 +169,7 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 	sfsList := &operatorv1alpha1.SimpleFeesSchedulesList{}
 	aoList := &operatorv1alpha1.ApplicationOverridePropertiesList{}
 	bpList := &operatorv1alpha1.BootstrapPropertiesList{}
+	bncList := &operatorv1alpha1.BlockNodesConfigList{}
 	ngList := &operatorv1alpha1.NetworkGenesisList{}
 
 	for _, e := range []entry{
@@ -315,6 +317,17 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 				return s
 			},
 			func(o client.Object) string { return o.(*operatorv1alpha1.BootstrapProperties).Spec.Orbit },
+		},
+		{
+			bncList,
+			func() []client.Object {
+				s := make([]client.Object, len(bncList.Items))
+				for i := range bncList.Items {
+					s[i] = &bncList.Items[i]
+				}
+				return s
+			},
+			func(o client.Object) string { return o.(*operatorv1alpha1.BlockNodesConfig).Spec.Orbit },
 		},
 		{
 			ngList,

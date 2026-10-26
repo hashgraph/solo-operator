@@ -33,7 +33,7 @@ func NewThrottlesConfigReconciler(c client.Client, scheme *runtime.Scheme) *Thro
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=throttlesconfigs/status,verbs=get;update;patch
 
 func (r *ThrottlesConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
