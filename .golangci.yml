@@ -16,12 +16,32 @@ linters:
     - misspell
     - unconvert
     - gocritic
+    - gosec
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - errcheck
           - unused
+          - gosec
+      - path: ^test/
+        linters:
+          - gosec
+      # Operator-supplied CLI/config paths; UC reads are O_NOFOLLOW-hardened
+      - path: ^internal/(beacon|uc)/
+        linters:
+          - gosec
+        text: "G304"
+      # math/rand only orders registry candidates
+      - path: ^internal/controller/
+        linters:
+          - gosec
+        text: "G404"
+      # Reason code name, not a credential
+      - path: ^internal/registry/reasons\.go
+        linters:
+          - gosec
+        text: "G101"
       # Ignore deprecated Requeue field - it's still commonly used in controller-runtime
       - linters:
           - staticcheck

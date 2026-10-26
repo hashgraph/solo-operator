@@ -18,6 +18,14 @@ concurrency:
   group: pr-checks-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+  pull-requests: write
+  checks: write
+  statuses: write
+
 jobs:
   build:
     name: Code
@@ -31,6 +39,15 @@ jobs:
     with:
       custom-job-label: Check
       enable-lint-check: true
+
+  vuln-check:
+    name: Vulnerability Check
+    uses: ./.github/workflows/zxc-compile-code.yaml
+    needs:
+      - build
+    with:
+      custom-job-label: Govulncheck
+      enable-vuln-check: true
 
   unit-tests:
     name: Unit Tests

@@ -25,6 +25,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable-vuln-check:
+        description: "Go Vulnerability Check Enabled"
+        type: boolean
+        required: false
+        default: false
       enable-docker-build:
         description: "Docker Build Enabled"
         type: boolean
@@ -92,6 +97,10 @@ jobs:
       - name: Lint Check
         if: ${{ inputs.enable-lint-check && !cancelled() && !failure() }}
         run: task lint
+
+      - name: Vulnerability Check
+        if: ${{ inputs.enable-vuln-check && !cancelled() && !failure() }}
+        run: task vuln
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
