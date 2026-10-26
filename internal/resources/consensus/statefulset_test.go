@@ -965,3 +965,82 @@ func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildVolumes_PrivateKeyModes(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
+	capsule.Spec.Secrets.SecretResources.GrpcTlsPrivateKey = operatorv1alpha1.KeyReference{SecretName: "grpc", KeyName: "tls.key"}
+	capsule.Spec.Secrets.SecretResources.GrpcTlsPublicCertificate = operatorv1alpha1.KeyReference{SecretName: "grpc", KeyName: "tls.crt"}
+
+	volumes, _ := r.buildVolumes(capsule, false)
+
+	want := map[string]int32{"keys": secretKeyMode, "grpc-tls-key": secretKeyMode, "grpc-tls-cert": configMapMode}
+	for _, v := range volumes {
+		wantMode, ok := want[v.Name]
+		if !ok {
+			continue
+		}
+		var got *int32
+		switch {
+		case v.Projected != nil:
+			got = v.Projected.DefaultMode
+		case v.Secret != nil:
+			got = v.Secret.DefaultMode
+		}
+		if got == nil || *got != wantMode {
+			t.Errorf("volume %q: defaultMode %v, want %#o", v.Name, got, wantMode)
+		}
+		delete(want, v.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing volumes: %v", want)
+	}
+}
+
+func TestApplyFSGroup_SecretKeys(t *testing.T) {
+	r := newStsReconciler()
+
+	t.Run("secret-backed keys get fsGroup and OnRootMismatch", func(t *testing.T) {
+		sts := &appsv1.StatefulSet{}
+		r.applyFSGroup(sts, capsuleWithSecretResources("node0-keys", "s-private-node0.pem"))
+		psc := sts.Spec.Template.Spec.SecurityContext
+		if psc == nil || psc.FSGroup == nil || *psc.FSGroup != HederaUID {
+			t.Fatalf("expected fsGroup %d, got %+v", HederaUID, psc)
+		}
+		if psc.FSGroupChangePolicy == nil || *psc.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
+			t.Errorf("expected fsGroupChangePolicy OnRootMismatch, got %v", psc.FSGroupChangePolicy)
+		}
+	})
+
+	t.Run("hostPath keys leave the pod security context alone", func(t *testing.T) {
+		capsule := capsuleWithImage("v0.50.0")
+		capsule.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{HostPath: &corev1.HostPathVolumeSource{Path: "/keys"}}
+		sts := &appsv1.StatefulSet{}
+		r.applyFSGroup(sts, capsule)
+		if sts.Spec.Template.Spec.SecurityContext != nil {
+			t.Errorf("expected no security context, got %+v", sts.Spec.Template.Spec.SecurityContext)
+		}
+	})
+}
+
+func TestBuildVolumes_HostPathMountsReadOnly(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	capsule.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{HostPath: &corev1.HostPathVolumeSource{Path: "/keys"}}
+	capsule.Spec.ConfigFolder = &corev1.HostPathVolumeSource{Path: "/config"}
+
+	_, mounts := r.buildVolumes(capsule, false)
+
+	want := map[string]bool{"keys": true, "config-folder": true}
+	for _, m := range mounts {
+		if want[m.Name] {
+			if !m.ReadOnly {
+				t.Errorf("hostPath mount %q must be read-only", m.Name)
+			}
+			delete(want, m.Name)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("missing mounts: %v", want)
+	}
+}

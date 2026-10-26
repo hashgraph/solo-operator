@@ -39,8 +39,11 @@ type EnvoyProxySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Orbit string `json:"orbit"`
 
-	// Image is the Envoy container image.
+	// Image is the Envoy container image, pinned by a non-latest tag or a sha256 digest.
 	// +kubebuilder:default="envoyproxy/envoy-distroless:v1.21.6"
+	// +kubebuilder:validation:MaxLength=512
+	// +kubebuilder:validation:XValidation:rule="self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="image must be pinned by a tag or a sha256 digest"
+	// +kubebuilder:validation:XValidation:rule="!self.lowerAscii().matches(':latest(@sha256:[a-f0-9]{64})?$')",message="image must not use the mutable 'latest' tag"
 	// +optional
 	Image string `json:"image,omitempty"`
 

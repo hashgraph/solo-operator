@@ -134,3 +134,16 @@ func TestBuildRole_MainnetNoConfigCRGrants(t *testing.T) {
 		t.Error("expected networkupgradeexecutes grant in mainnet mode, got none")
 	}
 }
+
+func TestBuildRole_NoConfigMapOrSecretRead(t *testing.T) {
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+	for _, clusterOnly := range []bool{true, false} {
+		role := (&RoleSubReconciler{}).buildRole(capsule, clusterOnly)
+		for _, res := range []string{"secrets", "configmaps"} {
+			if rule := findRule(role.Rules, res); rule != nil {
+				t.Errorf("clusterOnly=%v: unexpected %s grant %+v", clusterOnly, res, rule)
+			}
+		}
+	}
+}

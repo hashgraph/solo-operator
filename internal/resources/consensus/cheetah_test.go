@@ -663,7 +663,7 @@ func TestAddSidecarContainers_Cheetah(t *testing.T) {
 	}
 }
 
-func TestApplyCheetahFSGroup(t *testing.T) {
+func TestApplyFSGroup(t *testing.T) {
 	reconciler := &StatefulSetSubReconciler{}
 
 	t.Run("sets fsGroup 2000 when cheetah enabled and no security context set", func(t *testing.T) {
@@ -677,7 +677,7 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 			},
 		}
 		deploy := &appsv1.StatefulSet{}
-		reconciler.applyCheetahFSGroup(deploy, capsule)
+		reconciler.applyFSGroup(deploy, capsule)
 		if deploy.Spec.Template.Spec.SecurityContext == nil || deploy.Spec.Template.Spec.SecurityContext.FSGroup == nil {
 			t.Fatal("expected fsGroup to be set")
 		}
@@ -706,7 +706,7 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 				},
 			},
 		}
-		reconciler.applyCheetahFSGroup(deploy, capsule)
+		reconciler.applyFSGroup(deploy, capsule)
 		if *deploy.Spec.Template.Spec.SecurityContext.FSGroup != 1000 {
 			t.Errorf("expected user fsGroup 1000 to be preserved, got %d", *deploy.Spec.Template.Spec.SecurityContext.FSGroup)
 		}
@@ -715,7 +715,7 @@ func TestApplyCheetahFSGroup(t *testing.T) {
 	t.Run("no-op when cheetah not enabled", func(t *testing.T) {
 		capsule := &operatorv1alpha1.ConsensusCapsule{}
 		deploy := &appsv1.StatefulSet{}
-		reconciler.applyCheetahFSGroup(deploy, capsule)
+		reconciler.applyFSGroup(deploy, capsule)
 		if deploy.Spec.Template.Spec.SecurityContext != nil {
 			t.Error("expected no security context when cheetah not enabled")
 		}

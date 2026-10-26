@@ -128,7 +128,7 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeProperties map[string]string `json:"nodeProperties,omitempty"`
 
-	// hostPath volume containing config.txt
+	// hostPath volume containing config.txt, mounted read-only. Legacy; prefer the config CR refs.
 	// +optional
 	ConfigFolder *corev1.HostPathVolumeSource `json:"configFolder,omitempty"`
 
@@ -166,6 +166,7 @@ type ConsensusCapsuleSpec struct {
 
 // ConsensusSecrets holds TLS and signing key references.
 type ConsensusSecrets struct {
+	// HostPath mounts node keys read-only from the host. Legacy; prefer secretResources.
 	// +optional
 	HostPath *corev1.HostPathVolumeSource `json:"hostPath,omitempty"`
 

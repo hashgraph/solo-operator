@@ -41,7 +41,8 @@ type OrbitSpec struct {
 	// default image (relying on a default is not permitted under this policy). This is the
 	// opt-in, fresh-deploy counterpart to the always-on digest enforcement of the network
 	// upgrade flow; use it to guarantee digest-pinned images from day one rather than only
-	// after the first upgrade. Default false (tag-only images are allowed on deploy).
+	// after the first upgrade. Also applies to EnvoyProxy and HAProxyCapsule spec.image.
+	// Default false (tag-only images are allowed on deploy).
 	// +optional
 	RequireDigestOnDeploy bool `json:"requireDigestOnDeploy,omitempty"`
 

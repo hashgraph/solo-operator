@@ -103,6 +103,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	}
 	zeroBased := orbit != nil && orbit.IsNodeNameZeroBased()
 	volumes, volumeMounts := r.buildVolumes(capsule, zeroBased)
+	warnHostPathVolumes(ctx, capsule)
 
 	consensusContainer, err := r.buildConsensusNodeContainer(capsule, volumeMounts)
 	if err != nil {
@@ -171,7 +172,7 @@ func (r *StatefulSetSubReconciler) buildStatefulSet(ctx context.Context, capsule
 	}
 
 	r.applyPodProperties(sts, capsule)
-	r.applyCheetahFSGroup(sts, capsule)
+	r.applyFSGroup(sts, capsule)
 	r.applyImagePullSecrets(sts, capsule, resolvedAlloy)
 	// DeprecatedServiceAccount must mirror ServiceAccountName (set after applyPodProperties
 	// which may override ServiceAccountName).
@@ -337,7 +338,8 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 	pvc := capsule.Spec.PersistentVolumeClaims
 
 	// ── ConfigMap volumes ────────────────────────────────────────────────────
-	defaultMode := int32(420) // 0644
+	defaultMode := configMapMode
+	keyMode := secretKeyMode
 	optionalTrue := true
 	volumes := []corev1.Volume{
 		{
@@ -488,7 +490,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				},
 			})
 			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name: "keys", MountPath: HapiBase + "/data/keys",
+				Name: "keys", MountPath: HapiBase + "/data/keys", ReadOnly: true,
 			})
 		} else if capsule.Spec.Secrets.SecretResources != nil {
 			var projectedSources []corev1.VolumeProjection
@@ -526,7 +528,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 				VolumeSource: corev1.VolumeSource{
 					Projected: &corev1.ProjectedVolumeSource{
 						Sources:     projectedSources,
-						DefaultMode: &defaultMode,
+						DefaultMode: &keyMode,
 					},
 				},
 			})
@@ -541,7 +543,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 						Secret: &corev1.SecretVolumeSource{
 							SecretName:  sr.GrpcTlsPrivateKey.SecretName,
 							Items:       []corev1.KeyToPath{{Key: sr.GrpcTlsPrivateKey.KeyName, Path: "hedera.key"}},
-							DefaultMode: &defaultMode,
+							DefaultMode: &keyMode,
 						},
 					},
 				})
@@ -576,7 +578,7 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 			},
 		})
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name: "config-folder", MountPath: "/mnt/config",
+			Name: "config-folder", MountPath: "/mnt/config", ReadOnly: true,
 		})
 	}
 
@@ -652,7 +654,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(ctx context.Context, sts
 		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
 
 	if cheetahEnabled {
-		dm := int32(420)
+		dm := configMapMode
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "solo-cheetah-config",
 			VolumeSource: corev1.VolumeSource{
@@ -730,7 +732,7 @@ func (r *StatefulSetSubReconciler) addSidecarContainers(ctx context.Context, sts
 		r.event(ctx, capsule, corev1.EventTypeNormal, operatorv1alpha1.EventComponentSkipped,
 			"Skipped alloy: omitted from spec")
 	} else {
-		dm := int32(420)
+		dm := configMapMode
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "alloy-config",
 			VolumeSource: corev1.VolumeSource{
@@ -954,22 +956,45 @@ func (r *StatefulSetSubReconciler) buildUcContainer(capsule *operatorv1alpha1.Co
 	return container
 }
 
-// applyCheetahFSGroup sets fsGroup on the pod security context when any Cheetah uploader is enabled.
-func (r *StatefulSetSubReconciler) applyCheetahFSGroup(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule) {
+// applyFSGroup sets fsGroup for Cheetah PVC sharing and group-readable key volumes.
+func (r *StatefulSetSubReconciler) applyFSGroup(sts *appsv1.StatefulSet, capsule *operatorv1alpha1.ConsensusCapsule) {
 	containers := capsule.Spec.PodProperties.Containers
 	cheetahEnabled := (containers.BlocksUploader != nil && containers.BlocksUploader.Enabled) ||
 		(containers.RecordsUploader != nil && containers.RecordsUploader.Enabled) ||
 		(containers.EventsUploader != nil && containers.EventsUploader.Enabled)
-	if !cheetahEnabled {
+	if !cheetahEnabled && !mountsSecretKeys(capsule) {
 		return
 	}
-	if sts.Spec.Template.Spec.SecurityContext == nil {
-		sts.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{}
+	psc := sts.Spec.Template.Spec.SecurityContext
+	if psc == nil {
+		psc = &corev1.PodSecurityContext{}
+		sts.Spec.Template.Spec.SecurityContext = psc
 	}
-	if sts.Spec.Template.Spec.SecurityContext.FSGroup == nil {
+	if psc.FSGroup == nil {
 		fsGroup := HederaUID
-		sts.Spec.Template.Spec.SecurityContext.FSGroup = &fsGroup
+		psc.FSGroup = &fsGroup
 	}
+	// Avoid re-chowning large PVCs on every start.
+	if psc.FSGroupChangePolicy == nil {
+		policy := corev1.FSGroupChangeOnRootMismatch
+		psc.FSGroupChangePolicy = &policy
+	}
+}
+
+func warnHostPathVolumes(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) {
+	if s := capsule.Spec.Secrets; s != nil && s.HostPath != nil {
+		common.Warn(ctx, ReasonHostPathVolume).Str("path", s.HostPath.Path).
+			Msg("spec.secrets.hostPath is deprecated: node keys are read from the host; use spec.secrets.secretResources")
+	}
+	if cf := capsule.Spec.ConfigFolder; cf != nil {
+		common.Warn(ctx, ReasonHostPathVolume).Str("path", cf.Path).
+			Msg("spec.configFolder is deprecated: it mounts a host directory into the node pod; use the config CRs instead")
+	}
+}
+
+func mountsSecretKeys(capsule *operatorv1alpha1.ConsensusCapsule) bool {
+	s := capsule.Spec.Secrets
+	return s != nil && s.HostPath == nil && s.SecretResources != nil
 }
 
 // applyImagePullSecrets collects ImagePullSecrets from every container's SoftwareVersion

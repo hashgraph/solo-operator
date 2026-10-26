@@ -90,7 +90,8 @@ spec:
                   at data/config/bootstrap.properties. Optional — CN falls back to defaults.
                 type: string
               configFolder:
-                description: hostPath volume containing config.txt
+                description: hostPath volume containing config.txt, mounted read-only.
+                  Legacy; prefer the config CR refs.
                 properties:
                   path:
                     description: |-
@@ -23278,9 +23279,8 @@ spec:
                 description: key/cert secret references
                 properties:
                   hostPath:
-                    description: |-
-                      Represents a host path mapped into a pod.
-                      Host path volumes do not support ownership management or SELinux relabeling.
+                    description: HostPath mounts node keys read-only from the host.
+                      Legacy; prefer secretResources.
                     properties:
                       path:
                         description: |-
