@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -208,8 +209,10 @@ func (r *NetworkUpgradeExecuteReconciler) Reconcile(ctx context.Context, req ctr
 			return ctrl.Result{}, err
 		}
 
-		now := metav1.Now()
-		execute.Status.StartTime = &now
+		if execute.Status.StartTime == nil {
+			now := metav1.Now()
+			execute.Status.StartTime = &now
+		}
 		execute.Status.ObservedGeneration = execute.Generation
 
 		// Both modes transition to ReadyForProvisionerDaemon; the difference is who
@@ -403,72 +406,10 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 			}
 		}
 
-		prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
-			// Prefetch succeeded — skip registry re-validation. The images are
-			// likely cached on nodes; the kubelet uses them via IfNotPresent.
-			common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("NetworkUpgradeExecute: images prefetched, skipping registry re-validation")
-			ss := execute.Spec.SelectedSources
-			execute.Status.SelectedSources = &ss
-			setCondition(&execute.Status.Conditions, metav1.Condition{
-				Type:    operatorv1alpha1.CondRegistrySelected,
-				Status:  metav1.ConditionTrue,
-				Reason:  operatorv1alpha1.ReasonPrefetchCompleted.String(),
-				Message: "images prefetched on nodes; registry re-validation skipped",
-			})
-		} else {
-			rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-			checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
-			if err != nil {
-				return ctrl.Result{}, err
+		if !apimeta.IsStatusConditionTrue(execute.Status.Conditions, operatorv1alpha1.CondRegistrySelected) || execute.Status.SelectedSources == nil {
+			if res, err := r.selectSources(ctx, execute); res != nil {
+				return *res, err
 			}
-			skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
-			updated, registryOK := registry.RevalidateComponents(
-				ctx, checker,
-				execute.Spec.Images, execute.Spec.SelectedSources,
-				checkTimeout, rng, r.StrategyName,
-				skipUC,
-				func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
-					r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
-						"%s: registry %s unreachable, failed over to %s (digest: %s)",
-						name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
-				},
-				func(name operatorv1alpha1.ComponentName, err error) {
-					r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
-						"%s: %v", name, err)
-				},
-			)
-			if !registryOK {
-				now := metav1.Now()
-				execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
-				execute.Status.CompletionTime = &now
-				execute.Status.ObservedGeneration = execute.Generation
-				setCondition(&execute.Status.Conditions, metav1.Condition{
-					Type:    operatorv1alpha1.CondRegistrySelected,
-					Status:  metav1.ConditionFalse,
-					Reason:  operatorv1alpha1.ReasonRegistryInvalid.String(),
-					Message: "no valid registry available for one or more components",
-				})
-				if err := r.Status().Update(ctx, execute); err != nil {
-					return ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
-				}
-				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
-					"Registry validation failed for operationId %q", execute.Spec.OperationID)
-				return ctrl.Result{}, errx.WithHints(
-					errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
-					"Confirm at least one configured registry serves a valid image for each component")
-			}
-			execute.Status.SelectedSources = updated
-			setCondition(&execute.Status.Conditions, metav1.Condition{
-				Type:    operatorv1alpha1.CondRegistrySelected,
-				Status:  metav1.ConditionTrue,
-				Reason:  operatorv1alpha1.ReasonSelectionComplete.String(),
-				Message: "all selected registries healthy",
-			})
 		}
 
 		patch := client.MergeFrom(capsule.DeepCopy())
@@ -581,6 +522,86 @@ func (r *NetworkUpgradeExecuteReconciler) reconcilePendingNodeUpgrade(ctx contex
 	default: // upgradeWaiting — the consensus node has not yet reached ACTIVE.
 		return ctrl.Result{RequeueAfter: ucfg.NodeReadyRequeueInterval}, nil
 	}
+}
+
+// selectSources persists the registry choice before the capsule patch so a restart reuses it.
+func (r *NetworkUpgradeExecuteReconciler) selectSources(ctx context.Context, execute *operatorv1alpha1.NetworkUpgradeExecute) (*ctrl.Result, error) {
+	prepare, err := findPrepare(ctx, r.Client, execute.Namespace, execute.Spec.OperationID)
+	if err != nil {
+		return &ctrl.Result{}, err
+	}
+
+	if _, prefetchOK := prefetchCompleted(prepare); prefetchOK {
+		// Prefetch succeeded — skip registry re-validation. The images are
+		// likely cached on nodes; the kubelet uses them via IfNotPresent.
+		common.Info(ctx, operatorv1alpha1.ReasonPrefetchCompleted).Msg("NetworkUpgradeExecute: images prefetched, skipping registry re-validation")
+		ss := execute.Spec.SelectedSources
+		execute.Status.SelectedSources = &ss
+		setCondition(&execute.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondRegistrySelected,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonPrefetchCompleted.String(),
+			Message: "images prefetched on nodes; registry re-validation skipped",
+		})
+	} else {
+		rng := rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
+		checker, err := capsuleRegistryChecker(ctx, r.Client, r.Checker, execute.Namespace, execute.Spec.ConsensusCapsule, r.AllowedRegistryHosts)
+		if err != nil {
+			return &ctrl.Result{}, err
+		}
+		skipUC := map[operatorv1alpha1.ComponentName]bool{operatorv1alpha1.ComponentUC: true}
+		updated, registryOK := registry.RevalidateComponents(
+			ctx, checker,
+			execute.Spec.Images, execute.Spec.SelectedSources,
+			checkTimeout, rng, r.StrategyName,
+			skipUC,
+			func(name operatorv1alpha1.ComponentName, res registry.FailoverResult) {
+				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryFailover,
+					"%s: registry %s unreachable, failed over to %s (digest: %s)",
+					name, res.FailedImage, res.Selected.Image, res.Selected.Digest)
+			},
+			func(name operatorv1alpha1.ComponentName, err error) {
+				r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventRegistryInvalid,
+					"%s: %v", name, err)
+			},
+		)
+		if !registryOK {
+			now := metav1.Now()
+			execute.Status.Phase = operatorv1alpha1.ExecutePhaseFailed
+			execute.Status.CompletionTime = &now
+			execute.Status.ObservedGeneration = execute.Generation
+			setCondition(&execute.Status.Conditions, metav1.Condition{
+				Type:    operatorv1alpha1.CondRegistrySelected,
+				Status:  metav1.ConditionFalse,
+				Reason:  operatorv1alpha1.ReasonRegistryInvalid.String(),
+				Message: "no valid registry available for one or more components",
+			})
+			if err := r.Status().Update(ctx, execute); err != nil {
+				return &ctrl.Result{}, wrapStatusUpdate(err, "updating status to failed")
+			}
+			r.eventf(ctx, execute, corev1.EventTypeWarning, operatorv1alpha1.EventUpgradeFailed,
+				"Registry validation failed for operationId %q", execute.Spec.OperationID)
+			return &ctrl.Result{}, errx.WithHints(
+				errx.WithReason(errReconcile.New("no valid registry for one or more components"), ReasonNoValidRegistry),
+				"Confirm at least one configured registry serves a valid image for each component")
+		}
+		execute.Status.SelectedSources = updated
+		setCondition(&execute.Status.Conditions, metav1.Condition{
+			Type:    operatorv1alpha1.CondRegistrySelected,
+			Status:  metav1.ConditionTrue,
+			Reason:  operatorv1alpha1.ReasonSelectionComplete.String(),
+			Message: "all selected registries healthy",
+		})
+	}
+
+	execute.Status.ObservedGeneration = execute.Generation
+	if err := r.Status().Update(ctx, execute); err != nil {
+		if apierrors.IsConflict(err) {
+			return &ctrl.Result{Requeue: true}, nil
+		}
+		return &ctrl.Result{}, wrapStatusUpdate(err, "persisting selected sources")
+	}
+	return nil, nil
 }
 
 // failUpgrade drives the Execute CR to a terminal Failed phase with a

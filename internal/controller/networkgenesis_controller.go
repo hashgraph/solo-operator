@@ -9,6 +9,7 @@ import (
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
@@ -210,6 +211,7 @@ func (r *NetworkGenesisReconciler) succeed(ctx context.Context, ng *operatorv1al
 		genesis.ClusterConfigMapName,
 	}
 	ng.Status.GeneratedConfigMaps = generatedCMs
+	apimeta.RemoveStatusCondition(&ng.Status.Conditions, networkGenesisConditionFailed)
 	setNetworkGenesisCondition(&ng.Status.Conditions, metav1.Condition{
 		Type:               networkGenesisConditionReady,
 		Status:             metav1.ConditionTrue,
@@ -226,6 +228,7 @@ func (r *NetworkGenesisReconciler) fail(ctx context.Context, ng *operatorv1alpha
 	ng.Status.Phase = operatorv1alpha1.PhaseFailed
 	ng.Status.ObservedGeneration = ng.Generation
 	ng.Status.CompletionTime = &now
+	apimeta.RemoveStatusCondition(&ng.Status.Conditions, networkGenesisConditionReady)
 	setNetworkGenesisCondition(&ng.Status.Conditions, metav1.Condition{
 		Type:               networkGenesisConditionFailed,
 		Status:             metav1.ConditionTrue,
@@ -241,6 +244,7 @@ func (r *NetworkGenesisReconciler) rejectMutation(ctx context.Context, ng *opera
 	now := metav1.Now()
 	ng.Status.Phase = operatorv1alpha1.PhaseFailed
 	ng.Status.ObservedGeneration = ng.Generation
+	apimeta.RemoveStatusCondition(&ng.Status.Conditions, networkGenesisConditionReady)
 	setNetworkGenesisCondition(&ng.Status.Conditions, metav1.Condition{
 		Type:               networkGenesisConditionFailed,
 		Status:             metav1.ConditionTrue,

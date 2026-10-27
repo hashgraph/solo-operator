@@ -554,6 +554,53 @@ func TestReleaseSubReconciler_retriesWhenHashMatchesButNotDeployed(t *testing.T)
 	}
 }
 
+func TestReleaseSubReconciler_unlocksStalePendingRelease(t *testing.T) {
+	for _, status := range []string{"pending-install", "pending-upgrade", "pending-rollback"} {
+		t.Run(status, func(t *testing.T) {
+			mock := NewMockClient()
+			hc := newHelmCapsule("mirror", "test-ns")
+			r := newTestReleaseSubReconciler(newTestScheme(), mock, hc)
+			mock.SetRelease(&ReleaseInfo{
+				Name: "mirror", Namespace: "test-ns", Version: 3, Status: status,
+				LastDeployed: time.Now().Add(-2 * DefaultTimeout),
+			})
+
+			if _, err := r.Reconcile(context.Background(), hc); err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			info, _ := mock.GetRelease("mirror", "test-ns")
+			if info.Status != "deployed" || info.Version != 4 {
+				t.Errorf("got status=%s revision=%d, want deployed revision 4", info.Status, info.Version)
+			}
+			if hc.Status.ReleaseStatus != "deployed" {
+				t.Errorf("hc.Status.ReleaseStatus = %q, want deployed", hc.Status.ReleaseStatus)
+			}
+		})
+	}
+}
+
+func TestReleaseSubReconciler_waitsOutFreshPendingRelease(t *testing.T) {
+	mock := NewMockClient()
+	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(newTestScheme(), mock, hc)
+	mock.SetRelease(&ReleaseInfo{
+		Name: "mirror", Namespace: "test-ns", Version: 3, Status: "pending-upgrade",
+		LastDeployed: time.Now().Add(-time.Minute),
+	})
+
+	result, err := r.Reconcile(context.Background(), hc)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if result.RequeueAfter <= 0 || result.RequeueAfter > DefaultTimeout-time.Minute {
+		t.Errorf("RequeueAfter = %v, want the remaining timeout", result.RequeueAfter)
+	}
+	info, _ := mock.GetRelease("mirror", "test-ns")
+	if info.Status != "pending-upgrade" || info.Version != 3 {
+		t.Errorf("fresh pending release was touched: status=%s revision=%d", info.Status, info.Version)
+	}
+}
+
 // ─── Chart credentials ────────────────────────────────────────────────────────
 
 func TestReleaseSubReconciler_loadsCredentialsFromSecret(t *testing.T) {

@@ -71,6 +71,7 @@ func main() {
 	var allowedNamespaces string
 	var nodeActiveTimeout time.Duration
 	var nodeActiveAlertInterval time.Duration
+	var gracefulShutdownTimeout time.Duration
 	var showVersion bool
 	var logLevel string
 	var consoleLogging bool
@@ -106,6 +107,9 @@ func main() {
 	flag.DurationVar(&nodeActiveAlertInterval, "node-active-alert-interval", 5*time.Minute,
 		"Interval between repeated NodeActiveDeadlineExceeded warning events after the initial "+
 			"deadline fires. Shorter values give the node operator more frequent visibility.")
+	flag.DurationVar(&gracefulShutdownTimeout, "graceful-shutdown-timeout", 30*time.Second,
+		"How long in-flight reconciles may run after SIGTERM before the manager stops. "+
+			"Must be shorter than the pod's terminationGracePeriodSeconds.")
 
 	flag.Parse()
 
@@ -185,6 +189,9 @@ func main() {
 		Metrics:                metricsServerOptions,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
+		// Safe because main exits as soon as mgr.Start returns.
+		LeaderElectionReleaseOnCancel: true,
+		GracefulShutdownTimeout:       &gracefulShutdownTimeout,
 		// LeaderElectionID matches the API group (operator.solo.hiero.org) so the lock
 		// name is consistent with CRD group, finalizer, and label key naming conventions.
 		LeaderElectionID: "operator.solo.hiero.org",

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -350,6 +351,7 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 }
 
 func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) error {
+	before := orbitObj.Status.DeepCopy()
 	now := metav1.Now()
 
 	if orbitObj.Status.Phase == "" {
@@ -364,26 +366,17 @@ func (r *OrbitReconciler) updateStatus(ctx context.Context, orbitObj *operatorv1
 		}
 	}
 
-	ready := metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionTrue,
-		LastTransitionTime: now,
-		Reason:             ReasonReconcileSuccess.String(),
-		Message:            "Orbit is ready",
-	}
-	found := false
-	for i, c := range orbitObj.Status.Conditions {
-		if c.Type == "Ready" {
-			orbitObj.Status.Conditions[i] = ready
-			found = true
-			break
-		}
-	}
-	if !found {
-		orbitObj.Status.Conditions = append(orbitObj.Status.Conditions, ready)
-	}
+	apimeta.SetStatusCondition(&orbitObj.Status.Conditions, metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonReconcileSuccess.String(),
+		Message: "Orbit is ready",
+	})
 	r.setNamespaceAllowed(ctx, orbitObj)
 	orbitObj.Status.ObservedGeneration = orbitObj.Generation
+	if equality.Semantic.DeepEqual(before, &orbitObj.Status) {
+		return nil
+	}
 	return common.WarnOnConflict(ctx, r.Status().Update(ctx, orbitObj))
 }
 

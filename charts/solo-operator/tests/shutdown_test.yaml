@@ -1,0 +1,23 @@
+suite: deployment shutdown window
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: defaults to a 30s drain inside a 45s grace period
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 45
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --graceful-shutdown-timeout=30s
+
+  - it: derives the grace period from the drain timeout
+    set:
+      controller.gracefulShutdownTimeoutSeconds: 60
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 75
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --graceful-shutdown-timeout=60s
