@@ -6,9 +6,11 @@ import (
 	"context"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
@@ -42,6 +44,40 @@ func TestDeleteOwnedCapsules_CascadesNetworkGenesis(t *testing.T) {
 	err = c.Get(context.Background(), types.NamespacedName{Name: genesis.Name, Namespace: genesis.Namespace}, &operatorv1alpha1.NetworkGenesis{})
 	if err == nil {
 		t.Fatalf("expected NetworkGenesis to be deleted, but it still exists")
+	}
+}
+
+func TestDeleteOwnedCapsules_CascadesBlockNodesConfig(t *testing.T) {
+	scheme := newControllerTestScheme()
+
+	orbit := &operatorv1alpha1.Orbit{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+	}
+	owned := &operatorv1alpha1.BlockNodesConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "owned-bnc", Namespace: "test"},
+		Spec:       operatorv1alpha1.BlockNodesConfigSpec{Orbit: orbit.Name},
+	}
+	foreign := &operatorv1alpha1.BlockNodesConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "foreign-bnc", Namespace: "test"},
+		Spec:       operatorv1alpha1.BlockNodesConfigSpec{Orbit: "other-orbit"},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(orbit, owned, foreign).Build()
+	r := &OrbitReconciler{Client: c, Scheme: scheme}
+
+	remaining, err := r.deleteOwnedCapsules(context.Background(), orbit)
+	if err != nil {
+		t.Fatalf("deleteOwnedCapsules returned error: %v", err)
+	}
+	if remaining != 1 {
+		t.Fatalf("expected 1 remaining owned object, got %d", remaining)
+	}
+
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(owned), &operatorv1alpha1.BlockNodesConfig{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("expected owned BlockNodesConfig to be deleted, got err=%v", err)
+	}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(foreign), &operatorv1alpha1.BlockNodesConfig{}); err != nil {
+		t.Fatalf("expected BlockNodesConfig of another orbit to be kept, got err=%v", err)
 	}
 }
 

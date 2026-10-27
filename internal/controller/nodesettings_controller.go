@@ -33,7 +33,7 @@ func NewNodeSettingsReconciler(c client.Client, scheme *runtime.Scheme) *NodeSet
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodesettings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodesettings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodesettings/status,verbs=get;update;patch
 
 func (r *NodeSettingsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

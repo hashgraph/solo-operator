@@ -253,9 +253,6 @@ const (
 // +kubebuilder:printcolumn:name="HelmStatus",type="string",JSONPath=".status.releaseStatus"
 // +kubebuilder:printcolumn:name="Release",type="integer",JSONPath=".status.releaseVersion"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/finalizers,verbs=update
 
 // HelmCapsule manages a Helm release as part of a solo-operator network.
 // It supports both generic chart deployments and first-class Hedera ecosystem

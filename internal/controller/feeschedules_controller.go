@@ -33,7 +33,7 @@ func NewFeeSchedulesReconciler(c client.Client, scheme *runtime.Scheme) *FeeSche
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=feeschedules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=feeschedules,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=feeschedules/status,verbs=get;update;patch
 
 func (r *FeeSchedulesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

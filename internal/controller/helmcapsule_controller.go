@@ -50,7 +50,7 @@ func NewHelmCapsuleReconciler(c client.Client, scheme *runtime.Scheme, helmClien
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits,verbs=get;list;watch,roleName=manager-role

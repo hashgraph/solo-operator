@@ -41,7 +41,7 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete

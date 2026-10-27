@@ -111,28 +111,16 @@ rules:
   - applicationproperties
   - blocknodesconfigs
   - bootstrapproperties
-  - consensuscapsules
-  - envoyproxies
   - feeschedules
-  - haproxycapsules
-  - helmcapsules
   - log4j2configs
-  - networkgeneses
-  - networkupgradeexecutes
-  - networkupgradefreezeaborts
-  - networkupgradefreezes
-  - networkupgradeprepares
   - nodepropertiesconfigs
   - nodesettings
   - simplefeesschedules
   - throttlesconfigs
   verbs:
-  - create
   - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - operator.solo.hiero.org
@@ -164,6 +152,17 @@ rules:
 - apiGroups:
   - operator.solo.hiero.org
   resources:
+  - consensuscapsules
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - operator.solo.hiero.org
+  resources:
   - consensuscapsules/finalizers
   - envoyproxies/finalizers
   - haproxycapsules/finalizers
@@ -175,6 +174,31 @@ rules:
   - networkupgradeprepares/finalizers
   verbs:
   - update
+- apiGroups:
+  - operator.solo.hiero.org
+  resources:
+  - envoyproxies
+  - haproxycapsules
+  - helmcapsules
+  - networkgeneses
+  verbs:
+  - delete
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - operator.solo.hiero.org
+  resources:
+  - networkupgradeexecutes
+  - networkupgradefreezeaborts
+  - networkupgradefreezes
+  - networkupgradeprepares
+  verbs:
+  - get
+  - list
+  - update
+  - watch
 - apiGroups:
   - policy
   resources:
@@ -227,11 +251,8 @@ rules:
   resources:
   - orbits
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
   - update
   - watch
 - apiGroups:

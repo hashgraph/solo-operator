@@ -33,7 +33,7 @@ func NewBootstrapPropertiesReconciler(c client.Client, scheme *runtime.Scheme) *
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties,verbs=get;list;watch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=bootstrapproperties/status,verbs=get;update;patch
 
 func (r *BootstrapPropertiesReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

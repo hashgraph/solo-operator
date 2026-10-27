@@ -56,7 +56,7 @@ func (r *NetworkUpgradeFreezeReconciler) WithAllowedRegistryHosts(hosts []string
 	return r
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradefreezes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares,verbs=get;list;watch
