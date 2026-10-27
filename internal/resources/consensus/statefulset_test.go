@@ -5,6 +5,8 @@ package consensus
 import (
 	"context"
 	"maps"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -906,6 +908,61 @@ func TestBuildStatefulSet_OmittedSidecarRemoved(t *testing.T) {
 	}
 }
 
+func TestBuildStatefulSet_BackupUploaderWiring(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.77.2")
+	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
+	}
+
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+	spec := sts.Spec.Template.Spec
+
+	if len(spec.InitContainers) != 1 {
+		t.Errorf("backup uploader must not add init containers, got %d", len(spec.InitContainers))
+	}
+
+	ci := slices.IndexFunc(spec.Containers, func(c corev1.Container) bool { return c.Name == "backup-uploader" })
+	if ci < 0 {
+		t.Fatal("expected backup-uploader container")
+	}
+	c := spec.Containers[ci]
+	want := []corev1.VolumeMount{
+		{Name: VolumeTypeSaved, MountPath: HapiBase + "/data/saved", ReadOnly: true},
+		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},
+	}
+	if !reflect.DeepEqual(c.VolumeMounts, want) {
+		t.Errorf("backup-uploader mounts:\n got %+v\nwant %+v", c.VolumeMounts, want)
+	}
+	if !slices.Contains(c.Env, corev1.EnvVar{Name: "BACKUP_UPLOADER_CN_VERSION", Value: "v0.77.2"}) {
+		t.Errorf("expected BACKUP_UPLOADER_CN_VERSION=v0.77.2, got %v", c.Env)
+	}
+}
+
+func TestBuildBackupUploaderContainer_AdditionalMountsOverrideDefaults(t *testing.T) {
+	r := newStsReconciler()
+	c := r.buildBackupUploaderContainer(&operatorv1alpha1.StreamUploader{
+		Enabled: true,
+		AdditionalVolumeMounts: []corev1.VolumeMount{
+			{Name: "custom-saved", MountPath: HapiBase + "/data/saved"},
+			{Name: "extra", MountPath: "/extra"},
+		},
+	}, "")
+
+	want := []corev1.VolumeMount{
+		{Name: "custom-saved", MountPath: HapiBase + "/data/saved"},
+		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},
+		{Name: "extra", MountPath: "/extra"},
+	}
+	if !reflect.DeepEqual(c.VolumeMounts, want) {
+		t.Errorf("mounts:\n got %+v\nwant %+v", c.VolumeMounts, want)
+	}
+}
+
 func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 	tests := []struct {
 		name string
@@ -953,7 +1010,7 @@ func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 				Enabled:         true,
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
 				Config:          tt.cfg,
-			})
+			}, "")
 
 			got := map[string]string{}
 			for _, e := range c.Env {

@@ -3833,7 +3833,8 @@ spec:
                           softwareVersionSource, never both (a disabled uploader may declare neither).
                         properties:
                           additionalVolumeMounts:
-                            description: AdditionalVolumeMounts for the uploader
+                            description: AdditionalVolumeMounts for the uploader;
+                              one at a default mountPath replaces it.
                             items:
                               description: VolumeMount describes a mounting of a Volume
                                 within a container.
