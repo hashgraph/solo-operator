@@ -1023,24 +1023,20 @@ func TestApplyFSGroup_SecretKeys(t *testing.T) {
 	})
 }
 
-func TestBuildVolumes_HostPathMountsReadOnly(t *testing.T) {
+func TestBuildVolumes_HostPathKeysReadOnly(t *testing.T) {
 	r := newStsReconciler()
 	capsule := capsuleWithImage("v0.50.0")
 	capsule.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{HostPath: &corev1.HostPathVolumeSource{Path: "/keys"}}
-	capsule.Spec.ConfigFolder = &corev1.HostPathVolumeSource{Path: "/config"}
 
 	_, mounts := r.buildVolumes(capsule, false)
 
-	want := map[string]bool{"keys": true, "config-folder": true}
 	for _, m := range mounts {
-		if want[m.Name] {
+		if m.Name == "keys" {
 			if !m.ReadOnly {
-				t.Errorf("hostPath mount %q must be read-only", m.Name)
+				t.Error("hostPath keys mount must be read-only")
 			}
-			delete(want, m.Name)
+			return
 		}
 	}
-	if len(want) != 0 {
-		t.Errorf("missing mounts: %v", want)
-	}
+	t.Error("missing keys mount")
 }

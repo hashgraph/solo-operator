@@ -89,25 +89,6 @@ spec:
                   references a BootstrapProperties CR whose managed ConfigMap is subPath-mounted
                   at data/config/bootstrap.properties. Optional — CN falls back to defaults.
                 type: string
-              configFolder:
-                description: hostPath volume containing config.txt, mounted read-only.
-                  Legacy; prefer the config CR refs.
-                properties:
-                  path:
-                    description: |-
-                      path of the directory on the host.
-                      If the path is a symlink, it will follow the link to the real path.
-                      More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath
-                    type: string
-                  type:
-                    description: |-
-                      type for HostPath Volume
-                      Defaults to ""
-                      More info: https://kubernetes.io/docs/concepts/storage/volumes#hostpath
-                    type: string
-                required:
-                - path
-                type: object
               desiredRunState:
                 description: |-
                   DesiredRunState is the desired s6 process state (Running or Stopped).

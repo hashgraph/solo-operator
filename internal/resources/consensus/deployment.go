@@ -569,19 +569,6 @@ func (r *StatefulSetSubReconciler) buildVolumes(capsule *operatorv1alpha1.Consen
 		}
 	}
 
-	// ── Legacy hostPath config folder ────────────────────────────────────────
-	if capsule.Spec.ConfigFolder != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: "config-folder",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: capsule.Spec.ConfigFolder,
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name: "config-folder", MountPath: "/mnt/config", ReadOnly: true,
-		})
-	}
-
 	// ── Pod-level volume overrides ───────────────────────────────────────────
 	// replaceOrAppend replaces an existing volume with the same name or appends it,
 	// preventing duplicate volume names that the Kubernetes API would reject.
@@ -985,10 +972,6 @@ func warnHostPathVolumes(ctx context.Context, capsule *operatorv1alpha1.Consensu
 	if s := capsule.Spec.Secrets; s != nil && s.HostPath != nil {
 		common.Warn(ctx, ReasonHostPathVolume).Str("path", s.HostPath.Path).
 			Msg("spec.secrets.hostPath is deprecated: node keys are read from the host; use spec.secrets.secretResources")
-	}
-	if cf := capsule.Spec.ConfigFolder; cf != nil {
-		common.Warn(ctx, ReasonHostPathVolume).Str("path", cf.Path).
-			Msg("spec.configFolder is deprecated: it mounts a host directory into the node pod; use the config CRs instead")
 	}
 }
 

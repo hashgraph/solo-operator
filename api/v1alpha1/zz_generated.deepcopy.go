@@ -1024,11 +1024,6 @@ func (in *ConsensusCapsuleSpec) DeepCopyInto(out *ConsensusCapsuleSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.ConfigFolder != nil {
-		in, out := &in.ConfigFolder, &out.ConfigFolder
-		*out = new(v1.HostPathVolumeSource)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.ServiceAnnotations != nil {
 		in, out := &in.ServiceAnnotations, &out.ServiceAnnotations
 		*out = make(map[string]string, len(*in))

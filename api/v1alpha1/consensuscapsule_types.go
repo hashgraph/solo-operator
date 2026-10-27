@@ -128,10 +128,6 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeProperties map[string]string `json:"nodeProperties,omitempty"`
 
-	// hostPath volume containing config.txt, mounted read-only. Legacy; prefer the config CR refs.
-	// +optional
-	ConfigFolder *corev1.HostPathVolumeSource `json:"configFolder,omitempty"`
-
 	// +kubebuilder:default=LoadBalancer
 	// +optional
 	ServiceType ServiceType `json:"serviceType,omitempty"`
