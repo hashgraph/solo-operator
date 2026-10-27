@@ -69,10 +69,8 @@ func (r *RoleSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1al
 }
 
 func (r *RoleSubReconciler) buildRole(capsule *operatorv1alpha1.ConsensusCapsule, clusterOnly bool) *rbacv1.Role {
-	rules := []rbacv1.PolicyRule{
-		{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{""}, Resources: []string{"secrets"}, Verbs: []string{"get", "list", "watch"}},
-	}
+	// No configmaps/secrets: the pod gets them via volumes.
+	var rules []rbacv1.PolicyRule
 
 	sidecar := capsule.Spec.PodProperties.Containers.UC
 	if sidecar != nil && sidecar.Enabled {

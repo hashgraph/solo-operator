@@ -70,6 +70,9 @@ type HAProxyCapsuleSpec struct {
 
 	// Image is the HAProxy container image.
 	// +kubebuilder:default="haproxy:2.8.10-alpine3.20"
+	// +kubebuilder:validation:MaxLength=512
+	// +kubebuilder:validation:XValidation:rule="self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="image must be pinned by a tag or a sha256 digest"
+	// +kubebuilder:validation:XValidation:rule="!self.lowerAscii().matches(':latest(@sha256:[a-f0-9]{64})?$')",message="image must not use the mutable 'latest' tag"
 	// +optional
 	Image string `json:"image,omitempty"`
 

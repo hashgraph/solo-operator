@@ -25,6 +25,11 @@ const (
 	// AlloyUID is the "alloy" user in grafana/alloy; the image itself runs as root.
 	AlloyUID int64 = 473
 
+	configMapMode int32 = 0o644
+
+	// Readable by the node only via pod fsGroup.
+	secretKeyMode int32 = 0o440
+
 	// AlloyStoragePath is writable by AlloyUID, unlike the default relative to "/".
 	AlloyStoragePath = "/var/lib/alloy/data"
 

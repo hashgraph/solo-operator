@@ -18,6 +18,7 @@ const (
 	reasonExpectHashReadFailed errx.Reason = "ExpectHashReadFailed"
 	reasonExpectHashInvalid    errx.Reason = "ExpectHashInvalid"
 	reasonExpectedHashMismatch errx.Reason = "ExpectedHashMismatch"
+	reasonUnverifiedPackage    errx.Reason = "UnverifiedPackage"
 	reasonNotPrivilegedPayer   errx.Reason = "NotPrivilegedPayer"
 	reasonInvalidCheckpoint    errx.Reason = "InvalidCheckpoint"
 )

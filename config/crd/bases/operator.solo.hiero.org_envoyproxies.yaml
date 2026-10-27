@@ -1185,7 +1185,13 @@ spec:
               image:
                 default: envoyproxy/envoy-distroless:v1.21.6
                 description: Image is the Envoy container image.
+                maxLength: 512
                 type: string
+                x-kubernetes-validations:
+                - message: image must be pinned by a tag or a sha256 digest
+                  rule: self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+                - message: image must not use the mutable 'latest' tag
+                  rule: '!self.lowerAscii().matches('':latest(@sha256:[a-f0-9]{64})?$'')'
               ingressSpec:
                 description: IngressSpec is required when serviceType is Ingress.
                 properties:
