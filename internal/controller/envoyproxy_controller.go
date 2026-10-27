@@ -41,7 +41,7 @@ func NewEnvoyProxyReconciler(c client.Client, scheme *runtime.Scheme) *EnvoyProx
 	}
 }
 
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies,verbs=get;list;watch;update
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
