@@ -1037,8 +1037,6 @@ func getVolumeNameForPath(path string) string {
 // The backup.sh script inside the image requires BACKUP_UPLOADER_BUCKET_1 (bare bucket,
 // e.g. "my-bucket" or "my-bucket/folder") and RCLONE_CONFIG_BACKUPS_* env vars that configure the
 // rclone "backups" remote. Credentials are injected from config.Config.EnvFromSecret.
-// nodeVersion feeds BACKUP_UPLOADER_CN_VERSION, which backup.sh writes as VERSION
-// because HapiApp2.0/VERSION lives only in the consensus node image.
 func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operatorv1alpha1.StreamUploader, nodeVersion string) corev1.Container {
 	image := common.BuildImage(config.SoftwareVersion)
 
@@ -1065,7 +1063,7 @@ func (r *StatefulSetSubReconciler) buildBackupUploaderContainer(config *operator
 		container.Resources = *config.Resources
 	}
 
-	// backup.sh reads these fixed paths; a user mount at the same mountPath replaces the default.
+	// A user mount at the same mountPath replaces the default.
 	container.VolumeMounts = []corev1.VolumeMount{
 		{Name: VolumeTypeSaved, MountPath: HapiBase + "/data/saved", ReadOnly: true},
 		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},

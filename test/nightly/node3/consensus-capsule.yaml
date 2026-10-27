@@ -102,9 +102,9 @@ spec:
         enabled: true
         name: "backup-uploader"
         softwareVersion:
-          repository: "us-central1-docker.pkg.dev/hashsphere-public/hashsphere/images"
+          repository: "ghcr.io/hiero-ledger/solo-containers"
           imageName: "backup-uploader"
-          imageTag: "0.38.0"
+          imageTag: "0.47.0"
           imagePullPolicy: IfNotPresent
         resources:
           limits:
