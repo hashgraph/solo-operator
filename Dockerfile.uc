@@ -8,7 +8,7 @@
 # Selector stage: pick the pre-compiled binary for the target architecture.
 # TARGETARCH is set by docker buildx to the target platform (amd64/arm64),
 # which matches our binary suffix — unlike uname -m which reflects the builder.
-FROM debian:bookworm-slim AS selector
+FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8 AS selector
 
 ARG TARGETARCH
 
@@ -30,7 +30,7 @@ RUN cd /tmp && \
 #
 # We use debian:bookworm-slim (not distroless) so the image ships a shell for
 # `kubectl exec` debugging of the shared upgrade tree.
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
 
 # Match the consensus-node image: hedera group and user, both 2000.
 RUN groupadd --gid 2000 hedera && \

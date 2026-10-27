@@ -91,7 +91,7 @@ func (s *CRStore) Persist(operationID, step string, cr *unstructured.Unstructure
 	// Write atomically: write a temp file then rename, so a crash mid-write can
 	// never leave a truncated CR on disk that recovery would try to re-send.
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o640); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return "", errx.WithHints(
 			errx.WithReason(errPersist.Wrap(err, "write CR %s", tmp), ReasonCRPersistWriteFailed),
 			"Confirm --cr-persist-path is on a writable volume with free space",

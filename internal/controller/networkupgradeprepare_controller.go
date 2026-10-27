@@ -561,7 +561,7 @@ func (r *NetworkUpgradePrepareReconciler) targetsBySelector(
 		common.Debug(ctx, operatorv1alpha1.ReasonPrefetchCreated).
 			Msg("Using pod-node targeting: consensus nodeSelector matched no nodes")
 		return nil, false
-	case int32(len(candidateNodes)) > maxNodes:
+	case len(candidateNodes) > int(maxNodes):
 		// Genuine degradation: the matched pool is larger than the cap, so we
 		// cannot cache on every node the pod could reschedule onto. Surface it.
 		common.Warn(ctx, operatorv1alpha1.ReasonPrefetchCreated).

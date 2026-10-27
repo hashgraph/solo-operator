@@ -78,6 +78,10 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if err := validateProxyDigestPolicy(ctx, r.Client, envoyObj.Spec.Orbit, "EnvoyProxy", envoyObj.Name, envoy.GetImage(envoyObj)); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Run subreconcilers
 	result, err := r.subreconciler.Reconcile(ctx, envoyObj)
 	if err != nil {

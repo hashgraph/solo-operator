@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/automa-saga/errx"
+	"github.com/automa-saga/logx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
 	"github.com/spf13/cobra"
 
@@ -150,7 +151,13 @@ func runFileUpload(cmd *cobra.Command, resolve SessionFunc, zipPath string, file
 
 	if want, provided, err := expectedHash(expectHash, expectHashFile); err != nil {
 		return err
-	} else if provided && !bytes.Equal(want, localRaw) {
+	} else if !provided {
+		logx.As().Warn().
+			Str("reason", reasonUnverifiedPackage.String()).
+			Str("zip", zipPath).
+			Str("sha384", localHex).
+			Msg("Uploading unverified package: no --expect-hash/--expect-hash-file given; confirm the SHA-384 against the release before freeze prepare")
+	} else if !bytes.Equal(want, localRaw) {
 		return errx.Decorate(
 			errInput.New("local package hash %s does not match expected %s", localHex, hex.EncodeToString(want)),
 			reasonExpectedHashMismatch,

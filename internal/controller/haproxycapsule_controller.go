@@ -78,6 +78,10 @@ func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	if err := validateProxyDigestPolicy(ctx, r.Client, haproxyObj.Spec.Orbit, "HAProxyCapsule", haproxyObj.Name, haproxy.GetImage(haproxyObj)); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Run subreconcilers
 	result, err := r.subreconciler.Reconcile(ctx, haproxyObj)
 	if err != nil {

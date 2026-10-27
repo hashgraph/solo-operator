@@ -128,10 +128,6 @@ type ConsensusCapsuleSpec struct {
 	// +optional
 	NodeProperties map[string]string `json:"nodeProperties,omitempty"`
 
-	// hostPath volume containing config.txt
-	// +optional
-	ConfigFolder *corev1.HostPathVolumeSource `json:"configFolder,omitempty"`
-
 	// +kubebuilder:default=LoadBalancer
 	// +optional
 	ServiceType ServiceType `json:"serviceType,omitempty"`
@@ -166,6 +162,7 @@ type ConsensusCapsuleSpec struct {
 
 // ConsensusSecrets holds TLS and signing key references.
 type ConsensusSecrets struct {
+	// HostPath mounts node keys read-only from the host. Legacy; prefer secretResources.
 	// +optional
 	HostPath *corev1.HostPathVolumeSource `json:"hostPath,omitempty"`
 

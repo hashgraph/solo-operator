@@ -279,7 +279,7 @@ func (m *LogMonitor) persist(code int32, name string) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(m.persistPath, data, 0o644)
+	_ = os.WriteFile(m.persistPath, data, 0o600)
 }
 
 // LogFileMtime returns the mtime of the configured consensus log file in unix

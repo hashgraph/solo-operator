@@ -5,6 +5,8 @@ package consensus
 import (
 	"context"
 	"maps"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -906,6 +908,61 @@ func TestBuildStatefulSet_OmittedSidecarRemoved(t *testing.T) {
 	}
 }
 
+func TestBuildStatefulSet_BackupUploaderWiring(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.77.2")
+	capsule.Spec.PodProperties.Containers.BackupUploader = &operatorv1alpha1.StreamUploader{
+		Enabled:         true,
+		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
+	}
+
+	sts, err := r.buildStatefulSet(context.Background(), capsule)
+	if err != nil {
+		t.Fatalf("buildStatefulSet: %v", err)
+	}
+	spec := sts.Spec.Template.Spec
+
+	if len(spec.InitContainers) != 1 {
+		t.Errorf("backup uploader must not add init containers, got %d", len(spec.InitContainers))
+	}
+
+	ci := slices.IndexFunc(spec.Containers, func(c corev1.Container) bool { return c.Name == "backup-uploader" })
+	if ci < 0 {
+		t.Fatal("expected backup-uploader container")
+	}
+	c := spec.Containers[ci]
+	want := []corev1.VolumeMount{
+		{Name: VolumeTypeSaved, MountPath: HapiBase + "/data/saved", ReadOnly: true},
+		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},
+	}
+	if !reflect.DeepEqual(c.VolumeMounts, want) {
+		t.Errorf("backup-uploader mounts:\n got %+v\nwant %+v", c.VolumeMounts, want)
+	}
+	if !slices.Contains(c.Env, corev1.EnvVar{Name: "BACKUP_UPLOADER_CN_VERSION", Value: "v0.77.2"}) {
+		t.Errorf("expected BACKUP_UPLOADER_CN_VERSION=v0.77.2, got %v", c.Env)
+	}
+}
+
+func TestBuildBackupUploaderContainer_AdditionalMountsOverrideDefaults(t *testing.T) {
+	r := newStsReconciler()
+	c := r.buildBackupUploaderContainer(&operatorv1alpha1.StreamUploader{
+		Enabled: true,
+		AdditionalVolumeMounts: []corev1.VolumeMount{
+			{Name: "custom-saved", MountPath: HapiBase + "/data/saved"},
+			{Name: "extra", MountPath: "/extra"},
+		},
+	}, "")
+
+	want := []corev1.VolumeMount{
+		{Name: "custom-saved", MountPath: HapiBase + "/data/saved"},
+		{Name: VolumeTypeStats, MountPath: HapiBase + "/data/stats", ReadOnly: true},
+		{Name: "extra", MountPath: "/extra"},
+	}
+	if !reflect.DeepEqual(c.VolumeMounts, want) {
+		t.Errorf("mounts:\n got %+v\nwant %+v", c.VolumeMounts, want)
+	}
+}
+
 func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 	tests := []struct {
 		name string
@@ -953,7 +1010,7 @@ func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 				Enabled:         true,
 				SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "gcr.io", ImageName: "backup", ImageTag: "1.0"},
 				Config:          tt.cfg,
-			})
+			}, "")
 
 			got := map[string]string{}
 			for _, e := range c.Env {
@@ -964,4 +1021,79 @@ func TestBuildBackupUploaderContainer_EnvVars(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildVolumes_PrivateKeyModes(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithSecretResources("node0-keys", "s-private-node0.pem")
+	capsule.Spec.Secrets.SecretResources.GrpcTlsPrivateKey = operatorv1alpha1.KeyReference{SecretName: "grpc", KeyName: "tls.key"}
+	capsule.Spec.Secrets.SecretResources.GrpcTlsPublicCertificate = operatorv1alpha1.KeyReference{SecretName: "grpc", KeyName: "tls.crt"}
+
+	volumes, _ := r.buildVolumes(capsule, false)
+
+	want := map[string]int32{"keys": secretKeyMode, "grpc-tls-key": secretKeyMode, "grpc-tls-cert": configMapMode}
+	for _, v := range volumes {
+		wantMode, ok := want[v.Name]
+		if !ok {
+			continue
+		}
+		var got *int32
+		switch {
+		case v.Projected != nil:
+			got = v.Projected.DefaultMode
+		case v.Secret != nil:
+			got = v.Secret.DefaultMode
+		}
+		if got == nil || *got != wantMode {
+			t.Errorf("volume %q: defaultMode %v, want %#o", v.Name, got, wantMode)
+		}
+		delete(want, v.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing volumes: %v", want)
+	}
+}
+
+func TestApplyFSGroup_SecretKeys(t *testing.T) {
+	r := newStsReconciler()
+
+	t.Run("secret-backed keys get fsGroup and OnRootMismatch", func(t *testing.T) {
+		sts := &appsv1.StatefulSet{}
+		r.applyFSGroup(sts, capsuleWithSecretResources("node0-keys", "s-private-node0.pem"))
+		psc := sts.Spec.Template.Spec.SecurityContext
+		if psc == nil || psc.FSGroup == nil || *psc.FSGroup != HederaUID {
+			t.Fatalf("expected fsGroup %d, got %+v", HederaUID, psc)
+		}
+		if psc.FSGroupChangePolicy == nil || *psc.FSGroupChangePolicy != corev1.FSGroupChangeOnRootMismatch {
+			t.Errorf("expected fsGroupChangePolicy OnRootMismatch, got %v", psc.FSGroupChangePolicy)
+		}
+	})
+
+	t.Run("hostPath keys leave the pod security context alone", func(t *testing.T) {
+		capsule := capsuleWithImage("v0.50.0")
+		capsule.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{HostPath: &corev1.HostPathVolumeSource{Path: "/keys"}}
+		sts := &appsv1.StatefulSet{}
+		r.applyFSGroup(sts, capsule)
+		if sts.Spec.Template.Spec.SecurityContext != nil {
+			t.Errorf("expected no security context, got %+v", sts.Spec.Template.Spec.SecurityContext)
+		}
+	})
+}
+
+func TestBuildVolumes_HostPathKeysReadOnly(t *testing.T) {
+	r := newStsReconciler()
+	capsule := capsuleWithImage("v0.50.0")
+	capsule.Spec.Secrets = &operatorv1alpha1.ConsensusSecrets{HostPath: &corev1.HostPathVolumeSource{Path: "/keys"}}
+
+	_, mounts := r.buildVolumes(capsule, false)
+
+	for _, m := range mounts {
+		if m.Name == "keys" {
+			if !m.ReadOnly {
+				t.Error("hostPath keys mount must be read-only")
+			}
+			return
+		}
+	}
+	t.Error("missing keys mount")
 }

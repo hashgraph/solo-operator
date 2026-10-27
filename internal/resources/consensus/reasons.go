@@ -8,6 +8,8 @@ import "github.com/automa-saga/errx"
 const (
 	ReasonOrbitDefaultsResolved errx.Reason = "OrbitDefaultsResolved"
 
+	ReasonHostPathVolume errx.Reason = "HostPathVolume"
+
 	// ReasonExecTransportFailed: the pods/exec stream could not be established
 	// (pod not found/ready, or transport error).
 	ReasonExecTransportFailed errx.Reason = "ExecTransportFailed"

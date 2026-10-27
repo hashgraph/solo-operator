@@ -108,7 +108,7 @@ type ImageRegistrySpec struct {
 	// Image is a "registry[:port]/repository[:tag][@sha256:digest]" reference,
 	// e.g. "ghcr.io/hashgraph/consensus-node:0.75.0" or
 	// "registry.example.com:5000/consensus-node@sha256:<64 hex chars>".
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(:[0-9]+)?(/[a-zA-Z0-9._-]+)+(:[a-zA-Z0-9._-]+)?(@sha256:[a-f0-9]{64})?$`
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(:[0-9]+)?(/[a-zA-Z0-9._-]+)+(:[a-zA-Z0-9._-]+(@sha256:[a-f0-9]{64})?|@sha256:[a-f0-9]{64})$`
 	Image string `json:"image"`
 	// Per-registry layer hashes for non-deterministic builds.
 	// +optional
