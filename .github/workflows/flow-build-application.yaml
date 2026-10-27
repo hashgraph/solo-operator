@@ -29,6 +29,10 @@ defaults:
   run:
     shell: bash
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   code:
     name: Code

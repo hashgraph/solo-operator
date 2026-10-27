@@ -25,6 +25,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable-vuln-check:
+        description: "Go Vulnerability Check Enabled"
+        type: boolean
+        required: false
+        default: false
       enable-docker-build:
         description: "Docker Build Enabled"
         type: boolean
@@ -41,12 +46,8 @@ defaults:
     shell: bash
 
 permissions:
-  id-token: write
   contents: read
   actions: read
-  pull-requests: write
-  checks: write
-  statuses: write
 
 env:
   KIND_NODE_IMAGE: kindest/node:v1.32.2@sha256:142f543559cc55d64e1ab9341df08e5ced84bd2e893736da8f51320f26f5950b
@@ -92,6 +93,10 @@ jobs:
       - name: Lint Check
         if: ${{ inputs.enable-lint-check && !cancelled() && !failure() }}
         run: task lint
+
+      - name: Vulnerability Check
+        if: ${{ inputs.enable-vuln-check && !cancelled() && !failure() }}
+        run: task vuln
 
       - name: Unit Tests
         if: ${{ inputs.enable-unit-tests && !cancelled() && !failure() }}
