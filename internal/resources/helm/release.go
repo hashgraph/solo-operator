@@ -87,6 +87,15 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	if existing != nil && existing.Pending() {
 		if wait := opts.Timeout - time.Since(existing.LastDeployed); wait > 0 {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+					return err
+				}
+				hc.Status.ReleaseStatus = existing.Status
+				return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
+			}); err != nil {
+				return ctrl.Result{}, err
+			}
 			common.InfoL(&rl, ReasonReleasePending).Str("helmStatus", existing.Status).Msg("Helm release has an operation in progress, waiting")
 			return ctrl.Result{RequeueAfter: wait}, nil
 		}

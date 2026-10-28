@@ -599,6 +599,9 @@ func TestReleaseSubReconciler_waitsOutFreshPendingRelease(t *testing.T) {
 	if info.Status != "pending-upgrade" || info.Version != 3 {
 		t.Errorf("fresh pending release was touched: status=%s revision=%d", info.Status, info.Version)
 	}
+	if hc.Status.ReleaseStatus != "pending-upgrade" {
+		t.Errorf("hc.Status.ReleaseStatus = %q, want pending-upgrade", hc.Status.ReleaseStatus)
+	}
 }
 
 // ─── Chart credentials ────────────────────────────────────────────────────────
