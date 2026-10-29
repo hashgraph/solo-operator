@@ -27,11 +27,7 @@ var _ = Describe("Orbit Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "24h",
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-						},
-					},
+					Network:  &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
@@ -56,12 +52,12 @@ var _ = Describe("Orbit Controller", func() {
 		})
 	})
 
-	Context("Optional consensus block (CRD admission)", func() {
-		It("Admits a consensus-less (block-node-only) Orbit", func() {
-			const orbitName = "orbit-no-consensus"
+	Context("Optional network / consensus sections (CRD admission)", func() {
+		It("Admits a block-node-only Orbit with no network or consensus section", func() {
+			const orbitName = "orbit-bn-only"
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
-				// No Consensus block at all — valid for a block-node-only Orbit.
+				// No network and no consensus section — valid for a block-node-only Orbit.
 				Spec: operatorv1alpha1.OrbitSpec{Lifetime: "24h"},
 			}
 			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
@@ -72,22 +68,23 @@ var _ = Describe("Orbit Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
-		It("Rejects an Orbit that declares consensus with an empty ledgerId", func() {
+		It("Admits an Orbit whose network ledgerId is empty (free-form, no CRD constraint)", func() {
+			const orbitName = "orbit-empty-ledger"
 			orbit := &operatorv1alpha1.Orbit{
-				ObjectMeta: metav1.ObjectMeta{Name: "orbit-empty-ledger"},
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					// A present consensus block must be complete: ledgerId is required
-					// (CRD MinLength=1), so an empty ledgerId is rejected at admission.
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: ""},
-						},
-					},
+					// ledgerId is a free-form string with no CRD constraint — admission
+					// accepts it empty. The consensus-node requirement that it (and chainId)
+					// be set is enforced at ConsensusCapsule reconcile, not by the CRD.
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: ""},
 				},
 			}
-			err := k8sClient.Create(ctx, orbit)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("ledgerId"))
+			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 
@@ -107,11 +104,7 @@ var _ = Describe("Orbit Controller", func() {
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 				},
 			})).Should(Succeed())
 

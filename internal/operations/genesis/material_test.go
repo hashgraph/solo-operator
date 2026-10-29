@@ -148,18 +148,16 @@ func TestMaterialsFromCluster_MergesExternalAddresses(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: &operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{
-						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
-							NodeId:                   3,
-							SelfName:                 "ext3",
-							Weight:                   1,
-							ExternalHostname:         "ext3.example",
-							ExternalPort:             50111,
-							NodeAccount:              "0.0.6",
-							PublicSigningCertificate: string(extPEM),
-						}},
-					},
+				AddressBook: &operatorv1alpha1.OrbitAddressBook{
+					ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
+						NodeId:                   3,
+						SelfName:                 "ext3",
+						Weight:                   1,
+						ExternalHostname:         "ext3.example",
+						ExternalPort:             50111,
+						NodeAccount:              "0.0.6",
+						PublicSigningCertificate: string(extPEM),
+					}},
 				},
 			},
 		},
@@ -300,14 +298,12 @@ func TestMaterialsFromCluster_ExternalAddressMissingFieldsErrors(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
 			Consensus: &operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{
-						ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
-							NodeId:           99,
-							ExternalHostname: "", // intentionally empty
-							NodeAccount:      "", // intentionally empty
-						}},
-					},
+				AddressBook: &operatorv1alpha1.OrbitAddressBook{
+					ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
+						NodeId:           99,
+						ExternalHostname: "", // intentionally empty
+						NodeAccount:      "", // intentionally empty
+					}},
 				},
 			},
 		},

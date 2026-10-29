@@ -8,17 +8,16 @@ kind: Orbit
 metadata:
   name: solo-orbit
 spec:
-  upgrade:
-    consensusNode:
+  network:
+    ledgerId: "0x01"
+    chainId: "298"
+  consensus:
+    addressBook:
+      externalAddresses: []
+    upgrade:
       skipScaleDown: true
       prereqRequeueInterval: 2s
       daemonRequeueInterval: 2s
       nodeReadyRequeueInterval: 2s
       prefetch:
         enabled: false
-  consensus:
-    genesis:
-      addressBook:
-        ledgerId: "0x01"
-        chainId: "298"
-        externalAddresses: []

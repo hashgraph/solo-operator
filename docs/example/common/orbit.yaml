@@ -3,9 +3,17 @@ kind: Orbit
 metadata:
   name: solo-orbit
 spec:
-  # A host-level provisioner daemon runs the upgrade execute phase (consensus UC in
-  # mainnet mode). Default false = cluster-only.
-  provisionerDaemonEnabled: false
+  # network holds the network-wide identity (realm/shard/ledger/chain ids) shared by
+  # every component in this Orbit. Optional — a block-node-only Orbit may omit it. A
+  # consensus node requires ledgerId and chainId (enforced at ConsensusCapsule reconcile).
+  network:
+    # ledgerId is the consensus node's ledger.id (network identity);
+    # mainnet, testnet, previewnet use 0x00, 0x01 and 0x02 respectively.
+    # 0x01 is the well-known local/dev ledger id.
+    ledgerId: "0x01"
+    # EVM chain id (EIP-155); mainnet 295, testnet 296, previewnet 297.
+    # 298 is the well-known local/dev chain id.
+    chainId: "298"
   telemetry:
     alloy:
       enabled: true
@@ -39,8 +47,17 @@ spec:
           #   enabled: true
           #   endpoint: "http://prometheus.observability:9090/api/v1/write"
           #   scrapeInterval: "15s"
-  upgrade:
-    consensusNode:
+  consensus:
+    # A host-level provisioner daemon runs the upgrade execute phase (consensus UC in
+    # mainnet mode). Default false = cluster-only.
+    provisionerDaemonEnabled: false
+    # consensus.featureGates holds transitional, rollout-only gates. Leave unset
+    # (defaults off); set by solo-provisioner/jobs to match the deployed CN.
+    # See docs/design/feature-gates.md.
+    # consensus.addressBook carries only external (operator-unmanaged) nodes.
+    addressBook:
+      externalAddresses: []
+    upgrade:
       # skipScaleDown: when true (default) images are patched in-place and the
       # StatefulSet RollingUpdate restarts the pod; set false to use the
       # scale-down-to-0 / scale-up sequence. Ignored (forced scale-down) when a
@@ -61,19 +78,3 @@ spec:
       #   # coverage. Above this the operator pins one Job per node running a
       #   # consensus pod instead. Default: 30. Set 0 to always use pod-node targeting.
       #   maxNodes: 30
-  consensus:
-    # consensus.featureGates holds transitional, rollout-only gates. Leave unset
-    # (defaults off); set by solo-provisioner/jobs to match the deployed CN.
-    # See docs/design/feature-gates.md.
-    genesis:
-      addressBook:
-        # ledgerId is the consensus node's ledger.id (network identity);
-        # mainnet, testnet, previewnet use 0x00, 0x01 and 0x02 respectively
-        # 0x01 is the well-known local/dev ledger id.
-        ledgerId: "0x01"
-        
-        # EVM chain id (EIP-155)
-        # mainnet, testnet and local
-        # 298 is the well-known local/dev chain id.
-        chainId: "298"
-        externalAddresses: []

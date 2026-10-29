@@ -24,14 +24,19 @@ type OrbitSpec struct {
 	// +optional
 	Finalizers []string `json:"finalizers,omitempty"`
 
+	// Network holds the network-wide identity (realm/shard/ledger/chain ids) shared
+	// across every component in this Orbit — consensus nodes, block nodes, relays.
+	//
+	// Optional: a component that needs no network identity (for example a
+	// block-node-only Orbit) may omit it entirely. A consensus node DOES need a
+	// ledgerId — that one requirement is enforced at ConsensusCapsule reconcile, not
+	// by the CRD.
+	// +optional
+	Network *OrbitNetwork `json:"network,omitempty"`
+
 	// Telemetry contains telemetry configuration
 	// +optional
 	Telemetry *OrbitTelemetry `json:"telemetry,omitempty"`
-
-	// Upgrade contains tuning knobs for the network upgrade lifecycle,
-	// scoped per component type.
-	// +optional
-	Upgrade *OrbitUpgrade `json:"upgrade,omitempty"`
 
 	// RequireDigestOnDeploy, when true, requires every ConsensusCapsule in this Orbit to run
 	// only digest-pinned images on deploy: the consensus node and every enabled sidecar/
@@ -46,15 +51,6 @@ type OrbitSpec struct {
 	// +optional
 	RequireDigestOnDeploy bool `json:"requireDigestOnDeploy,omitempty"`
 
-	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-	// When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
-	// phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
-	// This is a host-level, cross-component infra fact, so it is network-wide config.
-	// +kubebuilder:default=false
-	// +optional
-	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
-
 	// Consensus contains shared configuration for all ConsensusCapsules.
 	//
 	// Optional: a consensus-less Orbit (for example one that only backs a
@@ -63,6 +59,49 @@ type OrbitSpec struct {
 	// with no consensus block fails terminally at reconcile.
 	// +optional
 	Consensus *OrbitConsensus `json:"consensus,omitempty"`
+}
+
+// OrbitNetwork holds the network-wide identity shared by every component in an Orbit
+// (consensus nodes, block nodes, relays). It is optional on the CRD: a component that
+// needs no network identity may omit it. A consensus node needs a ledgerId — that
+// requirement is enforced at ConsensusCapsule reconcile, not by the CRD.
+type OrbitNetwork struct {
+	// RealmId is the numeric realm ID
+	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	RealmId int `json:"realmId,omitempty"`
+
+	// ShardId is the numeric shard ID
+	// +kubebuilder:default=0
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	ShardId int `json:"shardId,omitempty"`
+
+	// LedgerId is the network's ledger identity, written verbatim to the
+	// consensus node's application.properties (and bootstrap.properties)
+	// ledger.id. It is a 0x-prefixed hex byte: mainnet 0x00, testnet 0x01,
+	// previewnet 0x02; local/dev networks use 0x01. This is distinct from
+	// ChainId — do not put an EVM chain id here.
+	//
+	// Optional on the CRD: only a consensus node requires it, and that requirement
+	// is enforced at ConsensusCapsule reconcile (a referenced Orbit with an empty
+	// ledgerId fails terminally there). A block-node-only Orbit may omit it.
+	//
+	// NOTE: this static ledger.id is expected to be superseded by the TSS ledger id
+	// (a 64-character public key) in a future consensus-node release; it may no longer
+	// be hex or an integer. It is a FREE-FORM string — do not add any
+	// length/pattern/numeric/hex constraint here, and do not build new coupling on its
+	// byte format.
+	// +optional
+	LedgerId string `json:"ledgerId,omitempty"`
+
+	// ChainId is the network's EVM chain id (EIP-155), written to the consensus
+	// node's contracts.chainId and used as the JSON-RPC relay's CHAIN_ID. It is a
+	// decimal number: mainnet 295, testnet 296, previewnet 297; local/dev 298.
+	// This is distinct from LedgerId. Optional; when empty it is treated as "0".
+	// +optional
+	ChainId string `json:"chainId,omitempty"`
 }
 
 // OrbitTelemetry contains telemetry configuration for the Orbit.
@@ -95,17 +134,8 @@ type OrbitAlloyDefaults struct {
 	Config *AlloyCollectorConfig `json:"config,omitempty"`
 }
 
-// OrbitUpgrade contains per-component upgrade tuning knobs.
-type OrbitUpgrade struct {
-	// ConsensusNode contains tuning knobs for the consensus node upgrade
-	// execute phase. All fields are optional; when unset the operator uses
-	// safe production defaults.
-	// +optional
-	ConsensusNode *ConsensusNodeUpgrade `json:"consensusNode,omitempty"`
-}
-
 // ConsensusNodeUpgrade contains tuning knobs for the consensus node upgrade
-// execute phase.
+// execute phase. It lives under spec.consensus.upgrade.
 type ConsensusNodeUpgrade struct {
 	// PrereqRequeueInterval is how often the execute reconciler polls for
 	// prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
@@ -206,10 +236,10 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 		MaxPrefetchNodes:         DefaultMaxPrefetchNodes,
 		SkipScaleDown:            true,
 	}
-	if orbit == nil || orbit.Spec.Upgrade == nil || orbit.Spec.Upgrade.ConsensusNode == nil {
+	if orbit == nil || orbit.Spec.Consensus == nil || orbit.Spec.Consensus.Upgrade == nil {
 		return cfg
 	}
-	u := orbit.Spec.Upgrade.ConsensusNode
+	u := orbit.Spec.Consensus.Upgrade
 
 	if u.PrereqRequeueInterval != nil && u.PrereqRequeueInterval.Duration >= MinRequeueInterval {
 		cfg.PrereqRequeueInterval = u.PrereqRequeueInterval.Duration
@@ -237,20 +267,37 @@ func ResolveUpgradeConfig(orbit *Orbit) EffectiveUpgradeConfig {
 	return cfg
 }
 
-// OrbitConsensus contains shared consensus configuration
+// OrbitConsensus contains shared configuration for all ConsensusCapsules. It is optional:
+// a non-consensus Orbit (for example one that only backs a block-node HelmCapsule) omits it.
 type OrbitConsensus struct {
 	// ProvisioningModel specifies how consensus nodes are deployed
 	// +kubebuilder:validation:Enum=InitContainerDinD;InitContainerJava;DeterministicContainerImage
 	// +optional
 	ProvisioningModel string `json:"provisioningModel,omitempty"`
 
+	// ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+	// (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+	// When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
+	// phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+	// +kubebuilder:default=false
+	// +optional
+	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
+
 	// FeatureGates holds transitional, rollout-only consensus feature gates. See
 	// ConsensusFeatureGates.
 	// +optional
 	FeatureGates *ConsensusFeatureGates `json:"featureGates,omitempty"`
 
-	// Genesis contains genesis-specific configuration
-	Genesis OrbitGenesis `json:"genesis"`
+	// AddressBook holds consensus address-book configuration. It carries only the
+	// external (operator-unmanaged) nodes; the network identity (realm/shard/ledger/
+	// chain ids) lives in spec.network.
+	// +optional
+	AddressBook *OrbitAddressBook `json:"addressBook,omitempty"`
+
+	// Upgrade contains tuning knobs for the consensus node upgrade execute phase.
+	// All fields are optional; when unset the operator uses safe production defaults.
+	// +optional
+	Upgrade *ConsensusNodeUpgrade `json:"upgrade,omitempty"`
 }
 
 // ConsensusFeatureGates holds transitional, rollout-only feature gates for consensus
@@ -267,52 +314,10 @@ type ConsensusFeatureGates struct {
 	NodeNameZeroBased bool `json:"nodeNameZeroBased,omitempty"`
 }
 
-// OrbitGenesis contains genesis initialization configuration
-type OrbitGenesis struct {
-	// AddressBook contains the address book configuration
-	AddressBook OrbitAddressBook `json:"addressBook"`
-}
-
-// OrbitAddressBook contains address book configuration
+// OrbitAddressBook contains consensus address-book configuration. It holds only the
+// external (operator-unmanaged) nodes; the network identity (realm/shard/ledger/chain
+// ids) lives in spec.network (see OrbitNetwork).
 type OrbitAddressBook struct {
-	// RealmId is the numeric realm ID
-	// +kubebuilder:default=0
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	RealmId int `json:"realmId,omitempty"`
-
-	// ShardId is the numeric shard ID
-	// +kubebuilder:default=0
-	// +kubebuilder:validation:Minimum=0
-	// +optional
-	ShardId int `json:"shardId,omitempty"`
-
-	// LedgerId is the network's ledger identity, written verbatim to the
-	// consensus node's application.properties (and bootstrap.properties)
-	// ledger.id. It is a 0x-prefixed hex byte: mainnet 0x00, testnet 0x01,
-	// previewnet 0x02; local/dev networks use 0x01. This is distinct from
-	// ChainId — do not put an EVM chain id here.
-	//
-	// Required within the consensus block: a present consensus block must be
-	// complete, so an Orbit that declares consensus must set a ledgerId. (The
-	// consensus block as a whole is optional — a block-node-only Orbit may omit
-	// it entirely; see OrbitSpec.Consensus.)
-	//
-	// NOTE: this static ledger.id is expected to be superseded by the TSS ledger
-	// id (a 64-character public key) in a future consensus-node release; it may
-	// no longer be hex or an integer. MinLength=1 only enforces non-emptiness —
-	// it makes no integer/hex/length assumption — so it stays compatible with the
-	// future format. Do not add any pattern/numeric/hex constraint here.
-	// +kubebuilder:validation:MinLength=1
-	LedgerId string `json:"ledgerId"`
-
-	// ChainId is the network's EVM chain id (EIP-155), written to the consensus
-	// node's contracts.chainId and used as the JSON-RPC relay's CHAIN_ID. It is a
-	// decimal number: mainnet 295, testnet 296, previewnet 297; local/dev 298.
-	// This is distinct from LedgerId. Optional; when empty it is treated as "0".
-	// +optional
-	ChainId string `json:"chainId,omitempty"`
-
 	// ExternalAddresses lists external nodes not managed by this operator
 	// +optional
 	ExternalAddresses []AddressBookEntry `json:"externalAddresses,omitempty"`

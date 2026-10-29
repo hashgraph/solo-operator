@@ -93,23 +93,21 @@ var _ = Describe("NetworkGenesis Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x00", ChainId: "298"},
 					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{
-								LedgerId: "0x00",
-								ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
-									NodeId:                   42,
-									NickName:                 "ext-node42",
-									SelfName:                 "ext-node42",
-									Weight:                   1,
-									InternalHostname:         "ext42.example.com",
-									InternalPort:             50111,
-									ExternalHostname:         "ext42.example.com",
-									ExternalPort:             50111,
-									NodeAccount:              "0.0.45",
-									PublicSigningCertificate: string(extCertPEM),
-								}},
-							},
+						AddressBook: &operatorv1alpha1.OrbitAddressBook{
+							ExternalAddresses: []operatorv1alpha1.AddressBookEntry{{
+								NodeId:                   42,
+								NickName:                 "ext-node42",
+								SelfName:                 "ext-node42",
+								Weight:                   1,
+								InternalHostname:         "ext42.example.com",
+								InternalPort:             50111,
+								ExternalHostname:         "ext42.example.com",
+								ExternalPort:             50111,
+								NodeAccount:              "0.0.45",
+								PublicSigningCertificate: string(extCertPEM),
+							}},
 						},
 					},
 				},
@@ -319,11 +317,7 @@ func createSimpleOrbit(ctx context.Context, name string) {
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: &operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
-				},
-			},
+			Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x00", ChainId: "298"},
 		},
 	}
 	err := k8sClient.Create(ctx, orbit)

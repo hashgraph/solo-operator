@@ -89,8 +89,8 @@ func MaterialsFromCluster(ctx context.Context, c client.Client, namespace string
 		out = append(out, m)
 	}
 
-	if orbit.Spec.Consensus != nil {
-		for _, ext := range orbit.Spec.Consensus.Genesis.AddressBook.ExternalAddresses {
+	if orbit.Spec.Consensus != nil && orbit.Spec.Consensus.AddressBook != nil {
+		for _, ext := range orbit.Spec.Consensus.AddressBook.ExternalAddresses {
 			m, err := materialFromExternal(ext)
 			if err != nil {
 				return nil, fmt.Errorf("external node %d: %w", ext.NodeId, err)

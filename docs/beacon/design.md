@@ -356,10 +356,10 @@ needs (`host`/`port`/`tls`):
 ```yaml
 # A single network. Keys resolve to <dir(config)>/keys/account<N>.pem and
 # artifacts to <dir(config)>/sysfiles/. For Solo networks this file is generated
-# from Orbit.AddressBook (see §10.1); shard/realm come from there.
+# from the Orbit (see §10.1); shard/realm come from there.
 name: solo-local               # label for logs/output; defaults to the directory name
-shard: 0                       # from Orbit.AddressBook.ShardId (default 0)
-realm: 0                       # from Orbit.AddressBook.RealmId (default 0)
+shard: 0                       # from Orbit.Spec.Network.ShardId (default 0)
+realm: 0                       # from Orbit.Spec.Network.RealmId (default 0)
 defaultPayer: 2                # privileged account for upgrades (0.0.2 / 0.0.50 / 0.0.58)
 defaultNodeAccount: 3
 nodes:
@@ -396,8 +396,8 @@ A per-network `config.yaml` is beacon's **only runtime input** — this keeps be
 
 To avoid a hand-maintained node list drifting from what the operator provisions, each network's file is **generated** for Solo networks rather than authored by hand:
 
-- The cluster is the source of truth: `Orbit.Spec.Consensus.AddressBook` already carries `ShardId`, `RealmId`, `LedgerId`, and the node topology, and the operator materializes a full address-book ConfigMap (node id, account, service host/port).
-- An **external** generator (a `task beacon:config` / small helper, **not** part of the `beacon` binary) renders one network's `<network>/config.yaml` from `Orbit.AddressBook` or that ConfigMap. Because generation lives outside beacon, the binary never imports `client-go` and the §4 trust boundary holds.
+- The cluster is the source of truth: `Orbit.Spec.Network` carries `ShardId`, `RealmId`, `LedgerId` and `ChainId`, `Orbit.Spec.Consensus.AddressBook` carries the external-node topology, and the operator materializes a full address-book ConfigMap (node id, account, service host/port).
+- An **external** generator (a `task beacon:config` / small helper, **not** part of the `beacon` binary) renders one network's `<network>/config.yaml` from the Orbit (`spec.network` + `spec.consensus.addressBook`) or that ConfigMap. Because generation lives outside beacon, the binary never imports `client-go` and the §4 trust boundary holds.
 - Non-Solo networks simply get a hand-written `<network>/config.yaml`, exactly like yahcli (minus the multi-network wrapper).
 
 _Deferred enhancement:_ `beacon --discover-from-network` could bootstrap the node list purely over HAPI via `FileGetContents(0.0.102)` given one reachable seed node — attractive but gated on the on-chain address-book endpoints being externally reachable (in K8s they may be internal), so it is a post-MVP option, not a replacement for the file interface.
@@ -440,8 +440,8 @@ _Deferred enhancement:_ `beacon --discover-from-network` could bootstrap the nod
 
 1. **Deployment-package hashing — resolved.** The node operator supplies the expected SHA-384 (typically shipped with the release). `file upload` takes `--expect-hash <hex>` **or** `--expect-hash-file <path>` (bare hex or `sha384sum` format); beacon computes `sha384(zip)` locally, **aborts before uploading on mismatch**, and prints the confirmed hash to feed into `freeze prepare`. (`package software-zip` prints the same hash at build time, §6.2.)
 2. **Interactive safety gate — resolved (yes).** The irreversible commands (`freeze prepare`, `freeze upgrade`, `freeze only`, `freeze telemetry`, `freeze abort`) prompt for confirmation when attached to a TTY; `--yes` bypasses (and is required for non-interactive/CI use).
-3. **Config source of truth — resolved (per-network file + external generator).** One flat `config.yaml` per network (no multi-network map, no `defaultNetwork`) is beacon's only runtime input, selected by the single `-c` flag; its directory holds that network's `keys/` and `sysfiles/` (§10). One file = one environment removes the cross-environment footgun of a shared config. For Solo networks each file is generated from `Orbit.AddressBook` by an external helper so the cluster stays the source of truth (§10.1). HAPI self-discovery (`--discover-from-network`) is a deferred enhancement.
-4. **Shard/realm — resolved.** Per-network `shard`/`realm` (default `0`/`0`), sourced from `Orbit.AddressBook.{ShardId,RealmId}` when generated; all IDs beacon builds are composed with them, and the CLI accepts bare numbers or `S.R.N` literals (§10). _Open:_ confirm whether Solo runs any non-zero-shard network today (drives whether 14.9 needs a non-zero-shard E2E case, else Phase-2).
+3. **Config source of truth — resolved (per-network file + external generator).** One flat `config.yaml` per network (no multi-network map, no `defaultNetwork`) is beacon's only runtime input, selected by the single `-c` flag; its directory holds that network's `keys/` and `sysfiles/` (§10). One file = one environment removes the cross-environment footgun of a shared config. For Solo networks each file is generated from the Orbit (`spec.network` + `spec.consensus.addressBook`) by an external helper so the cluster stays the source of truth (§10.1). HAPI self-discovery (`--discover-from-network`) is a deferred enhancement.
+4. **Shard/realm — resolved.** Per-network `shard`/`realm` (default `0`/`0`), sourced from `Orbit.Spec.Network.{ShardId,RealmId}` when generated; all IDs beacon builds are composed with them, and the CLI accepts bare numbers or `S.R.N` literals (§10). _Open:_ confirm whether Solo runs any non-zero-shard network today (drives whether 14.9 needs a non-zero-shard E2E case, else Phase-2).
 5. **Mirror node / explorer — deferred (optional).** Not needed for the upgrade flow: transaction outcome is confirmed via HAPI `TransactionReceipt`/`TransactionRecord`, and upload integrity via `FileInfoQuery` (network-computed SHA-384 in the file memo). A mirror node / explorer is only useful for after-the-fact or independent transaction detail; if wanted later, add an optional per-network `mirrorNode` (and/or `explorerUrl`) field — the config is reserved for it (§10).
 
 ## 16. References

@@ -171,11 +171,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "03"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "03", ChainId: "298"},
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
@@ -466,11 +462,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "04"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "04", ChainId: "298"},
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
@@ -578,11 +570,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "05"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "05", ChainId: "298"},
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)
@@ -640,11 +628,7 @@ var _ = Describe("HelmCapsule Controller", func() {
 			orbit := &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "06"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "06", ChainId: "298"},
 				},
 			}
 			err = k8sClient.Create(ctx, orbit)

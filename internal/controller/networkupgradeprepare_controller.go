@@ -361,7 +361,7 @@ func (r *NetworkUpgradePrepareReconciler) createPrefetchJobs(ctx context.Context
 	}
 
 	if !ucfg.PrefetchEnabled {
-		// Prefetch turned off via orbit.spec.upgrade.consensusNode.prefetch.enabled.
+		// Prefetch turned off via orbit.spec.consensus.upgrade.prefetch.enabled.
 		// Record it and let Freeze/Execute run normal registry validation.
 		common.Info(ctx, operatorv1alpha1.ReasonPrefetchDisabled).Msg("Skipping image prefetch (disabled)")
 		setCondition(&prepare.Status.Conditions, metav1.Condition{

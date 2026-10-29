@@ -152,8 +152,7 @@ func TestConfigMapSubReconciler_UpdatesConfigMap(t *testing.T) {
 // orbitWithLedgerID builds a cluster-scoped Orbit CR with the given raw ledger id.
 func orbitWithLedgerID(name, ledgerID string) *operatorv1alpha1.Orbit {
 	o := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: name}}
-	o.Spec.Consensus = &operatorv1alpha1.OrbitConsensus{}
-	o.Spec.Consensus.Genesis.AddressBook.LedgerId = ledgerID
+	o.Spec.Network = &operatorv1alpha1.OrbitNetwork{LedgerId: ledgerID}
 	return o
 }
 

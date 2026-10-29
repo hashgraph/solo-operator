@@ -253,11 +253,7 @@ func makeOrbit(name, id string) *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: &operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: id, ChainId: id},
-				},
-			},
+			Network: &operatorv1alpha1.OrbitNetwork{LedgerId: id, ChainId: id},
 		},
 	}
 }

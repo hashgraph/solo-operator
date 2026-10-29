@@ -182,19 +182,19 @@ func (r *ConsensusCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondUCSidecarReady)
 
-	// A consensus node requires its Orbit to declare a consensus block (with a ledgerId).
-	// The Orbit CRD makes spec.consensus optional so a block-node-only Orbit can omit it, so
-	// the requirement is enforced here: a referenced Orbit with no consensus block (or an
-	// empty ledgerId) is a terminal configuration error — surfaced via a condition + warning
-	// event, no requeue. A transient Orbit lookup failure requeues instead of failing
-	// terminally.
-	if terminal, err := r.validateOrbitConsensus(ctx, capsule); err != nil {
+	// A consensus node requires a complete network identity (ledgerId + chainId) from its
+	// Orbit's network section. The Orbit CRD makes spec.network optional so a block-node-only
+	// Orbit can omit it, so the requirement is enforced here: a referenced Orbit with no
+	// spec.network, or a missing ledgerId/chainId, is a terminal configuration error —
+	// surfaced via a condition + warning event, no requeue. A transient Orbit lookup failure
+	// requeues instead of failing terminally.
+	if terminal, err := r.validateOrbitNetwork(ctx, capsule); err != nil {
 		if terminal {
-			return r.failOrbitConsensusRequired(ctx, capsule, err)
+			return r.failOrbitNetworkRequired(ctx, capsule, err)
 		}
 		return ctrl.Result{}, err
 	}
-	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondOrbitConsensusReady)
+	apimeta.RemoveStatusCondition(&capsule.Status.Conditions, operatorv1alpha1.CondOrbitNetworkReady)
 
 	// Resolve any multi-registry SoftwareVersionSource to a verified, digest-pinned
 	// SoftwareVersion before the image validations below, so a source-configured container
@@ -494,18 +494,20 @@ func (r *ConsensusCapsuleReconciler) failImageRequired(ctx context.Context, caps
 	return ctrl.Result{}, nil
 }
 
-// validateOrbitConsensus requires the Orbit referenced by the ConsensusCapsule to declare a
-// consensus block (spec.consensus) with a non-empty ledgerId. A consensus node genuinely
-// needs consensus config; a block-node-only Orbit may omit the whole block, which is why
-// spec.consensus is optional on the Orbit CRD and the requirement is enforced here instead.
-// The checks are PRESENCE only — the ledgerId value is never parsed and no integer/hex format
-// is assumed (the CRD already guarantees ledgerId when consensus is present; the empty-string
-// case is a defensive belt-and-braces check). It returns (terminal=true, err) when the
-// referenced Orbit has no consensus block or an empty ledgerId (a spec error the caller
-// records without requeuing), and (terminal=false, err) for a transient Orbit lookup failure
-// (requeue). A missing Orbit reference or a not-found Orbit is resolved elsewhere in the
-// deploy path, so it is not treated as a consensus violation here.
-func (r *ConsensusCapsuleReconciler) validateOrbitConsensus(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+// validateOrbitNetwork requires the Orbit referenced by the ConsensusCapsule to carry a
+// complete network identity: a non-empty spec.network.ledgerId AND a non-empty
+// spec.network.chainId. These are the hard requirements a consensus node needs from its Orbit
+// (every other consensus field has an operator default); a block-node-only Orbit may omit the
+// whole network section, which is why spec.network is optional on the CRD and the requirement
+// is enforced here instead. realmId/shardId are not checked: they are plain ints defaulted to
+// 0 (a valid value — mainnet is shard 0, realm 0), so they are always present. The checks are
+// PRESENCE only — the values are never parsed and no integer/hex format is assumed (ledgerId is
+// a free-form string moving to a 64-character TSS public key). It returns (terminal=true, err)
+// when the referenced Orbit has no network section or a missing ledgerId/chainId (a spec error
+// the caller records without requeuing), and (terminal=false, err) for a transient Orbit lookup
+// failure (requeue). A missing Orbit reference or a not-found Orbit is resolved elsewhere in the
+// deploy path, so it is not treated as a network violation here.
+func (r *ConsensusCapsuleReconciler) validateOrbitNetwork(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule) (bool, error) {
 	if capsule.Spec.Orbit == "" {
 		return false, nil
 	}
@@ -513,47 +515,50 @@ func (r *ConsensusCapsuleReconciler) validateOrbitConsensus(ctx context.Context,
 	if err := r.Get(ctx, client.ObjectKey{Name: capsule.Spec.Orbit}, orbit); err != nil {
 		if apierrors.IsNotFound(err) {
 			// The Orbit's absence is handled elsewhere in the deploy path; don't block
-			// the consensus check on it here.
+			// the network check on it here.
 			return false, nil
 		}
-		return false, errx.WithReason(errK8sAPI.Wrap(err, "get Orbit %s for consensus check", capsule.Spec.Orbit), ReasonGetFailed)
+		return false, errx.WithReason(errK8sAPI.Wrap(err, "get Orbit %s for network check", capsule.Spec.Orbit), ReasonGetFailed)
 	}
-	if orbit.Spec.Consensus == nil {
+	var missing []string
+	if orbit.Spec.Network == nil {
+		missing = []string{"network.ledgerId", "network.chainId"}
+	} else {
+		if orbit.Spec.Network.LedgerId == "" {
+			missing = append(missing, "network.ledgerId")
+		}
+		if orbit.Spec.Network.ChainId == "" {
+			missing = append(missing, "network.chainId")
+		}
+	}
+	if len(missing) > 0 {
 		return true, errx.WithHints(
 			errx.WithReason(
-				errOrbitConsensusRequired.New("Orbit %q referenced by ConsensusCapsule %q has no consensus block (spec.consensus), which a consensus node requires", capsule.Spec.Orbit, capsule.Name),
-				ReasonOrbitConsensusRequired),
-			"Add spec.consensus (with genesis.addressBook.ledgerId) to the Orbit — only a block-node-only Orbit may omit the consensus block.",
-		)
-	}
-	if orbit.Spec.Consensus.Genesis.AddressBook.LedgerId == "" {
-		return true, errx.WithHints(
-			errx.WithReason(
-				errOrbitConsensusRequired.New("Orbit %q referenced by ConsensusCapsule %q declares a consensus block with an empty spec.consensus.genesis.addressBook.ledgerId, which a consensus node requires", capsule.Spec.Orbit, capsule.Name),
-				ReasonOrbitConsensusRequired),
-			"Set spec.consensus.genesis.addressBook.ledgerId on the Orbit — a consensus node requires a ledger identity.",
+				errOrbitNetworkRequired.New("Orbit %q referenced by ConsensusCapsule %q is missing %s, which a consensus node requires", capsule.Spec.Orbit, capsule.Name, strings.Join(missing, " and ")),
+				ReasonOrbitNetworkRequired),
+			"Set spec.network.ledgerId and spec.network.chainId on the Orbit — a consensus node requires the full network identity (only a block-node-only Orbit may omit the network section).",
 		)
 	}
 	return false, nil
 }
 
-// failOrbitConsensusRequired records the terminal missing-consensus configuration error as a
+// failOrbitNetworkRequired records the terminal incomplete-network configuration error as a
 // status condition and a warning event, then stops the reconcile without a requeue (a spec
 // edit triggers a fresh reconcile). Mirrors failUCSidecarRequired.
-func (r *ConsensusCapsuleReconciler) failOrbitConsensusRequired(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (ctrl.Result, error) {
+func (r *ConsensusCapsuleReconciler) failOrbitNetworkRequired(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, err error) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Error(err, "consensus node requires an Orbit consensus block", "reason", ReasonOrbitConsensusRequired.String())
+	logger.Error(err, "consensus node requires a complete Orbit network identity", "reason", ReasonOrbitNetworkRequired.String())
 	if r.Recorder != nil {
-		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventOrbitConsensusRequired.String(),
+		r.Recorder.Eventf(capsule, nil, corev1.EventTypeWarning, operatorv1alpha1.EventOrbitNetworkRequired.String(),
 			"Reconcile", "%s", errx.Format(err))
 	}
 	capsule.Status.Phase = operatorv1alpha1.PhaseFailed
 	capsule.Status.ObservedGeneration = capsule.Generation
 	apimeta.SetStatusCondition(&capsule.Status.Conditions, metav1.Condition{
-		Type:               operatorv1alpha1.CondOrbitConsensusReady,
+		Type:               operatorv1alpha1.CondOrbitNetworkReady,
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: capsule.Generation,
-		Reason:             ReasonOrbitConsensusRequired.String(),
+		Reason:             ReasonOrbitNetworkRequired.String(),
 		Message:            err.Error(),
 	})
 	if uerr := r.Status().Update(ctx, capsule); uerr != nil {

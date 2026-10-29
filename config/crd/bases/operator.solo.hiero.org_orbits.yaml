@@ -57,6 +57,80 @@ spec:
                   required for consensus nodes — a ConsensusCapsule that references an Orbit
                   with no consensus block fails terminally at reconcile.
                 properties:
+                  addressBook:
+                    description: |-
+                      AddressBook holds consensus address-book configuration. It carries only the
+                      external (operator-unmanaged) nodes; the network identity (realm/shard/ledger/
+                      chain ids) lives in spec.network.
+                    properties:
+                      externalAddresses:
+                        description: ExternalAddresses lists external nodes not managed
+                          by this operator
+                        items:
+                          description: AddressBookEntry represents a node in the address
+                            book
+                          properties:
+                            externalHostname:
+                              description: ExternalHostname is the external FQDN or
+                                IP
+                              type: string
+                            externalPort:
+                              description: ExternalPort is the external gossip port
+                              format: int32
+                              maximum: 65535
+                              minimum: 0
+                              type: integer
+                            internalHostname:
+                              description: InternalHostname is the internal FQDN or
+                                IP
+                              type: string
+                            internalPort:
+                              description: InternalPort is the internal gossip port
+                              format: int32
+                              maximum: 65535
+                              minimum: 0
+                              type: integer
+                            nickName:
+                              description: NickName is a friendly name for the node
+                              type: string
+                            nodeAccount:
+                              description: NodeAccount is the account ID in the form
+                                "0.0.x"
+                              type: string
+                            nodeId:
+                              description: NodeId is the unique identifier for the
+                                node
+                              format: int64
+                              minimum: 0
+                              type: integer
+                            publicLedgerKey:
+                              description: PublicLedgerKey is the base64-encoded public
+                                ledger key
+                              type: string
+                            publicSigningCertificate:
+                              description: PublicSigningCertificate is the PEM-encoded
+                                signing certificate
+                              type: string
+                            selfName:
+                              description: SelfName is the self-identifying name
+                              type: string
+                            weight:
+                              description: Weight is the consensus weight
+                              minimum: 0
+                              type: integer
+                          required:
+                          - externalHostname
+                          - externalPort
+                          - internalHostname
+                          - internalPort
+                          - nickName
+                          - nodeAccount
+                          - nodeId
+                          - selfName
+                          - weight
+                          type: object
+                        type: array
+                    type: object
                   featureGates:
                     description: |-
                       FeatureGates holds transitional, rollout-only consensus feature gates. See
@@ -71,125 +145,14 @@ spec:
                           sets it to match the deployed CN; the operator only honors it.
                         type: boolean
                     type: object
-                  genesis:
-                    description: Genesis contains genesis-specific configuration
-                    properties:
-                      addressBook:
-                        description: AddressBook contains the address book configuration
-                        properties:
-                          chainId:
-                            description: |-
-                              ChainId is the network's EVM chain id (EIP-155), written to the consensus
-                              node's contracts.chainId and used as the JSON-RPC relay's CHAIN_ID. It is a
-                              decimal number: mainnet 295, testnet 296, previewnet 297; local/dev 298.
-                              This is distinct from LedgerId. Optional; when empty it is treated as "0".
-                            type: string
-                          externalAddresses:
-                            description: ExternalAddresses lists external nodes not
-                              managed by this operator
-                            items:
-                              description: AddressBookEntry represents a node in the
-                                address book
-                              properties:
-                                externalHostname:
-                                  description: ExternalHostname is the external FQDN
-                                    or IP
-                                  type: string
-                                externalPort:
-                                  description: ExternalPort is the external gossip
-                                    port
-                                  format: int32
-                                  maximum: 65535
-                                  minimum: 0
-                                  type: integer
-                                internalHostname:
-                                  description: InternalHostname is the internal FQDN
-                                    or IP
-                                  type: string
-                                internalPort:
-                                  description: InternalPort is the internal gossip
-                                    port
-                                  format: int32
-                                  maximum: 65535
-                                  minimum: 0
-                                  type: integer
-                                nickName:
-                                  description: NickName is a friendly name for the
-                                    node
-                                  type: string
-                                nodeAccount:
-                                  description: NodeAccount is the account ID in the
-                                    form "0.0.x"
-                                  type: string
-                                nodeId:
-                                  description: NodeId is the unique identifier for
-                                    the node
-                                  format: int64
-                                  minimum: 0
-                                  type: integer
-                                publicLedgerKey:
-                                  description: PublicLedgerKey is the base64-encoded
-                                    public ledger key
-                                  type: string
-                                publicSigningCertificate:
-                                  description: PublicSigningCertificate is the PEM-encoded
-                                    signing certificate
-                                  type: string
-                                selfName:
-                                  description: SelfName is the self-identifying name
-                                  type: string
-                                weight:
-                                  description: Weight is the consensus weight
-                                  minimum: 0
-                                  type: integer
-                              required:
-                              - externalHostname
-                              - externalPort
-                              - internalHostname
-                              - internalPort
-                              - nickName
-                              - nodeAccount
-                              - nodeId
-                              - selfName
-                              - weight
-                              type: object
-                            type: array
-                          ledgerId:
-                            description: |-
-                              LedgerId is the network's ledger identity, written verbatim to the
-                              consensus node's application.properties (and bootstrap.properties)
-                              ledger.id. It is a 0x-prefixed hex byte: mainnet 0x00, testnet 0x01,
-                              previewnet 0x02; local/dev networks use 0x01. This is distinct from
-                              ChainId — do not put an EVM chain id here.
-
-                              Required within the consensus block: a present consensus block must be
-                              complete, so an Orbit that declares consensus must set a ledgerId. (The
-                              consensus block as a whole is optional — a block-node-only Orbit may omit
-                              it entirely; see OrbitSpec.Consensus.)
-
-                              NOTE: this static ledger.id is expected to be superseded by the TSS ledger
-                              id (a 64-character public key) in a future consensus-node release; it may
-                              no longer be hex or an integer. MinLength=1 only enforces non-emptiness —
-                              it makes no integer/hex/length assumption — so it stays compatible with the
-                              future format. Do not add any pattern/numeric/hex constraint here.
-                            minLength: 1
-                            type: string
-                          realmId:
-                            default: 0
-                            description: RealmId is the numeric realm ID
-                            minimum: 0
-                            type: integer
-                          shardId:
-                            default: 0
-                            description: ShardId is the numeric shard ID
-                            minimum: 0
-                            type: integer
-                        required:
-                        - ledgerId
-                        type: object
-                    required:
-                    - addressBook
-                    type: object
+                  provisionerDaemonEnabled:
+                    default: false
+                    description: |-
+                      ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
+                      (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
+                      When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
+                      phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
+                    type: boolean
                   provisioningModel:
                     description: ProvisioningModel specifies how consensus nodes are
                       deployed
@@ -198,8 +161,75 @@ spec:
                     - InitContainerJava
                     - DeterministicContainerImage
                     type: string
-                required:
-                - genesis
+                  upgrade:
+                    description: |-
+                      Upgrade contains tuning knobs for the consensus node upgrade execute phase.
+                      All fields are optional; when unset the operator uses safe production defaults.
+                    properties:
+                      daemonRequeueInterval:
+                        description: |-
+                          DaemonRequeueInterval is how often the execute reconciler polls for the
+                          provisioner daemon result condition. Default: 10s. Values below 1s are
+                          ignored and the default is used.
+                        format: duration
+                        type: string
+                      nodeReadyRequeueInterval:
+                        description: |-
+                          NodeReadyRequeueInterval is how often the execute reconciler polls for
+                          the consensus node to reach ACTIVE after the pod is brought online.
+                          Default: 10s. Values below 1s are ignored and the default is used.
+                        format: duration
+                        type: string
+                      prefetch:
+                        description: Prefetch configures best-effort image prefetch
+                          during the prepare phase.
+                        properties:
+                          enabled:
+                            description: 'Enabled turns image prefetch on or off.
+                              Default: true.'
+                            type: boolean
+                          jobTTL:
+                            description: |-
+                              JobTTL is how long completed prefetch Jobs linger before Kubernetes
+                              auto-deletes them via the TTL controller. Default: 90d.
+                              Caution: this TTL applies to both succeeded and failed Jobs. Setting
+                              a short duration causes failed Jobs to be deleted, losing debug info
+                              (logs, events) needed to diagnose prefetch failures.
+                            format: duration
+                            type: string
+                          maxNodes:
+                            description: |-
+                              MaxNodes is the maximum number of nodes matching capsule nodeSelectors for
+                              which the operator creates node-pinned prefetch Jobs (selector coverage).
+                              When the matched pool exceeds this threshold, the operator falls back to
+                              pinning one Job per node currently running a consensus pod. Default: 30.
+                              Set to 0 to always use pod-node targeting.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                        type: object
+                      prereqRequeueInterval:
+                        description: |-
+                          PrereqRequeueInterval is how often the execute reconciler polls for
+                          prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
+                          Default: 30s. Values below 1s are ignored and the default is used.
+                        format: duration
+                        type: string
+                      skipScaleDown:
+                        default: true
+                        description: |-
+                          SkipScaleDown controls how the execute phase restarts the consensus pod
+                          onto the new image. When true (default) the operator patches the
+                          ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
+                          strategy restart the pod, skipping the scale-down-to-0 / scale-up-to-1
+                          sequence and saving ~10s. When false it uses the scale-down sequence.
+                          Applies to both cluster-only and mainnet (provisioner-daemon) modes: a
+                          config-only upgrade behaves the same in either, because the config step is
+                          pod-state-agnostic. The operator forces the scale-down path regardless of
+                          this flag when the upgrade requires host-level infrastructure work (the pod
+                          must be fully absent before the provisioner daemon can proceed).
+                        type: boolean
+                    type: object
                 type: object
               deploymentModel:
                 description: DeploymentModel specifies whether this is a single or
@@ -218,15 +248,52 @@ spec:
                 description: Lifetime specifies the duration for this Orbit (e.g.,
                   "P2DT15H" or "2 days 15 hours")
                 type: string
-              provisionerDaemonEnabled:
-                default: false
+              network:
                 description: |-
-                  ProvisionerDaemonEnabled indicates that a host-level provisioner daemon
-                  (solo-provisioner) runs on bare-metal nodes rather than inside Kubernetes.
-                  When true the consensus UC sidecar runs as UC_MODE=mainnet (defers the execute
-                  phase to the host daemon); when false (default) the UC runs as UC_MODE=cluster-only.
-                  This is a host-level, cross-component infra fact, so it is network-wide config.
-                type: boolean
+                  Network holds the network-wide identity (realm/shard/ledger/chain ids) shared
+                  across every component in this Orbit — consensus nodes, block nodes, relays.
+
+                  Optional: a component that needs no network identity (for example a
+                  block-node-only Orbit) may omit it entirely. A consensus node DOES need a
+                  ledgerId — that one requirement is enforced at ConsensusCapsule reconcile, not
+                  by the CRD.
+                properties:
+                  chainId:
+                    description: |-
+                      ChainId is the network's EVM chain id (EIP-155), written to the consensus
+                      node's contracts.chainId and used as the JSON-RPC relay's CHAIN_ID. It is a
+                      decimal number: mainnet 295, testnet 296, previewnet 297; local/dev 298.
+                      This is distinct from LedgerId. Optional; when empty it is treated as "0".
+                    type: string
+                  ledgerId:
+                    description: |-
+                      LedgerId is the network's ledger identity, written verbatim to the
+                      consensus node's application.properties (and bootstrap.properties)
+                      ledger.id. It is a 0x-prefixed hex byte: mainnet 0x00, testnet 0x01,
+                      previewnet 0x02; local/dev networks use 0x01. This is distinct from
+                      ChainId — do not put an EVM chain id here.
+
+                      Optional on the CRD: only a consensus node requires it, and that requirement
+                      is enforced at ConsensusCapsule reconcile (a referenced Orbit with an empty
+                      ledgerId fails terminally there). A block-node-only Orbit may omit it.
+
+                      NOTE: this static ledger.id is expected to be superseded by the TSS ledger id
+                      (a 64-character public key) in a future consensus-node release; it may no longer
+                      be hex or an integer. It is a FREE-FORM string — do not add any
+                      length/pattern/numeric/hex constraint here, and do not build new coupling on its
+                      byte format.
+                    type: string
+                  realmId:
+                    default: 0
+                    description: RealmId is the numeric realm ID
+                    minimum: 0
+                    type: integer
+                  shardId:
+                    default: 0
+                    description: ShardId is the numeric shard ID
+                    minimum: 0
+                    type: integer
+                type: object
               requireDigestOnDeploy:
                 description: |-
                   RequireDigestOnDeploy, when true, requires every ConsensusCapsule in this Orbit to run
@@ -519,82 +586,6 @@ spec:
                         - message: set a non-empty imageTag or a digest so the image
                             is not resolved to :latest
                           rule: size(self.imageTag) > 0 || has(self.digest)
-                    type: object
-                type: object
-              upgrade:
-                description: |-
-                  Upgrade contains tuning knobs for the network upgrade lifecycle,
-                  scoped per component type.
-                properties:
-                  consensusNode:
-                    description: |-
-                      ConsensusNode contains tuning knobs for the consensus node upgrade
-                      execute phase. All fields are optional; when unset the operator uses
-                      safe production defaults.
-                    properties:
-                      daemonRequeueInterval:
-                        description: |-
-                          DaemonRequeueInterval is how often the execute reconciler polls for the
-                          provisioner daemon result condition. Default: 10s. Values below 1s are
-                          ignored and the default is used.
-                        format: duration
-                        type: string
-                      nodeReadyRequeueInterval:
-                        description: |-
-                          NodeReadyRequeueInterval is how often the execute reconciler polls for
-                          the consensus node to reach ACTIVE after the pod is brought online.
-                          Default: 10s. Values below 1s are ignored and the default is used.
-                        format: duration
-                        type: string
-                      prefetch:
-                        description: Prefetch configures best-effort image prefetch
-                          during the prepare phase.
-                        properties:
-                          enabled:
-                            description: 'Enabled turns image prefetch on or off.
-                              Default: true.'
-                            type: boolean
-                          jobTTL:
-                            description: |-
-                              JobTTL is how long completed prefetch Jobs linger before Kubernetes
-                              auto-deletes them via the TTL controller. Default: 90d.
-                              Caution: this TTL applies to both succeeded and failed Jobs. Setting
-                              a short duration causes failed Jobs to be deleted, losing debug info
-                              (logs, events) needed to diagnose prefetch failures.
-                            format: duration
-                            type: string
-                          maxNodes:
-                            description: |-
-                              MaxNodes is the maximum number of nodes matching capsule nodeSelectors for
-                              which the operator creates node-pinned prefetch Jobs (selector coverage).
-                              When the matched pool exceeds this threshold, the operator falls back to
-                              pinning one Job per node currently running a consensus pod. Default: 30.
-                              Set to 0 to always use pod-node targeting.
-                            format: int32
-                            minimum: 0
-                            type: integer
-                        type: object
-                      prereqRequeueInterval:
-                        description: |-
-                          PrereqRequeueInterval is how often the execute reconciler polls for
-                          prerequisite CRs (Prepare/Freeze succeeded, ConfigCRsApplied).
-                          Default: 30s. Values below 1s are ignored and the default is used.
-                        format: duration
-                        type: string
-                      skipScaleDown:
-                        default: true
-                        description: |-
-                          SkipScaleDown controls how the execute phase restarts the consensus pod
-                          onto the new image. When true (default) the operator patches the
-                          ConsensusCapsule images in-place and lets the StatefulSet RollingUpdate
-                          strategy restart the pod, skipping the scale-down-to-0 / scale-up-to-1
-                          sequence and saving ~10s. When false it uses the scale-down sequence.
-                          Applies to both cluster-only and mainnet (provisioner-daemon) modes: a
-                          config-only upgrade behaves the same in either, because the config step is
-                          pod-state-agnostic. The operator forces the scale-down path regardless of
-                          this flag when the upgrade requires host-level infrastructure work (the pod
-                          must be fully absent before the provisioner daemon can proceed).
-                        type: boolean
                     type: object
                 type: object
             type: object

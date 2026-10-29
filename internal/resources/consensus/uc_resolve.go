@@ -56,7 +56,7 @@ func ucModeFromOrbit(capsule *operatorv1alpha1.ConsensusCapsule, orbit *operator
 			"Set spec.orbit to the name of the Orbit CR that owns this ConsensusCapsule",
 		)
 	}
-	if orbit != nil && orbit.Spec.ProvisionerDaemonEnabled {
+	if orbit != nil && orbit.Spec.Consensus != nil && orbit.Spec.Consensus.ProvisionerDaemonEnabled {
 		return uc.ModeMainnet, nil
 	}
 	return uc.ModeClusterOnly, nil

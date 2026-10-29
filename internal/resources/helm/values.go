@@ -88,14 +88,14 @@ func injectComponentValues(ctx context.Context, c client.Client, namespace strin
 		)
 	}
 
-	// A consensus-less Orbit (e.g. one that only backs a block-node HelmCapsule) has no
-	// consensus block; leave ledgerID/chainID empty for it. The block-node component
-	// injects neither, and the mirror/relay/explorer components only run for Orbits that
-	// do declare consensus.
+	// An Orbit without a network section (e.g. one that only backs a block-node HelmCapsule)
+	// has no ledger/chain identity; leave ledgerID/chainID empty for it. The block-node
+	// component injects neither, and the mirror/relay/explorer components only run for Orbits
+	// that do declare a network identity.
 	var ledgerID, chainID string
-	if orbit.Spec.Consensus != nil {
-		ledgerID = orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
-		chainID = orbit.Spec.Consensus.Genesis.AddressBook.ChainId
+	if orbit.Spec.Network != nil {
+		ledgerID = orbit.Spec.Network.LedgerId
+		chainID = orbit.Spec.Network.ChainId
 	}
 
 	switch *spec.Component {

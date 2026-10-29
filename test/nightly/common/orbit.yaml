@@ -3,9 +3,9 @@ kind: Orbit
 metadata:
   name: solo-orbit
 spec:
+  network:
+    ledgerId: "0x01"
+    chainId: "298"
   consensus:
-    genesis:
-      addressBook:
-        ledgerId: "0x01"
-        chainId: "298"
-        externalAddresses: []
+    addressBook:
+      externalAddresses: []

@@ -84,8 +84,8 @@ func buildConfigTxt(orbit *operatorv1alpha1.Orbit, materials []RosterMaterial) s
 // orbitLedgerID returns the network's ledger identity (application.properties
 // ledger.id), defaulting to mainnet's 0x00 when unset.
 func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
-	if orbit.Spec.Consensus != nil {
-		if v := orbit.Spec.Consensus.Genesis.AddressBook.LedgerId; v != "" {
+	if orbit.Spec.Network != nil {
+		if v := orbit.Spec.Network.LedgerId; v != "" {
 			return v
 		}
 	}
@@ -96,8 +96,8 @@ func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
 // CHAIN_ID / the config.txt swirld id). It is a DECIMAL number (295/296/297/298),
 // not a hex byte like ledger.id — so the unset default is decimal "0", not "0x00".
 func orbitChainID(orbit *operatorv1alpha1.Orbit) string {
-	if orbit.Spec.Consensus != nil {
-		if v := orbit.Spec.Consensus.Genesis.AddressBook.ChainId; v != "" {
+	if orbit.Spec.Network != nil {
+		if v := orbit.Spec.Network.ChainId; v != "" {
 			return v
 		}
 	}

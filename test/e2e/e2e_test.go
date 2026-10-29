@@ -32,11 +32,7 @@ var _ = Describe("E2E Tests", func() {
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
 						Lifetime: "24h",
-						Consensus: &operatorv1alpha1.OrbitConsensus{
-							Genesis: operatorv1alpha1.OrbitGenesis{
-								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-							},
-						},
+						Network:  &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 					},
 				}
 
@@ -72,11 +68,7 @@ var _ = Describe("E2E Tests", func() {
 								},
 							},
 						},
-						Consensus: &operatorv1alpha1.OrbitConsensus{
-							Genesis: operatorv1alpha1.OrbitGenesis{
-								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-							},
-						},
+						Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 					},
 				}
 
@@ -430,11 +422,7 @@ var _ = Describe("E2E Tests", func() {
 				},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "1h",
-					Consensus: &operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-						},
-					},
+					Network:  &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 				},
 			}
 
@@ -534,11 +522,7 @@ var _ = Describe("E2E Tests", func() {
 						Name: orbitName,
 					},
 					Spec: operatorv1alpha1.OrbitSpec{
-						Consensus: &operatorv1alpha1.OrbitConsensus{
-							Genesis: operatorv1alpha1.OrbitGenesis{
-								AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-							},
-						},
+						Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 					},
 				}
 				_ = k8sClient.Create(ctx, orbit)
