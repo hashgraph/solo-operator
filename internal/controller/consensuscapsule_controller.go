@@ -1000,7 +1000,6 @@ func (r *ConsensusCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}, genChanged).
 		Owns(&corev1.ConfigMap{}, genChanged).
 		Owns(&corev1.Service{}, genChanged).
-		Owns(&corev1.PersistentVolumeClaim{}, genChanged).
 		Owns(&appsv1.StatefulSet{}, genChanged).
 		Owns(&rbacv1.RoleBinding{}, genChanged).
 		// The UC reports platform status on its own pod's condition — a pod status
