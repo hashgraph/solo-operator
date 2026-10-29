@@ -37,11 +37,16 @@ const (
 )
 
 type ReleaseInfo struct {
-	Name        string
-	Namespace   string
-	Version     int
-	Status      string
-	ChartString string // "chartname-version"
+	Name         string
+	Namespace    string
+	Version      int
+	Status       string
+	ChartString  string // "chartname-version"
+	LastDeployed time.Time
+}
+
+func (i *ReleaseInfo) Pending() bool {
+	return helmrelease.Status(i.Status).IsPending()
 }
 
 // ChartCredentials is read from the Secret named in HelmChartSpec.CredentialsRef.
@@ -75,6 +80,7 @@ type Client interface {
 	InstallOrUpgrade(ctx context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, values map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error)
 	Uninstall(ctx context.Context, releaseName, namespace string, opts UninstallOptions) error
 	GetRelease(releaseName, namespace string) (*ReleaseInfo, error)
+	Unlock(releaseName, namespace string) error
 }
 
 // ─── Real implementation ──────────────────────────────────────────────────────
@@ -277,6 +283,28 @@ func (h *helmSDKClient) GetRelease(releaseName, namespace string) (*ReleaseInfo,
 	return releaseInfoFrom(rel), nil
 }
 
+func (h *helmSDKClient) Unlock(releaseName, namespace string) error {
+	cfg, err := h.actionConfig(namespace)
+	if err != nil {
+		return err
+	}
+	rel, err := cfg.Releases.Last(releaseName)
+	if err != nil {
+		if isNotFound(err) {
+			return nil
+		}
+		return errx.WithReason(errHelm.Wrap(err, "helm get last revision of %s", releaseName), ReasonHelm)
+	}
+	if rel.Info == nil || !rel.Info.Status.IsPending() {
+		return nil
+	}
+	rel.SetStatus(helmrelease.StatusFailed, "operation interrupted; unlocked by solo-operator")
+	if err := cfg.Releases.Update(rel); err != nil {
+		return errx.WithReason(errHelm.Wrap(err, "helm unlock %s", releaseName), ReasonHelm)
+	}
+	return nil
+}
+
 func releaseInfoFrom(rel *helmrelease.Release) *ReleaseInfo {
 	if rel == nil {
 		return nil
@@ -288,6 +316,7 @@ func releaseInfoFrom(rel *helmrelease.Release) *ReleaseInfo {
 	}
 	if rel.Info != nil {
 		info.Status = rel.Info.Status.String()
+		info.LastDeployed = rel.Info.LastDeployed.Time
 	}
 	if rel.Chart != nil && rel.Chart.Metadata != nil {
 		info.ChartString = rel.Chart.Metadata.Name + "-" + rel.Chart.Metadata.Version

@@ -152,3 +152,5 @@ controller:
   # initial deadline fires. Shorter values give the node operator more frequent
   # visibility. Empty uses the operator default (5m).
   nodeActiveAlertInterval: 5m
+  # Best-effort SIGTERM drain in seconds; the pod grace period is this plus 15s.
+  gracefulShutdownTimeoutSeconds: 30

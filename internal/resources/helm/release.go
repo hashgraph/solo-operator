@@ -65,26 +65,45 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if hash == hc.Status.ValuesHash {
-		existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("checking existing release: %w", err)
-		}
-		if existing != nil && existing.Status == "deployed" {
+	existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("checking existing release: %w", err)
+	}
+	if hash == hc.Status.ValuesHash && existing != nil {
+		if existing.Status == "deployed" {
 			if err := r.syncOutputs(ctx, hc, componentOutputs(hc, releaseName, values)); err != nil {
 				return ctrl.Result{}, err
 			}
 			common.DebugL(&rl, ReasonReleaseUpToDate).Msg("Release up-to-date, skipping upgrade")
 			return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
 		}
-		if existing != nil {
-			common.InfoL(&rl, ReasonReleaseRetry).Str("helmStatus", existing.Status).Msg("Release not in deployed state, retrying upgrade")
-		}
+		common.InfoL(&rl, ReasonReleaseRetry).Str("helmStatus", existing.Status).Msg("Release not in deployed state, retrying upgrade")
 	}
 
 	opts := releaseOptions(hc)
 	if opts.Timeout <= 0 {
 		opts.Timeout = DefaultTimeout
+	}
+
+	if existing != nil && existing.Pending() {
+		if wait := opts.Timeout - time.Since(existing.LastDeployed); wait > 0 {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+					return err
+				}
+				hc.Status.ReleaseStatus = existing.Status
+				return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
+			}); err != nil {
+				return ctrl.Result{}, err
+			}
+			common.InfoL(&rl, ReasonReleasePending).Str("helmStatus", existing.Status).Msg("Helm release has an operation in progress, waiting")
+			return ctrl.Result{RequeueAfter: wait}, nil
+		}
+		common.WarnL(&rl, ReasonReleaseUnlocked).Str("helmStatus", existing.Status).Int("revision", existing.Version).
+			Msg("Helm release stuck pending past its timeout, marking failed to unlock")
+		if err := r.helmClient.Unlock(releaseName, hc.Namespace); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if hc.Spec.Chart.CredentialsRef != nil {

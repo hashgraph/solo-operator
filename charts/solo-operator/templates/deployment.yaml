@@ -29,7 +29,7 @@ spec:
       serviceAccountName: {{ include "solo-operator.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: {{ add .Values.controller.gracefulShutdownTimeoutSeconds 15 }}
       containers:
         - name: manager
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -58,6 +58,7 @@ spec:
             {{- with .Values.controller.nodeActiveAlertInterval }}
             - --node-active-alert-interval={{ . }}
             {{- end }}
+            - --graceful-shutdown-timeout={{ .Values.controller.gracefulShutdownTimeoutSeconds }}s
             {{- $allowedNamespaces := include "solo-operator.allowedNamespaces" . }}
             {{- if ne $allowedNamespaces "_all_namespaces_placeholder" }}
             - --allowed-namespaces={{ $allowedNamespaces | replace " " "," }}

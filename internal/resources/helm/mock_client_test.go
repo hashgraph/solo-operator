@@ -4,6 +4,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
@@ -18,6 +19,17 @@ type MockClient struct {
 	GetReleaseFunc       func(releaseName, namespace string) (*ReleaseInfo, error)
 }
 
+func (m *MockClient) SetRelease(info *ReleaseInfo) {
+	m.releases[info.Namespace+"/"+info.Name] = info
+}
+
+func (m *MockClient) Unlock(releaseName, namespace string) error {
+	if info, ok := m.releases[namespace+"/"+releaseName]; ok && info.Pending() {
+		info.Status = "failed"
+	}
+	return nil
+}
+
 func NewMockClient() *MockClient {
 	return &MockClient{releases: make(map[string]*ReleaseInfo)}
 }
@@ -28,6 +40,9 @@ func (m *MockClient) InstallOrUpgrade(ctx context.Context, releaseName, namespac
 	}
 	key := namespace + "/" + releaseName
 	existing := m.releases[key]
+	if existing != nil && existing.Pending() {
+		return nil, errors.New("another operation (install/upgrade/rollback) is in progress")
+	}
 	version := 1
 	if existing != nil {
 		version = existing.Version + 1

@@ -15,6 +15,7 @@ const (
 	ReasonReleaseReconciling errx.Reason = "ReleaseReconciling"
 	ReasonReleaseReconciled  errx.Reason = "ReleaseReconciled"
 	ReasonReleasePending     errx.Reason = "ReleasePending"
+	ReasonReleaseUnlocked    errx.Reason = "ReleaseUnlocked"
 
 	ReasonAddressBookReadFailed errx.Reason = "AddressBookReadFailed"
 	ReasonCapsuleSkipped        errx.Reason = "CapsuleSkipped"

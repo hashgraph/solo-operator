@@ -61,4 +61,4 @@ spec:
       - name: tmp
         emptyDir: {}
       serviceAccountName: controller-manager
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 45
