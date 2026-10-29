@@ -333,7 +333,7 @@ func newMainnetOrbit() *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			ProvisionerDaemonEnabled: true,
+			Consensus: &operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: true},
 		},
 	}
 }
@@ -345,7 +345,7 @@ func newClusterOnlyOrbit() *operatorv1alpha1.Orbit {
 	return &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			ProvisionerDaemonEnabled: false,
+			Consensus: &operatorv1alpha1.OrbitConsensus{ProvisionerDaemonEnabled: false},
 		},
 	}
 }
@@ -563,15 +563,15 @@ func TestExecuteReconcile_WaitsForPrereqs(t *testing.T) {
 }
 
 // TestExecuteReconcile_OrbitOverridesRequeue verifies that
-// Orbit.spec.upgrade.consensusNode.* overrides the hardcoded requeue defaults,
+// Orbit.spec.consensus.upgrade.* overrides the hardcoded requeue defaults,
 // exercising the getCapsule → getOrbit → ResolveUpgradeConfig wiring.
 func TestExecuteReconcile_OrbitOverridesRequeue(t *testing.T) {
 	const override = 3 * time.Second
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Upgrade: &operatorv1alpha1.OrbitUpgrade{
-				ConsensusNode: &operatorv1alpha1.ConsensusNodeUpgrade{
+			Consensus: &operatorv1alpha1.OrbitConsensus{
+				Upgrade: &operatorv1alpha1.ConsensusNodeUpgrade{
 					PrereqRequeueInterval: &metav1.Duration{Duration: override},
 				},
 			},

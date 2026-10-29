@@ -93,11 +93,7 @@ func TestBuildClusterConfig_ContainsExpectedKeys(t *testing.T) {
 func TestBuildClusterConfig_DefaultsAlwaysUsed(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x00"},
-				},
-			},
+			Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x00"},
 		},
 	}
 	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)
@@ -119,11 +115,7 @@ func TestBuildClusterConfig_DefaultsAlwaysUsed(t *testing.T) {
 func TestBuildClusterConfig_LedgerIDAndChainIDPropagate(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		Spec: operatorv1alpha1.OrbitSpec{
-			Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{
-					AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01", ChainId: "298"},
-				},
-			},
+			Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x01", ChainId: "298"},
 		},
 	}
 	data := BuildClusterConfig(orbit, []RosterMaterial{{NodeID: 0, GossipHost: "h", GossipPort: 1, Weight: 1}}, nil)

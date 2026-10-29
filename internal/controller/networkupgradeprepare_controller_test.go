@@ -1156,8 +1156,8 @@ func TestReconcilePrefetch_Disabled(t *testing.T) {
 	orbit := &operatorv1alpha1.Orbit{
 		ObjectMeta: metav1.ObjectMeta{Name: prepare.Spec.Orbit},
 		Spec: operatorv1alpha1.OrbitSpec{
-			Upgrade: &operatorv1alpha1.OrbitUpgrade{
-				ConsensusNode: &operatorv1alpha1.ConsensusNodeUpgrade{
+			Consensus: &operatorv1alpha1.OrbitConsensus{
+				Upgrade: &operatorv1alpha1.ConsensusNodeUpgrade{
 					Prefetch: &operatorv1alpha1.PrefetchConfig{Enabled: boolPtr(false)},
 				},
 			},

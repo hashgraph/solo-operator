@@ -12,6 +12,7 @@ import (
 	"github.com/joomcode/errorx"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -881,6 +882,95 @@ func TestFailUCSidecarRequired_SetsPhaseFailed(t *testing.T) {
 	}
 	if got.Status.ObservedGeneration != capsule.Generation {
 		t.Errorf("expected ObservedGeneration=%d, got %d", capsule.Generation, got.Status.ObservedGeneration)
+	}
+}
+
+func TestValidateOrbitNetwork(t *testing.T) {
+	scheme := newControllerTestScheme()
+	// orbitWithNetwork builds an Orbit with the given network ledgerId/chainId (realm/shard 0).
+	orbitWithNetwork := func(ledgerId, chainId string) *operatorv1alpha1.Orbit {
+		return &operatorv1alpha1.Orbit{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"},
+			Spec:       operatorv1alpha1.OrbitSpec{Network: &operatorv1alpha1.OrbitNetwork{LedgerId: ledgerId, ChainId: chainId}},
+		}
+	}
+	// orbitNoNetwork builds a block-node-only Orbit with no network section.
+	orbitNoNetwork := func() *operatorv1alpha1.Orbit {
+		return &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	}
+	run := func(o *operatorv1alpha1.Orbit, c *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+		b := fake.NewClientBuilder().WithScheme(scheme)
+		if o != nil {
+			b = b.WithObjects(o)
+		}
+		r := &ConsensusCapsuleReconciler{Client: b.Build(), Scheme: scheme}
+		return r.validateOrbitNetwork(context.Background(), c)
+	}
+
+	// Complete network (ledgerId + chainId set, realm/shard default 0) → ok.
+	if terminal, err := run(orbitWithNetwork("0x01", "298"), newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("complete network: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// A free-form (non-hex) ledgerId is accepted — the check is presence-only.
+	if terminal, err := run(orbitWithNetwork("some-future-tss-public-key", "298"), newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("free-form ledgerId: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// No network section → terminal violation.
+	terminal, err := run(orbitNoNetwork(), newCapsuleForControllerTest())
+	if err == nil || !terminal {
+		t.Fatalf("no network: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	if !errorx.IsOfType(err, errOrbitNetworkRequired) {
+		t.Errorf("expected errOrbitNetworkRequired type, got %v", err)
+	}
+	if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonOrbitNetworkRequired {
+		t.Errorf("expected reason %s, got %q (ok=%v)", ReasonOrbitNetworkRequired, reason, ok)
+	}
+	if hints, ok := errx.Hints(err); !ok || len(hints) == 0 {
+		t.Error("expected remediation hints on the missing-network error")
+	}
+	// Network present but empty ledgerId → terminal.
+	if terminal, err := run(orbitWithNetwork("", "298"), newCapsuleForControllerTest()); err == nil || !terminal {
+		t.Errorf("empty ledgerId: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	// Network present but empty chainId → terminal.
+	if terminal, err := run(orbitWithNetwork("0x01", ""), newCapsuleForControllerTest()); err == nil || !terminal {
+		t.Errorf("empty chainId: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	// Orbit not found → resolved elsewhere, not a network violation here.
+	if terminal, err := run(nil, newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("orbit missing: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// No Orbit reference → not checked here.
+	noRef := newCapsuleForControllerTest()
+	noRef.Spec.Orbit = ""
+	if terminal, err := run(orbitNoNetwork(), noRef); err != nil || terminal {
+		t.Errorf("no orbit ref: want ok, got terminal=%v err=%v", terminal, err)
+	}
+}
+
+func TestFailOrbitNetworkRequired_SetsPhaseFailed(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	// An Orbit with no network section referenced by the capsule → terminal.
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: capsule.Spec.Orbit}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule, orbit).WithStatusSubresource(capsule).Build()
+	r := buildReconcilerForUpdateStatus(c)
+	terminal, termErr := r.validateOrbitNetwork(ctx, capsule)
+	if termErr == nil || !terminal {
+		t.Fatalf("expected terminal error, got terminal=%v err=%v", terminal, termErr)
+	}
+	if _, err := r.failOrbitNetworkRequired(ctx, capsule, termErr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got operatorv1alpha1.ConsensusCapsule
+	_ = c.Get(ctx, client.ObjectKeyFromObject(capsule), &got)
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
+	}
+	if cond := apimeta.FindStatusCondition(got.Status.Conditions, operatorv1alpha1.CondOrbitNetworkReady); cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOrbitNetworkReady=False, got %+v", cond)
 	}
 }
 

@@ -381,6 +381,10 @@ const (
 	// consensus node or an enabled sidecar/uploader) with no declared image; the operator
 	// provides no built-in defaults (terminal config error).
 	EventImageRequired errx.Reason = "ImageRequired"
+	// EventOrbitNetworkRequired is posted when the Orbit referenced by a ConsensusCapsule has
+	// an incomplete network identity (spec.network is nil, or its ledgerId or chainId is
+	// empty); a consensus node requires the full network identity (terminal config error).
+	EventOrbitNetworkRequired errx.Reason = "OrbitNetworkRequired"
 	// EventImageSourceInvalid is posted when a container's SoftwareVersionSource is malformed
 	// — no candidate repositories or no usable per-platform layer hashes (terminal config error).
 	EventImageSourceInvalid errx.Reason = "ImageSourceInvalid"

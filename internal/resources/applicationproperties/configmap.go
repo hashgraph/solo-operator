@@ -144,5 +144,8 @@ func (r *ConfigMapSubReconciler) buildConfigMap(obj *operatorv1alpha1.Applicatio
 }
 
 func orbitLedgerID(orbit *operatorv1alpha1.Orbit) string {
-	return orbit.Spec.Consensus.Genesis.AddressBook.LedgerId
+	if orbit.Spec.Network == nil {
+		return ""
+	}
+	return orbit.Spec.Network.LedgerId
 }

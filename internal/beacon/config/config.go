@@ -11,8 +11,9 @@
 //
 // config.yaml is beacon's ONLY runtime input — it carries no dependency on
 // client-go/kubeconfig, so beacon stays a portable, HAPI-only tool runnable
-// against any network. For Solo networks the file is generated from
-// Orbit.AddressBook by an external helper; that generator is out of scope here.
+// against any network. For Solo networks the file is generated from the Orbit
+// (spec.network + spec.consensus.addressBook) by an external helper; that
+// generator is out of scope here.
 package config
 
 import (

@@ -27,11 +27,7 @@ var _ = Describe("Orbit Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "24h",
-					Consensus: operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-						},
-					},
+					Network:  &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
@@ -56,6 +52,42 @@ var _ = Describe("Orbit Controller", func() {
 		})
 	})
 
+	Context("Optional network / consensus sections (CRD admission)", func() {
+		It("Admits a block-node-only Orbit with no network or consensus section", func() {
+			const orbitName = "orbit-bn-only"
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
+				// No network and no consensus section — valid for a block-node-only Orbit.
+				Spec: operatorv1alpha1.OrbitSpec{Lifetime: "24h"},
+			}
+			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("Admits an Orbit whose network ledgerId is empty (free-form, no CRD constraint)", func() {
+			const orbitName = "orbit-empty-ledger"
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
+				Spec: operatorv1alpha1.OrbitSpec{
+					// ledgerId is a free-form string with no CRD constraint — admission
+					// accepts it empty. The consensus-node requirement that it (and chainId)
+					// be set is enforced at ConsensusCapsule reconcile, not by the CRD.
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: ""},
+				},
+			}
+			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
 	Context("Cascade-delete of referencing Capsules and Proxies", func() {
 		const (
 			orbitName = "orbit-cascade"
@@ -72,11 +104,7 @@ var _ = Describe("Orbit Controller", func() {
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: operatorv1alpha1.OrbitConsensus{
-						Genesis: operatorv1alpha1.OrbitGenesis{
-							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
-						},
-					},
+					Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x03", ChainId: "298"},
 				},
 			})).Should(Succeed())
 
