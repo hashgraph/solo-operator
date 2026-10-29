@@ -27,7 +27,7 @@ var _ = Describe("Orbit Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
 					Lifetime: "24h",
-					Consensus: operatorv1alpha1.OrbitConsensus{
+					Consensus: &operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
 							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
 						},
@@ -56,6 +56,41 @@ var _ = Describe("Orbit Controller", func() {
 		})
 	})
 
+	Context("Optional consensus block (CRD admission)", func() {
+		It("Admits a consensus-less (block-node-only) Orbit", func() {
+			const orbitName = "orbit-no-consensus"
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
+				// No Consensus block at all — valid for a block-node-only Orbit.
+				Spec: operatorv1alpha1.OrbitSpec{Lifetime: "24h"},
+			}
+			Expect(k8sClient.Create(ctx, orbit)).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, orbit)).Should(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: orbitName}, &operatorv1alpha1.Orbit{}))
+			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("Rejects an Orbit that declares consensus with an empty ledgerId", func() {
+			orbit := &operatorv1alpha1.Orbit{
+				ObjectMeta: metav1.ObjectMeta{Name: "orbit-empty-ledger"},
+				Spec: operatorv1alpha1.OrbitSpec{
+					// A present consensus block must be complete: ledgerId is required
+					// (CRD MinLength=1), so an empty ledgerId is rejected at admission.
+					Consensus: &operatorv1alpha1.OrbitConsensus{
+						Genesis: operatorv1alpha1.OrbitGenesis{
+							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: ""},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, orbit)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("ledgerId"))
+		})
+	})
+
 	Context("Cascade-delete of referencing Capsules and Proxies", func() {
 		const (
 			orbitName = "orbit-cascade"
@@ -72,7 +107,7 @@ var _ = Describe("Orbit Controller", func() {
 			Expect(k8sClient.Create(ctx, &operatorv1alpha1.Orbit{
 				ObjectMeta: metav1.ObjectMeta{Name: orbitName},
 				Spec: operatorv1alpha1.OrbitSpec{
-					Consensus: operatorv1alpha1.OrbitConsensus{
+					Consensus: &operatorv1alpha1.OrbitConsensus{
 						Genesis: operatorv1alpha1.OrbitGenesis{
 							AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x03"},
 						},

@@ -55,8 +55,14 @@ type OrbitSpec struct {
 	// +optional
 	ProvisionerDaemonEnabled bool `json:"provisionerDaemonEnabled,omitempty"`
 
-	// Consensus contains shared configuration for all ConsensusCapsules
-	Consensus OrbitConsensus `json:"consensus"`
+	// Consensus contains shared configuration for all ConsensusCapsules.
+	//
+	// Optional: a consensus-less Orbit (for example one that only backs a
+	// block-node HelmCapsule) may omit the consensus block entirely. It IS
+	// required for consensus nodes — a ConsensusCapsule that references an Orbit
+	// with no consensus block fails terminally at reconcile.
+	// +optional
+	Consensus *OrbitConsensus `json:"consensus,omitempty"`
 }
 
 // OrbitTelemetry contains telemetry configuration for the Orbit.
@@ -287,9 +293,16 @@ type OrbitAddressBook struct {
 	// previewnet 0x02; local/dev networks use 0x01. This is distinct from
 	// ChainId — do not put an EVM chain id here.
 	//
+	// Required within the consensus block: a present consensus block must be
+	// complete, so an Orbit that declares consensus must set a ledgerId. (The
+	// consensus block as a whole is optional — a block-node-only Orbit may omit
+	// it entirely; see OrbitSpec.Consensus.)
+	//
 	// NOTE: this static ledger.id is expected to be superseded by the TSS ledger
-	// id (a public key) in a future consensus-node release; treat this field as
-	// transitional and avoid building new coupling on its byte format.
+	// id (a 64-character public key) in a future consensus-node release; it may
+	// no longer be hex or an integer. MinLength=1 only enforces non-emptiness —
+	// it makes no integer/hex/length assumption — so it stays compatible with the
+	// future format. Do not add any pattern/numeric/hex constraint here.
 	// +kubebuilder:validation:MinLength=1
 	LedgerId string `json:"ledgerId"`
 
@@ -351,6 +364,9 @@ type Orbit struct {
 // defaulting to false (node<id+1>) when the gate is unset. The operator only honors
 // the value; solo-provisioner sets it to match the deployed CN.
 func (o *Orbit) IsNodeNameZeroBased() bool {
+	if o.Spec.Consensus == nil {
+		return false
+	}
 	if fg := o.Spec.Consensus.FeatureGates; fg != nil {
 		return fg.NodeNameZeroBased
 	}

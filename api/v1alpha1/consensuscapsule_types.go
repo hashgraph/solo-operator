@@ -618,6 +618,13 @@ const CondImageDigestPinned = "ImageDigestPinned"
 // declared image. The operator provides no built-in default images.
 const CondImagesDeclared = "ImagesDeclared"
 
+// CondOrbitConsensusReady is the condition type for the consensus-block requirement: it is
+// False when the Orbit referenced by the ConsensusCapsule has no consensus block
+// (spec.consensus is nil) or declares one with an empty ledgerId. A consensus node requires
+// a complete consensus block; spec.consensus is optional on the Orbit CRD so a
+// block-node-only Orbit may omit it.
+const CondOrbitConsensusReady = "OrbitConsensusReady"
+
 // ConsensusCapsuleStatus defines the observed state of ConsensusCapsule
 type ConsensusCapsuleStatus struct {
 	// Phase is the ConsensusCapsule lifecycle phase. Active (see PhaseActive) is a

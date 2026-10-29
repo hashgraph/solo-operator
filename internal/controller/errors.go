@@ -32,6 +32,13 @@ var (
 	// default images. Terminal — the operator must set softwareVersion on each container.
 	errImageRequired = errNS.NewType("image_required")
 
+	// errOrbitConsensusRequired: the Orbit referenced by a ConsensusCapsule has no
+	// consensus block (spec.consensus is nil), or declares one with an empty ledgerId. A
+	// consensus node needs a complete consensus block; a block-node-only Orbit may omit it
+	// entirely (that is why spec.consensus is optional on the CRD). Terminal — the operator
+	// must add consensus (with a ledgerId) to the Orbit.
+	errOrbitConsensusRequired = errNS.NewType("orbit_consensus_required")
+
 	// errImageSourceInvalid: a container's SoftwareVersionSource is malformed — no
 	// candidate repositories, or no usable per-platform layer hashes. A source must
 	// carry layer hashes (verification is mandatory). Terminal — the operator must fix
@@ -75,7 +82,8 @@ const (
 	ReasonPrefetchJobBuild  errx.Reason = "PrefetchJobBuildFailed"
 	ReasonPrefetchJobCreate errx.Reason = "PrefetchJobCreateFailed"
 
-	ReasonUCSidecarRequired errx.Reason = "UCSidecarRequired"
+	ReasonUCSidecarRequired      errx.Reason = "UCSidecarRequired"
+	ReasonOrbitConsensusRequired errx.Reason = "OrbitConsensusRequired"
 )
 
 const statusRBACHint = "Confirm the operator has patch permission on the resource's /status"

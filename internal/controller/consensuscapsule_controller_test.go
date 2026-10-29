@@ -12,6 +12,7 @@ import (
 	"github.com/joomcode/errorx"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -881,6 +882,92 @@ func TestFailUCSidecarRequired_SetsPhaseFailed(t *testing.T) {
 	}
 	if got.Status.ObservedGeneration != capsule.Generation {
 		t.Errorf("expected ObservedGeneration=%d, got %d", capsule.Generation, got.Status.ObservedGeneration)
+	}
+}
+
+func TestValidateOrbitConsensus(t *testing.T) {
+	scheme := newControllerTestScheme()
+	// orbitWithLedger builds an Orbit that declares a consensus block with the given ledgerId.
+	orbitWithLedger := func(ledgerId string) *operatorv1alpha1.Orbit {
+		o := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+		o.Spec.Consensus = &operatorv1alpha1.OrbitConsensus{}
+		o.Spec.Consensus.Genesis.AddressBook.LedgerId = ledgerId
+		return o
+	}
+	// orbitNoConsensus builds a consensus-less (block-node-only) Orbit.
+	orbitNoConsensus := func() *operatorv1alpha1.Orbit {
+		return &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+	}
+	run := func(o *operatorv1alpha1.Orbit, c *operatorv1alpha1.ConsensusCapsule) (bool, error) {
+		b := fake.NewClientBuilder().WithScheme(scheme)
+		if o != nil {
+			b = b.WithObjects(o)
+		}
+		r := &ConsensusCapsuleReconciler{Client: b.Build(), Scheme: scheme}
+		return r.validateOrbitConsensus(context.Background(), c)
+	}
+
+	// Consensus block with a non-empty ledgerId → ok.
+	if terminal, err := run(orbitWithLedger("0x01"), newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("consensus+ledgerId: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// A free-form (non-hex) ledgerId is accepted — the check is presence-only.
+	if terminal, err := run(orbitWithLedger("some-future-tss-public-key"), newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("free-form ledgerId: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// No consensus block → terminal violation.
+	terminal, err := run(orbitNoConsensus(), newCapsuleForControllerTest())
+	if err == nil || !terminal {
+		t.Fatalf("no consensus: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	if !errorx.IsOfType(err, errOrbitConsensusRequired) {
+		t.Errorf("expected errOrbitConsensusRequired type, got %v", err)
+	}
+	if reason, ok := errx.ReasonOf(err); !ok || reason != ReasonOrbitConsensusRequired {
+		t.Errorf("expected reason %s, got %q (ok=%v)", ReasonOrbitConsensusRequired, reason, ok)
+	}
+	if hints, ok := errx.Hints(err); !ok || len(hints) == 0 {
+		t.Error("expected remediation hints on the missing-consensus error")
+	}
+	// Consensus block present but empty ledgerId → terminal (defensive; the CRD normally
+	// blocks this at admission via MinLength=1).
+	if terminal, err := run(orbitWithLedger(""), newCapsuleForControllerTest()); err == nil || !terminal {
+		t.Errorf("empty ledgerId: want terminal error, got terminal=%v err=%v", terminal, err)
+	}
+	// Orbit not found → resolved elsewhere, not a consensus violation here.
+	if terminal, err := run(nil, newCapsuleForControllerTest()); err != nil || terminal {
+		t.Errorf("orbit missing: want ok, got terminal=%v err=%v", terminal, err)
+	}
+	// No Orbit reference → not checked here.
+	noRef := newCapsuleForControllerTest()
+	noRef.Spec.Orbit = ""
+	if terminal, err := run(orbitNoConsensus(), noRef); err != nil || terminal {
+		t.Errorf("no orbit ref: want ok, got terminal=%v err=%v", terminal, err)
+	}
+}
+
+func TestFailOrbitConsensusRequired_SetsPhaseFailed(t *testing.T) {
+	ctx := context.Background()
+	scheme := newControllerTestScheme()
+	capsule := newCapsuleForControllerTest()
+	// A consensus-less Orbit referenced by the capsule → terminal.
+	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: capsule.Spec.Orbit}}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(capsule, orbit).WithStatusSubresource(capsule).Build()
+	r := buildReconcilerForUpdateStatus(c)
+	terminal, termErr := r.validateOrbitConsensus(ctx, capsule)
+	if termErr == nil || !terminal {
+		t.Fatalf("expected terminal error, got terminal=%v err=%v", terminal, termErr)
+	}
+	if _, err := r.failOrbitConsensusRequired(ctx, capsule, termErr); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var got operatorv1alpha1.ConsensusCapsule
+	_ = c.Get(ctx, client.ObjectKeyFromObject(capsule), &got)
+	if got.Status.Phase != operatorv1alpha1.PhaseFailed {
+		t.Errorf("expected PhaseFailed, got %s", got.Status.Phase)
+	}
+	if cond := apimeta.FindStatusCondition(got.Status.Conditions, operatorv1alpha1.CondOrbitConsensusReady); cond == nil || cond.Status != metav1.ConditionFalse {
+		t.Errorf("expected CondOrbitConsensusReady=False, got %+v", cond)
 	}
 }
 
