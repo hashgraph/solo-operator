@@ -22,25 +22,12 @@ on:
         type: boolean
         required: false
         default: false
-      enable-snyk-scan:
-        description: "Snyk Scan Enabled"
-        type: boolean
-        required: false
-        default: false
-      snyk-org-identifier:
-        description: "Snyk Organization Identifier:"
-        type: string
-        required: false
-        default: ""
       custom-job-label:
         description: "Custom Job Label:"
         type: string
         required: false
         default: "Analyze"
     secrets:
-      snyk-token:
-        description: "The Snyk access token is used by Snyk to analyze the code for vulnerabilities "
-        required: false
       codecov-token:
         description: "The CodeCov access token is used by CodeCov.io to analyze the code coverage "
         required: false
@@ -74,13 +61,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Download Unit Test Coverage Report
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: ${{ (inputs.enable-codecov-analysis || inputs.enable-codacy-coverage) && !cancelled() && !failure() }}
@@ -100,63 +80,3 @@ jobs:
           CODACY_PROJECT_TOKEN: ${{ secrets.codacy-project-token }}
         if: ${{ inputs.enable-codacy-coverage && !cancelled() && !failure() }}
         run: bash <(curl -Ls https://coverage.codacy.com/get.sh) report -l Go -r coverage.out
-
-      - name: Setup Snyk
-        env:
-          SNYK_TOKEN: ${{ secrets.snyk-token }}
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        run: npm install -g snyk snyk-to-html @wcj/html-to-markdown-cli
-
-      - name: Snyk Scan
-        id: snyk
-        env:
-          SNYK_TOKEN: ${{ secrets.snyk-token }}
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        run: snyk test --org=${{ inputs.snyk-org-identifier }} --all-projects --severity-threshold=high --json-file-output=snyk-test.json
-
-      - name: Snyk Code
-        id: snyk-code
-        env:
-          SNYK_TOKEN: ${{ secrets.snyk-token }}
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        run: snyk code test --org=${{ inputs.snyk-org-identifier }} --severity-threshold=high --json-file-output=snyk-code.json
-
-      - name: Publish Snyk Results
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        run: |
-          if [[ -f "snyk-test.json" && -n "$(cat snyk-test.json | tr -d '[:space:]')" ]]; then
-            snyk-to-html -i snyk-test.json -o snyk-test.html --summary
-            html-to-markdown snyk-test.html -o snyk
-            cat snyk/snyk-test.html.md >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Publish Snyk Code Results
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        run: |
-          if [[ -f "snyk-code.json" && -n "$(cat snyk-code.json | tr -d '[:space:]')" ]]; then
-            snyk-to-html -i snyk-code.json -o snyk-code.html --summary
-            html-to-markdown snyk-code.html -o snyk
-            cat snyk/snyk-code.html.md >> $GITHUB_STEP_SUMMARY
-          fi
-
-      - name: Check Snyk Files
-        if: ${{ always() }}
-        run: |
-          echo "::group::Snyk File List"
-            ls -lah snyk* || true
-          echo "::endgroup::"
-          echo "::group::Snyk Test Contents"
-            cat snyk-test.json || true
-          echo "::endgroup::"
-          echo "::group::Snyk Code Contents"
-            cat snyk-code.json || true
-          echo "::endgroup::"
-
-      - name: Publish Snyk Reports
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ inputs.enable-snyk-scan && !cancelled() && !failure() }}
-        with:
-          name: Snyk Reports
-          path: |
-            snyk-*.html
-            snyk-*.json
