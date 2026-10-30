@@ -10,7 +10,7 @@ spec:
   chart:
     repo: oci://ghcr.io/hiero-ledger/hiero-block-node
     chart: block-node-server
-    version: "0.44.2"
+    version: "0.45.0"
 
   component: block-node
 
@@ -22,10 +22,10 @@ spec:
 
   values:
     image:
-      # includes prebuilt plugins - adhoc downloading is not supported by operator
-      repository: ghcr.io/hiero-ledger/hiero-block-node-solo-dev
+      # ships every plugin prebuilt; plugins.names picks from its catalog, so no Maven init containers
+      repository: ghcr.io/hiero-ledger/hiero-block-node-full
     plugins:
-      names: ""
+      source: image
     resources:
       requests:
         cpu: 500m
