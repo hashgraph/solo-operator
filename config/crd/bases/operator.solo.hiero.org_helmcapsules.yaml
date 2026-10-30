@@ -228,6 +228,20 @@ spec:
                   - name
                   type: object
                 type: array
+              valuesMode:
+                default: Reset
+                description: |-
+                  ValuesMode controls how upgrades treat the previous release's values.
+                  Reset (default) applies only the values computed from this spec.
+                  Reuse is helm --reuse-values: values removed from this spec persist in the release.
+                  ResetThenReuse is helm --reset-then-reuse-values.
+                  Ignored on first install. Changing only this field does not trigger an upgrade;
+                  it applies on the next one.
+                enum:
+                - Reset
+                - Reuse
+                - ResetThenReuse
+                type: string
               wait:
                 description: |-
                   Wait waits until all resources are ready before marking the release successful.
