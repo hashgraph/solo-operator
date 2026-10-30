@@ -238,6 +238,7 @@ func releaseOptions(hc *operatorv1alpha1.HelmCapsule) ReleaseOptions {
 		CleanupOnFail: hc.Spec.CleanupOnFail,
 		MaxHistory:    hc.Spec.MaxHistory,
 		DisableHooks:  hc.Spec.DisableHooks,
+		ValuesMode:    hc.Spec.ValuesMode,
 	}
 	if hc.Spec.Timeout != nil && hc.Spec.Timeout.Duration > 0 {
 		opts.Timeout = hc.Spec.Timeout.Duration
