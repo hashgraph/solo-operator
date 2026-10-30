@@ -256,6 +256,8 @@ func TestRestart_ConsensusCapsule_PinsReachChildBuild(t *testing.T) {
 	capsule.Spec.Log4j2ConfigRef = "log4j2"
 	capsule.Spec.SettingsConfigRef = "settings"
 	capsule.Spec.ApplicationPropertiesRef = "app"
+	orbit := newTestOrbit()
+	orbit.Spec.Network = &operatorv1alpha1.OrbitNetwork{LedgerId: "0x01", ChainId: "298"}
 	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{
 		Enabled:         true,
 		SoftwareVersion: &operatorv1alpha1.SoftwareVersion{Repository: "ghcr.io/hashgraph", ImageName: "uc", ImageTag: "1.0.0"},
@@ -266,7 +268,7 @@ func TestRestart_ConsensusCapsule_PinsReachChildBuild(t *testing.T) {
 
 	scheme := newControllerTestScheme()
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(capsule, newTestOrbit(),
+		WithObjects(capsule, orbit,
 			cm(log4j2config.ConfigMapNameForRef("log4j2")),
 			cm(nodesettings.ConfigMapNameForRef("settings")),
 			cm(applicationproperties.ConfigMapNameForRef("app"))).

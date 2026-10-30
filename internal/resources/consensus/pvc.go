@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -76,11 +75,8 @@ func (r *PVCSubReconciler) Reconcile(ctx context.Context, capsule *operatorv1alp
 func (r *PVCSubReconciler) reconcilePVC(ctx context.Context, capsule *operatorv1alpha1.ConsensusCapsule, volumeType string, spec *corev1.PersistentVolumeClaimSpec) error {
 	desired := r.buildPVC(capsule, volumeType, spec)
 
-	// Set owner reference
-	if err := controllerutil.SetControllerReference(capsule, desired, r.Scheme); err != nil {
-		return err
-	}
-
+	// Deliberately no owner reference: PVC data must outlive the capsule and be
+	// removed only by an explicit delete, never by garbage collection.
 	// Check if exists
 	existing := &corev1.PersistentVolumeClaim{}
 	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)

@@ -82,3 +82,9 @@ task destroy
 # Uninstall MetalLB and RustFS
 task cleanup
 ```
+
+## Data retention
+
+- **PVCs outlive the capsule.** The operator does not set an owner reference on a `ConsensusCapsule`'s PVCs, so deleting the capsule (or its Orbit) never deletes consensus data.
+- **Reinstall reuses them.** A capsule with the same namespace and node id picks up the existing PVCs.
+- **Delete data on purpose.** Remove it with an explicit `kubectl delete pvc -n <namespace> -l <labels>`.

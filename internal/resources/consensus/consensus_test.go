@@ -451,7 +451,62 @@ func TestPVCSubReconciler(t *testing.T) {
 		pvc := &corev1.PersistentVolumeClaim{}
 		if err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: "test-namespace"}, pvc); err != nil {
 			t.Errorf("failed to get PVC %s: %v", name, err)
+			continue
 		}
+		if len(pvc.OwnerReferences) != 0 {
+			t.Errorf("PVC %s must not have owner references, got %v", name, pvc.OwnerReferences)
+		}
+	}
+}
+
+func TestPVCSubReconciler_SurvivesCapsuleDeleteAndIsReused(t *testing.T) {
+	ctx := context.Background()
+	scheme := newTestScheme()
+	capsule := newTestCapsule()
+	capsule.Spec.PersistentVolumeClaims = &operatorv1alpha1.ConsensusPVCConfig{
+		Logs: &corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+			},
+		},
+	}
+	c := newTestClient(scheme, capsule)
+	reconciler := NewPVCSubReconciler(c, scheme)
+
+	if _, err := reconciler.Reconcile(ctx, capsule); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	key := client.ObjectKey{Name: "node0-logs", Namespace: "test-namespace"}
+	first := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(ctx, key, first); err != nil {
+		t.Fatalf("PVC not created: %v", err)
+	}
+
+	if err := c.Delete(ctx, capsule); err != nil {
+		t.Fatalf("delete capsule: %v", err)
+	}
+	// The fake client does not garbage-collect, so assert the cause: no owner reference.
+	survivor := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(ctx, key, survivor); err != nil {
+		t.Fatalf("PVC must survive capsule deletion: %v", err)
+	}
+	if len(survivor.OwnerReferences) != 0 {
+		t.Errorf("PVC must not be owned by the capsule, got %v", survivor.OwnerReferences)
+	}
+
+	// Reinstall with the same namespace and node id reuses the existing PVC.
+	reinstalled := newTestCapsule()
+	reinstalled.Spec.PersistentVolumeClaims = capsule.Spec.PersistentVolumeClaims
+	if _, err := reconciler.Reconcile(ctx, reinstalled); err != nil {
+		t.Fatalf("reinstall reconcile: %v", err)
+	}
+	again := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(ctx, key, again); err != nil {
+		t.Fatalf("get PVC: %v", err)
+	}
+	if again.UID != first.UID || again.ResourceVersion != first.ResourceVersion {
+		t.Error("expected existing PVC to be reused unchanged")
 	}
 }
 
