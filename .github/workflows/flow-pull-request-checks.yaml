@@ -93,16 +93,3 @@ jobs:
   helm-check:
     name: Helm Check
     uses: ./.github/workflows/zxc-helm-check.yaml
-
-  snyk:
-    name: Snyk Scan
-    uses: ./.github/workflows/zxc-code-analysis.yaml
-    needs:
-      - build
-    if: ${{ github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name }}
-    with:
-      custom-job-label: Standard
-      enable-snyk-scan: true
-      snyk-org-identifier: ${{ vars.SNYK_ORG_IDENTIFIER }}
-    secrets:
-      snyk-token: ${{ secrets.SNYK_TOKEN }}

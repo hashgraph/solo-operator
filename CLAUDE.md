@@ -133,7 +133,7 @@ The chart is published to `oci://ghcr.io/hashgraph/solo-operator/solo-operator-c
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `flow-pull-request-checks.yaml` | PR | Build, lint, unit tests, helm lint/template, Snyk |
+| `flow-pull-request-checks.yaml` | PR | Build, lint, unit tests, helm lint/template |
 | `flow-release-deploy-artifact.yaml` | `workflow_dispatch` | Semantic release → helm publish → docker publish |
 | `zxc-helm-check.yaml` | reusable | Helm lint + template validation |
 | `zxc-release.yaml` | reusable | Semantic release + helm package/push |
