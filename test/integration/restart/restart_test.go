@@ -150,9 +150,7 @@ var _ = Describe("Operator restart mid-upgrade", func() {
 		createNamespace(ctx, ns)
 		Expect(k8sClient.Create(ctx, &operatorv1alpha1.Orbit{
 			ObjectMeta: metav1.ObjectMeta{Name: ns},
-			Spec: operatorv1alpha1.OrbitSpec{Consensus: operatorv1alpha1.OrbitConsensus{
-				Genesis: operatorv1alpha1.OrbitGenesis{AddressBook: operatorv1alpha1.OrbitAddressBook{LedgerId: "0x01"}},
-			}},
+			Spec:       operatorv1alpha1.OrbitSpec{Network: &operatorv1alpha1.OrbitNetwork{LedgerId: "0x01", ChainId: "298"}},
 		})).To(Succeed())
 		Expect(k8sClient.Create(ctx, &operatorv1alpha1.ConsensusCapsule{
 			ObjectMeta: metav1.ObjectMeta{Name: capsKey.Name, Namespace: ns, Labels: map[string]string{common.LabelOrbit: ns}},

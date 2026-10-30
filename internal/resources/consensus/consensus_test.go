@@ -486,8 +486,13 @@ func TestPVCSubReconciler_SurvivesCapsuleDeleteAndIsReused(t *testing.T) {
 	if err := c.Delete(ctx, capsule); err != nil {
 		t.Fatalf("delete capsule: %v", err)
 	}
-	if err := c.Get(ctx, key, &corev1.PersistentVolumeClaim{}); err != nil {
+	// The fake client does not garbage-collect, so assert the cause: no owner reference.
+	survivor := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(ctx, key, survivor); err != nil {
 		t.Fatalf("PVC must survive capsule deletion: %v", err)
+	}
+	if len(survivor.OwnerReferences) != 0 {
+		t.Errorf("PVC must not be owned by the capsule, got %v", survivor.OwnerReferences)
 	}
 
 	// Reinstall with the same namespace and node id reuses the existing PVC.
