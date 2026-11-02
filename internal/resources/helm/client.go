@@ -63,6 +63,8 @@ type ReleaseOptions struct {
 	CleanupOnFail bool
 	MaxHistory    int
 	DisableHooks  bool
+	// ValuesMode applies to upgrades only. Empty means Reset.
+	ValuesMode operatorv1alpha1.HelmValuesMode
 	// Credentials are used to authenticate to a private chart repository.
 	// Nil means no authentication (public repo).
 	Credentials *ChartCredentials
@@ -212,7 +214,14 @@ func (h *helmSDKClient) upgrade(ctx context.Context, releaseName, namespace stri
 	upgrade.CleanupOnFail = opts.CleanupOnFail
 	upgrade.MaxHistory = opts.MaxHistory
 	upgrade.DisableHooks = opts.DisableHooks
-	upgrade.ReuseValues = false
+	switch opts.ValuesMode {
+	case operatorv1alpha1.HelmValuesModeReuse:
+		upgrade.ReuseValues = true
+	case operatorv1alpha1.HelmValuesModeResetThenReuse:
+		upgrade.ResetThenReuseValues = true
+	default:
+		upgrade.ResetValues = true
+	}
 	// TODO: volumeClaimTemplates are immutable; size/storageClass changes need a StatefulSet orphan-delete first.
 	upgrade.Version = chart.Version
 	if err := applyCredentials(cfg.RegistryClient, &upgrade.ChartPathOptions, chart, opts.Credentials); err != nil {

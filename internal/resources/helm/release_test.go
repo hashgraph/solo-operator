@@ -159,6 +159,28 @@ func TestReleaseSubReconciler_customTimeout(t *testing.T) {
 	}
 }
 
+func TestReleaseSubReconciler_valuesModePassedThrough(t *testing.T) {
+	scheme := newTestScheme()
+
+	var captured operatorv1alpha1.HelmValuesMode
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, releaseName, namespace string, chart operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, opts ReleaseOptions) (*ReleaseInfo, error) {
+		captured = opts.ValuesMode
+		return &ReleaseInfo{Name: releaseName, Namespace: namespace, Version: 1, Status: "deployed", ChartString: chart.Chart + "-" + chart.Version}, nil
+	}
+
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.ValuesMode = operatorv1alpha1.HelmValuesModeReuse
+	r := newTestReleaseSubReconciler(scheme, mock, hc)
+
+	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if captured != operatorv1alpha1.HelmValuesModeReuse {
+		t.Errorf("expected ValuesMode=Reuse, got %q", captured)
+	}
+}
+
 func TestReleaseSubReconciler_DefaultTimeout(t *testing.T) {
 	scheme := newTestScheme()
 

@@ -59,6 +59,20 @@ const (
 	HelmComponentBlockNode      HelmComponent = "block-node"
 )
 
+// HelmValuesMode selects how a Helm upgrade treats the values of the previous release.
+// +kubebuilder:validation:Enum=Reset;Reuse;ResetThenReuse
+type HelmValuesMode string
+
+const (
+	// HelmValuesModeReset ignores the previous release's values (helm upgrade --reset-values).
+	HelmValuesModeReset HelmValuesMode = "Reset"
+	// HelmValuesModeReuse merges the previous release's values with the new ones (helm upgrade --reuse-values).
+	HelmValuesModeReuse HelmValuesMode = "Reuse"
+	// HelmValuesModeResetThenReuse starts from the new chart's defaults, then layers the previous
+	// release's values and the new ones on top (helm upgrade --reset-then-reuse-values).
+	HelmValuesModeResetThenReuse HelmValuesMode = "ResetThenReuse"
+)
+
 // HelmCapsuleSpec defines the desired state of a HelmCapsule.
 // +kubebuilder:validation:XValidation:rule="has(self.orbitRef) && has(self.orbitRef.name) && size(self.orbitRef.name) > 0",message="orbitRef is required and its name must not be empty"
 type HelmCapsuleSpec struct {
@@ -95,6 +109,16 @@ type HelmCapsuleSpec struct {
 	// auto-injected values and anything from ValuesFrom.
 	// +optional
 	Values *apiextv1.JSON `json:"values,omitempty"`
+
+	// ValuesMode controls how upgrades treat the previous release's values.
+	// Reset (default) applies only the values computed from this spec.
+	// Reuse is helm --reuse-values: values removed from this spec persist in the release.
+	// ResetThenReuse is helm --reset-then-reuse-values.
+	// Ignored on first install. Changing only this field does not trigger an upgrade;
+	// it applies on the next one.
+	// +kubebuilder:default=Reset
+	// +optional
+	ValuesMode HelmValuesMode `json:"valuesMode,omitempty"`
 
 	// Timeout for Helm install/upgrade operations.
 	// Defaults to 5m (same as the Helm CLI default).
