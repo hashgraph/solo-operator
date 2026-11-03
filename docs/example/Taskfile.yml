@@ -173,11 +173,19 @@ tasks:
       - kubectl apply -f helmcapsule/mirror-pinger.yaml
 
   deploy:blocknode:capsule:
-    desc: Deploy the block node HelmCapsule and wait until Ready
+    desc: Deploy the block node HelmCapsule and wait until Ready (BLOCKNODE_CHART_REPO/BLOCKNODE_CHART_VERSION override the chart)
     internal: true
     deps: [deploy:orbit]
+    vars:
+      BLOCKNODE_CHART_REPO: '{{.BLOCKNODE_CHART_REPO | default ""}}'
+      BLOCKNODE_CHART_VERSION: '{{.BLOCKNODE_CHART_VERSION | default ""}}'
     cmds:
-      - kubectl apply -f helmcapsule/block-node.yaml
+      - |
+        yq eval '
+          {{if .BLOCKNODE_CHART_REPO}}.spec.chart.repo = "{{.BLOCKNODE_CHART_REPO}}" |{{end}}
+          {{if .BLOCKNODE_CHART_VERSION}}.spec.chart.version = "{{.BLOCKNODE_CHART_VERSION}}" |{{end}}
+          .
+        ' helmcapsule/block-node.yaml | kubectl apply -f -
       - kubectl wait --for=condition=Ready helmcapsule/block-node -n solo-orbit --timeout=15m
       - kubectl get helmcapsule block-node -n solo-orbit -o jsonpath='{.status.outputs}{"\n"}'
 
