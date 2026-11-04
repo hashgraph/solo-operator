@@ -56,10 +56,7 @@ backend {{.Name}}
     http-check expect status 200
 {{- end}}
     server upstream {{.Host}}:{{.Port}}
-{{- if .HTTPS}} ssl alpn h2
-{{- with .ServerName}} sni str({{.}}){{end}}
-{{- if .CAFile}} verify required ca-file {{.CAFile}}{{with .ServerName}} verifyhost {{.}}{{end}}
-{{- else}} verify none{{end}}
+{{- if .HTTPS}} ssl alpn h2{{with .ServerName}} sni str({{.}}){{end}} verify none
 {{- else}} proto h2{{end}} check
-{{- if .GRPCCheck}}{{if .HTTPS}} check-alpn h2{{else}} check-proto h2{{end}}{{end}} inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down
+{{- if .GRPCCheck}}{{if .HTTPS}} check-alpn h2{{else}} check-proto h2{{end}}{{end}} inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down resolvers default init-addr last,libc,none
 {{end}}
