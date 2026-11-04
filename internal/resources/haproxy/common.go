@@ -7,6 +7,8 @@ import (
 	"cmp"
 	_ "embed"
 	"fmt"
+	"net"
+	"strings"
 	"text/template"
 	"time"
 
@@ -41,7 +43,6 @@ type haproxyConfigData struct {
 	ACLs           []string
 }
 
-// timeoutsData is in milliseconds.
 type timeoutsData struct {
 	Connect       int64
 	Client        int64
@@ -318,7 +319,7 @@ func resolve(haproxy *operatorv1alpha1.HAProxyCapsule) inputs {
 	if haproxy.Spec.Backends != nil {
 		backends = *haproxy.Spec.Backends
 	}
-	host := GetUpstreamService(haproxy)
+	host := upstreamHost(GetUpstreamService(haproxy), haproxy.Namespace)
 	in := inputs{grpc: resolveBackend(host, backends.Grpc, "consensus_nodes", operatorv1alpha1.HAProxyBackendProtocolHTTP)}
 
 	if name := haproxy.Spec.TLSSecretName; name != "" {
@@ -364,10 +365,29 @@ func resolveBackend(host string, spec *operatorv1alpha1.HAProxyBackendSpec, name
 		HTTPS:     https,
 		GRPCCheck: spec.HealthCheck == operatorv1alpha1.HAProxyBackendHealthCheckGRPC,
 	}
-	if https && spec.TLS != nil {
+	if spec.TLS != nil {
 		bd.ServerName = spec.TLS.ServerName
 	}
 	return bd
+}
+
+func (b backendData) Resolve() bool {
+	return net.ParseIP(b.Host) == nil
+}
+
+// HAProxy's runtime resolver ignores search domains.
+func upstreamHost(name, namespace string) string {
+	switch {
+	case net.ParseIP(name) != nil:
+		return name
+	case !strings.Contains(name, "."):
+		return name + "." + namespace + ".svc.cluster.local"
+	case strings.Count(name, ".") == 1:
+		return name + ".svc.cluster.local"
+	case strings.HasSuffix(name, ".svc"):
+		return name + ".cluster.local"
+	}
+	return name
 }
 
 func referencedNames(haproxy *operatorv1alpha1.HAProxyCapsule, kind sourceKind) []string {

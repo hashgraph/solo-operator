@@ -58,22 +58,19 @@ spec:
   # TLS termination on grpcsPort — needs a kubernetes.io/tls secret (cert-manager works directly).
   # tlsSecretName: haproxy-node0-tls
 
-  # HotReload applies config/secret/ACL changes in place; Restart rolls the pod.
   # reloadStrategy: HotReload   # default
   # reloader:
   #   image: haproxy:2.8.10-alpine3.20   # defaults to spec.image
   #   intervalSeconds: 5
 
-  # Defaults: grpc → HTTP :50211, grpcs → HTTPS :50212. HTTPS upstreams use verify none.
   # backends:
   #   grpc:
   #     protocol: HTTPS
   #     healthCheck: TCP        # default; or GRPC
   #   grpcs:                    # requires tlsSecretName
   #     tls:
-  #       serverName: node0.example.com   # SNI
+  #       serverName: node0.example.com
 
-  # IP/CIDR blocklists, one per line.
   # aclFiles:
   #   - name: ofac
   #     configMapRef:

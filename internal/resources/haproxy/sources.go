@@ -17,7 +17,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/common"
 )
 
-// restartChecksum covers the rendered config and the referenced keys; missing sources hash as absent.
 func restartChecksum(ctx context.Context, c client.Client, haproxy *operatorv1alpha1.HAProxyCapsule) (string, error) {
 	cfg, err := HAProxyConfig(haproxy)
 	if err != nil {
@@ -27,22 +26,23 @@ func restartChecksum(ctx context.Context, c client.Client, haproxy *operatorv1al
 	_, _ = h.Write([]byte(cfg))
 	for _, v := range resolve(haproxy).volumes {
 		for _, s := range v.sources {
-			data, err := s.read(ctx, c, haproxy.Namespace)
+			values, err := s.read(ctx, c, haproxy.Namespace)
 			if err != nil {
 				return "", err
 			}
-			_, _ = fmt.Fprintf(h, "\n%s/%s:%t", s.kind, s.name, data != nil)
-			for _, it := range s.items {
+			_, _ = fmt.Fprintf(h, "\n%s/%s:%t", s.kind, s.name, values != nil)
+			for i, it := range s.items {
 				_, _ = fmt.Fprintf(h, "\n%s=", it.Key)
-				_, _ = h.Write(data[it.Key])
+				if values != nil {
+					_, _ = h.Write(values[i])
+				}
 			}
 		}
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-// read returns nil data when the object does not exist yet.
-func (s source) read(ctx context.Context, c client.Client, namespace string) (map[string][]byte, error) {
+func (s source) read(ctx context.Context, c client.Client, namespace string) ([][]byte, error) {
 	secret := &corev1.Secret{}
 	cm := &corev1.ConfigMap{}
 	obj := client.Object(secret)
@@ -59,12 +59,13 @@ func (s source) read(ctx context.Context, c client.Client, namespace string) (ma
 			fmt.Sprintf("Confirm the operator ServiceAccount has get permission on %ss", strings.ToLower(string(s.kind))),
 		)
 	}
-	if s.kind == secretSource {
-		return secret.Data, nil
+	values := make([][]byte, len(s.items))
+	for i, it := range s.items {
+		if s.kind == secretSource {
+			values[i] = secret.Data[it.Key]
+		} else {
+			values[i] = []byte(cm.Data[it.Key])
+		}
 	}
-	data := make(map[string][]byte, len(cm.Data))
-	for k, v := range cm.Data {
-		data[k] = []byte(v)
-	}
-	return data, nil
+	return values, nil
 }

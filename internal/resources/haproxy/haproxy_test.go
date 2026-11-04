@@ -1324,7 +1324,7 @@ func mustHAProxyConfig(t *testing.T, haproxy *operatorv1alpha1.HAProxyCapsule) s
 
 func TestHAProxyConfig_NonTLS(t *testing.T) {
 	haproxy := &operatorv1alpha1.HAProxyCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1", Namespace: "ns"},
 	}
 	cfg := mustHAProxyConfig(t, haproxy)
 
@@ -1334,7 +1334,7 @@ func TestHAProxyConfig_NonTLS(t *testing.T) {
 	if !strings.Contains(cfg, "bind *:50212") {
 		t.Errorf("expected grpcs frontend on 50212, config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "server upstream node1:50211 proto h2 check inter 10s") {
+	if !strings.Contains(cfg, "default-server check inter 10s observe layer4 error-limit 5 on-error mark-down proto h2 resolvers default init-addr none\n    server upstream node1.ns.svc.cluster.local:50211\n") {
 		t.Errorf("expected h2c upstream node1:50211 (haproxy- prefix stripped), config:\n%s", cfg)
 	}
 	if strings.Contains(cfg, "ssl crt") || strings.Contains(cfg, " ssl alpn") {
@@ -1350,7 +1350,7 @@ func TestHAProxyConfig_NonTLS(t *testing.T) {
 
 func TestHAProxyConfig_TLS(t *testing.T) {
 	haproxy := &operatorv1alpha1.HAProxyCapsule{
-		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1", Namespace: "ns"},
 		Spec: operatorv1alpha1.HAProxyCapsuleSpec{
 			TLSSecretName: "my-tls",
 		},
@@ -1363,7 +1363,7 @@ func TestHAProxyConfig_TLS(t *testing.T) {
 	if !strings.Contains(cfg, "consensus_nodes_tls") {
 		t.Errorf("expected consensus_nodes_tls backend in TLS config, config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "server upstream node1:50212 ssl alpn h2 verify none check") {
+	if !strings.Contains(cfg, "on-error mark-down ssl alpn h2 verify none resolvers default init-addr none\n    server upstream node1.ns.svc.cluster.local:50212\n") {
 		t.Errorf("expected HTTPS upstream with verify none on TLS backend, config:\n%s", cfg)
 	}
 }

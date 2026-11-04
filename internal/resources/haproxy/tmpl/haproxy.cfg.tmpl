@@ -32,31 +32,29 @@ frontend grpcs_frontend
 {{- with .Grpcs}}{{template "backend" .}}{{end}}
 listen stats
     bind *:{{.MetricsPort}}
-    mode http
     http-request use-service prometheus-exporter if { path /metrics }
     stats enable
     stats uri /stats
     stats refresh 10s
 {{define "acls"}}
-{{- range .}}
-    tcp-request connection reject if { src -f {{.}} }
-{{- end}}
-{{- range .}}
-    http-request deny if { hdr_ip(x-forwarded-for) -f {{.}} }
+{{- if .}}
+    acl blocked_src src{{range .}} -f {{.}}{{end}}
+    acl blocked_xff hdr_ip(x-forwarded-for){{range .}} -f {{.}}{{end}}
+    tcp-request connection reject if blocked_src
+    http-request deny if blocked_xff
 {{- end}}
 {{- end}}
 
 {{- define "backend"}}
 backend {{.Name}}
-    mode http
     http-reuse safe
 {{- if .GRPCCheck}}
     option httpchk
     http-check send meth POST uri /grpc.health.v1.Health/Check ver HTTP/2 hdr content-type application/grpc hdr te trailers
     http-check expect status 200
 {{- end}}
-    server upstream {{.Host}}:{{.Port}}
-{{- if .HTTPS}} ssl alpn h2{{with .ServerName}} sni str({{.}}){{end}} verify none
-{{- else}} proto h2{{end}} check
-{{- if .GRPCCheck}}{{if .HTTPS}} check-alpn h2{{else}} check-proto h2{{end}}{{end}} inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down resolvers default init-addr last,libc,none
+    default-server check inter 10s observe layer4 error-limit 5 on-error mark-down
+{{- if .HTTPS}} ssl alpn h2 verify none{{if .GRPCCheck}} check-alpn h2{{end}}{{else}} proto h2{{end}}
+{{- if .Resolve}} resolvers default init-addr none{{end}}
+    server upstream {{.Host}}:{{.Port}}{{with .ServerName}} sni str({{.}}) check-sni {{.}}{{end}}
 {{end}}

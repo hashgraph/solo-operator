@@ -282,18 +282,14 @@ func TestHAProxyConfig_ACLFiles(t *testing.T) {
 	}
 	cfg := mustHAProxyConfig(t, haproxy)
 	for _, want := range []string{
-		"tcp-request connection reject if { src -f /usr/local/etc/haproxy/acl/ofac.acl }",
-		"http-request deny if { hdr_ip(x-forwarded-for) -f /usr/local/etc/haproxy/acl/ofac.acl }",
-		"tcp-request connection reject if { src -f /usr/local/etc/haproxy/acl/extra.acl }",
-		"http-request deny if { hdr_ip(x-forwarded-for) -f /usr/local/etc/haproxy/acl/extra.acl }",
+		"acl blocked_src src -f /usr/local/etc/haproxy/acl/ofac.acl -f /usr/local/etc/haproxy/acl/extra.acl",
+		"acl blocked_xff hdr_ip(x-forwarded-for) -f /usr/local/etc/haproxy/acl/ofac.acl -f /usr/local/etc/haproxy/acl/extra.acl",
+		"tcp-request connection reject if blocked_src",
+		"http-request deny if blocked_xff",
 	} {
 		if got := strings.Count(cfg, want); got != 2 {
 			t.Errorf("expected %q on both frontends, found %d times:\n%s", want, got, cfg)
 		}
-	}
-	// HAProxy warns when tcp-request rules follow http-request rules.
-	if strings.Index(cfg, "tcp-request connection reject if { src -f /usr/local/etc/haproxy/acl/extra.acl }") > strings.Index(cfg, "http-request deny") {
-		t.Error("all tcp-request rules must precede http-request rules")
 	}
 }
 
@@ -311,15 +307,15 @@ func TestHAProxyConfig_Backends(t *testing.T) {
 			backends: &operatorv1alpha1.HAProxyBackendsSpec{
 				Grpc: &operatorv1alpha1.HAProxyBackendSpec{Protocol: operatorv1alpha1.HAProxyBackendProtocolHTTPS},
 			},
-			want:     []string{"server upstream node1:50212 ssl alpn h2 verify none check inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down resolvers default init-addr last,libc,none"},
-			unwanted: []string{"proto h2 check"},
+			want:     []string{"default-server check inter 10s observe layer4 error-limit 5 on-error mark-down ssl alpn h2 verify none resolvers default init-addr none\n    server upstream node1.ns.svc.cluster.local:50212\n"},
+			unwanted: []string{"mark-down proto h2", "check-alpn"},
 		},
 		{
 			name: "custom port",
 			backends: &operatorv1alpha1.HAProxyBackendsSpec{
 				Grpc: &operatorv1alpha1.HAProxyBackendSpec{Port: 60211},
 			},
-			want: []string{"server upstream node1:60211 proto h2 check"},
+			want: []string{"server upstream node1.ns.svc.cluster.local:60211\n"},
 		},
 		{
 			name: "grpc health check over h2c",
@@ -330,8 +326,9 @@ func TestHAProxyConfig_Backends(t *testing.T) {
 				"option httpchk",
 				"http-check send meth POST uri /grpc.health.v1.Health/Check ver HTTP/2 hdr content-type application/grpc hdr te trailers",
 				"http-check expect status 200",
-				"proto h2 check check-proto h2 inter",
+				"on-error mark-down proto h2 resolvers",
 			},
+			unwanted: []string{"check-alpn"},
 		},
 		{
 			name: "grpcs SNI with grpc health check",
@@ -342,7 +339,10 @@ func TestHAProxyConfig_Backends(t *testing.T) {
 					TLS:         &operatorv1alpha1.HAProxyBackendTLSSpec{ServerName: "node1.example"},
 				},
 			},
-			want: []string{"server upstream node1:50212 ssl alpn h2 sni str(node1.example) verify none check check-alpn h2 inter"},
+			want: []string{
+				"ssl alpn h2 verify none check-alpn h2 resolvers",
+				"server upstream node1.ns.svc.cluster.local:50212 sni str(node1.example) check-sni node1.example\n",
+			},
 		},
 		{
 			name:     "external upstream by IP",
@@ -350,13 +350,19 @@ func TestHAProxyConfig_Backends(t *testing.T) {
 			backends: &operatorv1alpha1.HAProxyBackendsSpec{
 				Grpc: &operatorv1alpha1.HAProxyBackendSpec{Protocol: operatorv1alpha1.HAProxyBackendProtocolHTTPS},
 			},
-			want: []string{"server upstream 10.20.30.40:50212 ssl alpn h2 verify none check"},
+			want:     []string{"server upstream 10.20.30.40:50212\n"},
+			unwanted: []string{"resolvers"},
+		},
+		{
+			name:     "remote FQDN is re-resolved at runtime",
+			upstream: "cn0.mainnet.example.com",
+			want:     []string{"proto h2 resolvers default init-addr none\n    server upstream cn0.mainnet.example.com:50211\n"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			haproxy := &operatorv1alpha1.HAProxyCapsule{
-				ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "haproxy-node1", Namespace: "ns"},
 				Spec:       operatorv1alpha1.HAProxyCapsuleSpec{Backends: tt.backends, UpstreamService: tt.upstream},
 			}
 			if tt.tls {
@@ -386,5 +392,20 @@ func TestReferencedSources(t *testing.T) {
 	haproxy.Spec.TLSSecretName = ""
 	if got := ReferencedSecrets(haproxy); len(got) != 0 {
 		t.Errorf("expected no secrets without TLS termination, got %v", got)
+	}
+}
+
+func TestUpstreamHost(t *testing.T) {
+	for name, want := range map[string]string{
+		"node1":                         "node1.ns.svc.cluster.local",
+		"node1.other":                   "node1.other.svc.cluster.local",
+		"node1.other.svc":               "node1.other.svc.cluster.local",
+		"node1.other.svc.cluster.local": "node1.other.svc.cluster.local",
+		"cn0.mainnet.example.com":       "cn0.mainnet.example.com",
+		"10.20.30.40":                   "10.20.30.40",
+	} {
+		if got := upstreamHost(name, "ns"); got != want {
+			t.Errorf("upstreamHost(%q) = %q, want %q", name, got, want)
+		}
 	}
 }

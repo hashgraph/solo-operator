@@ -61,7 +61,7 @@ type HAProxyHealthCheckSpec struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
-// HAProxyReloadStrategy is HotReload or Restart.
+// HAProxyReloadStrategy is the reload mode.
 // +kubebuilder:validation:Enum=HotReload;Restart
 type HAProxyReloadStrategy string
 
@@ -85,7 +85,7 @@ type HAProxyReloaderSpec struct {
 	IntervalSeconds int32 `json:"intervalSeconds,omitempty"`
 }
 
-// HAProxyBackendProtocol is the protocol spoken to the upstream.
+// HAProxyBackendProtocol is the upstream protocol.
 // +kubebuilder:validation:Enum=HTTP;HTTPS
 type HAProxyBackendProtocol string
 
@@ -94,7 +94,7 @@ const (
 	HAProxyBackendProtocolHTTPS HAProxyBackendProtocol = "HTTPS"
 )
 
-// HAProxyBackendHealthCheck is the upstream server check type.
+// HAProxyBackendHealthCheck is the upstream check type.
 // +kubebuilder:validation:Enum=TCP;GRPC
 type HAProxyBackendHealthCheck string
 
@@ -103,10 +103,8 @@ const (
 	HAProxyBackendHealthCheckGRPC HAProxyBackendHealthCheck = "GRPC"
 )
 
-// HAProxyBackendTLSSpec configures upstream TLS. Certificates are not verified (verify none).
-// TODO: add verify Required with a CA certificate reference.
+// HAProxyBackendTLSSpec configures upstream TLS. TODO: verify Required with a CA reference.
 type HAProxyBackendTLSSpec struct {
-	// ServerName is sent as SNI.
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
 	// +optional
@@ -114,17 +112,14 @@ type HAProxyBackendTLSSpec struct {
 }
 
 type HAProxyBackendSpec struct {
-	// Protocol defaults to HTTP for grpc and HTTPS for grpcs.
 	// +optional
 	Protocol HAProxyBackendProtocol `json:"protocol,omitempty"`
 
-	// Port defaults to 50211 for HTTP and 50212 for HTTPS.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	// +optional
 	Port int32 `json:"port,omitempty"`
 
-	// HealthCheck GRPC POSTs /grpc.health.v1.Health/Check and expects HTTP 200.
 	// +kubebuilder:default=TCP
 	// +optional
 	HealthCheck HAProxyBackendHealthCheck `json:"healthCheck,omitempty"`
@@ -133,11 +128,10 @@ type HAProxyBackendSpec struct {
 	TLS *HAProxyBackendTLSSpec `json:"tls,omitempty"`
 }
 
-// HAProxyBackendsSpec configures the upstream per frontend.
+// HAProxyBackendsSpec configures upstreams.
 // +kubebuilder:validation:XValidation:rule="!has(self.grpc) || !has(self.grpc.tls) || (has(self.grpc.protocol) && self.grpc.protocol == 'HTTPS')",message="backends.grpc.tls requires protocol HTTPS"
 // +kubebuilder:validation:XValidation:rule="!has(self.grpcs) || !has(self.grpcs.tls) || !has(self.grpcs.protocol) || self.grpcs.protocol == 'HTTPS'",message="backends.grpcs.tls requires protocol HTTPS"
 type HAProxyBackendsSpec struct {
-	// Grpc also serves grpcsPort when tlsSecretName is unset.
 	// +optional
 	Grpc *HAProxyBackendSpec `json:"grpc,omitempty"`
 
@@ -181,7 +175,6 @@ type HAProxyTimeoutsSpec struct {
 	// +optional
 	HTTPKeepAlive *metav1.Duration `json:"httpKeepAlive,omitempty"`
 
-	// HardStopAfter caps how long old workers drain after a reload.
 	// +kubebuilder:default="30m"
 	// +optional
 	HardStopAfter *metav1.Duration `json:"hardStopAfter,omitempty"`
@@ -279,8 +272,8 @@ type HAProxyCapsuleSpec struct {
 	// +optional
 	MetricsPort int32 `json:"metricsPort,omitempty"`
 
-	// UpstreamService is the consensus node Service to route traffic to.
-	// Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+	// UpstreamService defaults to the CR name minus "haproxy-".
+	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
 	// +optional
 	UpstreamService string `json:"upstreamService,omitempty"`
@@ -292,7 +285,6 @@ type HAProxyCapsuleSpec struct {
 	// +optional
 	Backends *HAProxyBackendsSpec `json:"backends,omitempty"`
 
-	// ACLFiles are IP/CIDR blocklists matched on source address and x-forwarded-for.
 	// +listType=map
 	// +listMapKey=name
 	// +kubebuilder:validation:MaxItems=16
@@ -307,7 +299,6 @@ type HAProxyCapsuleSpec struct {
 	// +optional
 	MaxConnections int32 `json:"maxConnections,omitempty"`
 
-	// ReloadStrategy HotReload reloads in place via a sidecar; Restart rolls the pod.
 	// +kubebuilder:default=HotReload
 	// +optional
 	ReloadStrategy HAProxyReloadStrategy `json:"reloadStrategy,omitempty"`

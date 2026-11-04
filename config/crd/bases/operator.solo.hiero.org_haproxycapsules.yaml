@@ -49,8 +49,6 @@ spec:
             description: HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
             properties:
               aclFiles:
-                description: ACLFiles are IP/CIDR blocklists matched on source address
-                  and x-forwarded-for.
                 items:
                   properties:
                     configMapRef:
@@ -997,40 +995,34 @@ spec:
                     type: object
                 type: object
               backends:
-                description: HAProxyBackendsSpec configures the upstream per frontend.
+                description: HAProxyBackendsSpec configures upstreams.
                 properties:
                   grpc:
-                    description: Grpc also serves grpcsPort when tlsSecretName is
-                      unset.
                     properties:
                       healthCheck:
                         default: TCP
-                        description: HealthCheck GRPC POSTs /grpc.health.v1.Health/Check
-                          and expects HTTP 200.
+                        description: HAProxyBackendHealthCheck is the upstream check
+                          type.
                         enum:
                         - TCP
                         - GRPC
                         type: string
                       port:
-                        description: Port defaults to 50211 for HTTP and 50212 for
-                          HTTPS.
                         format: int32
                         maximum: 65535
                         minimum: 1
                         type: integer
                       protocol:
-                        description: Protocol defaults to HTTP for grpc and HTTPS
-                          for grpcs.
+                        description: HAProxyBackendProtocol is the upstream protocol.
                         enum:
                         - HTTP
                         - HTTPS
                         type: string
                       tls:
-                        description: HAProxyBackendTLSSpec configures upstream TLS.
-                          Certificates are not verified (verify none).
+                        description: 'HAProxyBackendTLSSpec configures upstream TLS.
+                          TODO: verify Required with a CA reference.'
                         properties:
                           serverName:
-                            description: ServerName is sent as SNI.
                             maxLength: 253
                             pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                             type: string
@@ -1040,32 +1032,28 @@ spec:
                     properties:
                       healthCheck:
                         default: TCP
-                        description: HealthCheck GRPC POSTs /grpc.health.v1.Health/Check
-                          and expects HTTP 200.
+                        description: HAProxyBackendHealthCheck is the upstream check
+                          type.
                         enum:
                         - TCP
                         - GRPC
                         type: string
                       port:
-                        description: Port defaults to 50211 for HTTP and 50212 for
-                          HTTPS.
                         format: int32
                         maximum: 65535
                         minimum: 1
                         type: integer
                       protocol:
-                        description: Protocol defaults to HTTP for grpc and HTTPS
-                          for grpcs.
+                        description: HAProxyBackendProtocol is the upstream protocol.
                         enum:
                         - HTTP
                         - HTTPS
                         type: string
                       tls:
-                        description: HAProxyBackendTLSSpec configures upstream TLS.
-                          Certificates are not verified (verify none).
+                        description: 'HAProxyBackendTLSSpec configures upstream TLS.
+                          TODO: verify Required with a CA reference.'
                         properties:
                           serverName:
-                            description: ServerName is sent as SNI.
                             maxLength: 253
                             pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                             type: string
@@ -1601,8 +1589,7 @@ spec:
                 type: string
               reloadStrategy:
                 default: HotReload
-                description: ReloadStrategy HotReload reloads in place via a sidecar;
-                  Restart rolls the pod.
+                description: HAProxyReloadStrategy is the reload mode.
                 enum:
                 - HotReload
                 - Restart
@@ -1998,8 +1985,6 @@ spec:
                     type: string
                   hardStopAfter:
                     default: 30m
-                    description: HardStopAfter caps how long old workers drain after
-                      a reload.
                     type: string
                   httpKeepAlive:
                     type: string
@@ -2056,9 +2041,8 @@ spec:
                   type: object
                 type: array
               upstreamService:
-                description: |-
-                  UpstreamService is the consensus node Service to route traffic to.
-                  Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+                description: UpstreamService defaults to the CR name minus "haproxy-".
+                maxLength: 253
                 pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                 type: string
             required:
