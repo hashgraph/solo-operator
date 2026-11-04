@@ -10,9 +10,12 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -46,6 +49,8 @@ func NewHAProxyCapsuleReconciler(c client.Client, scheme *runtime.Scheme) *HAPro
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 
 // Reconcile is the main reconciliation loop for HAProxyCapsule resources
 func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -78,7 +83,7 @@ func (r *HAProxyCapsuleReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if err := validateProxyDigestPolicy(ctx, r.Client, haproxyObj.Spec.Orbit, "HAProxyCapsule", haproxyObj.Name, haproxy.GetImage(haproxyObj)); err != nil {
+	if err := validateProxyDigestPolicy(ctx, r.Client, haproxyObj.Spec.Orbit, "HAProxyCapsule", haproxyObj.Name, haproxy.Images(haproxyObj)...); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -136,14 +141,49 @@ func (r *HAProxyCapsuleReconciler) updateStatus(ctx context.Context, haproxyObj 
 	return common.WarnOnConflict(ctx, r.Status().Update(ctx, haproxyObj))
 }
 
+const (
+	fieldHAProxySecretRefs    = "haproxy.secretRefs"
+	fieldHAProxyConfigMapRefs = "haproxy.configMapRefs"
+)
+
 // SetupWithManager sets up the controller with the Manager
 func (r *HAProxyCapsuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ctx := context.Background()
+	indexer := mgr.GetFieldIndexer()
+	if err := indexer.IndexField(ctx, &operatorv1alpha1.HAProxyCapsule{}, fieldHAProxySecretRefs, func(o client.Object) []string {
+		return haproxy.ReferencedSecrets(o.(*operatorv1alpha1.HAProxyCapsule))
+	}); err != nil {
+		return err
+	}
+	if err := indexer.IndexField(ctx, &operatorv1alpha1.HAProxyCapsule{}, fieldHAProxyConfigMapRefs, func(o client.Object) []string {
+		return haproxy.ReferencedConfigMaps(o.(*operatorv1alpha1.HAProxyCapsule))
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&operatorv1alpha1.HAProxyCapsule{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&networkingv1.Ingress{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapByIndex(fieldHAProxySecretRefs))).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapByIndex(fieldHAProxyConfigMapRefs))).
 		Named("haproxycapsule").
 		Complete(r)
+}
+
+func (r *HAProxyCapsuleReconciler) mapByIndex(field string) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		list := &operatorv1alpha1.HAProxyCapsuleList{}
+		if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace()), client.MatchingFields{field: obj.GetName()}); err != nil {
+			common.Err(ctx, err, ReasonListFailed).Str("index", field).Msg("Failed to list HAProxyCapsules for watched source")
+			return nil
+		}
+		reqs := make([]reconcile.Request, 0, len(list.Items))
+		for _, item := range list.Items {
+			reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: item.Name, Namespace: item.Namespace}})
+		}
+		return reqs
+	}
 }

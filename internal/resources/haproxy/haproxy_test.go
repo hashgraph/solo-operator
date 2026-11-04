@@ -176,9 +176,11 @@ func TestDeploymentSubReconciler(t *testing.T) {
 		t.Errorf("expected managed-by label %s, got %s", ManagedByValue, deploy.Labels[LabelManagedBy])
 	}
 
-	// Verify container
-	if len(deploy.Spec.Template.Spec.Containers) != 1 {
-		t.Fatalf("expected 1 container, got %d", len(deploy.Spec.Template.Spec.Containers))
+	if len(deploy.Spec.Template.Spec.Containers) != 2 {
+		t.Fatalf("expected 2 containers, got %d", len(deploy.Spec.Template.Spec.Containers))
+	}
+	if deploy.Spec.Template.Spec.Containers[1].Name != ReloaderContainerName {
+		t.Errorf("expected second container %s, got %s", ReloaderContainerName, deploy.Spec.Template.Spec.Containers[1].Name)
 	}
 
 	container := deploy.Spec.Template.Spec.Containers[0]
@@ -232,7 +234,7 @@ func TestDeploymentSubReconciler_WithTLS(t *testing.T) {
 	for _, vol := range deploy.Spec.Template.Spec.Volumes {
 		if vol.Name == TLSVolumeName {
 			foundTLSVolume = true
-			if vol.Secret == nil || vol.Secret.SecretName != "tls-secret" {
+			if vol.Projected == nil || vol.Projected.Sources[0].Secret.Name != "tls-secret" {
 				t.Errorf("expected TLS volume to reference secret tls-secret")
 			}
 			break
@@ -1332,11 +1334,14 @@ func TestHAProxyConfig_NonTLS(t *testing.T) {
 	if !strings.Contains(cfg, "bind *:50212") {
 		t.Errorf("expected grpcs frontend on 50212, config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "server upstream node1:50211") {
-		t.Errorf("expected upstream node1:50211 (haproxy- prefix stripped), config:\n%s", cfg)
+	if !strings.Contains(cfg, "server upstream node1:50211 proto h2 check inter 10s") {
+		t.Errorf("expected h2c upstream node1:50211 (haproxy- prefix stripped), config:\n%s", cfg)
 	}
-	if strings.Contains(cfg, "ssl") {
-		t.Error("non-TLS config must not contain ssl directive")
+	if strings.Contains(cfg, "ssl crt") || strings.Contains(cfg, " ssl alpn") {
+		t.Error("non-TLS config must not terminate or originate TLS")
+	}
+	if strings.Contains(cfg, "mode tcp") {
+		t.Error("frontends must run in mode http")
 	}
 	if strings.Contains(cfg, "consensus_nodes_tls") {
 		t.Error("non-TLS config must not contain consensus_nodes_tls backend")
@@ -1358,8 +1363,8 @@ func TestHAProxyConfig_TLS(t *testing.T) {
 	if !strings.Contains(cfg, "consensus_nodes_tls") {
 		t.Errorf("expected consensus_nodes_tls backend in TLS config, config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "ssl verify none") {
-		t.Errorf("expected ssl verify none on TLS backend, config:\n%s", cfg)
+	if !strings.Contains(cfg, "server upstream node1:50212 ssl alpn h2 verify none check") {
+		t.Errorf("expected HTTPS upstream with verify none on TLS backend, config:\n%s", cfg)
 	}
 }
 
@@ -1437,6 +1442,7 @@ func TestDeploymentSubReconciler_ConfigChecksumAnnotation(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	haproxy := newTestHAProxy()
+	haproxy.Spec.ReloadStrategy = operatorv1alpha1.HAProxyReloadStrategyRestart
 	c := newTestClient(scheme, haproxy)
 
 	_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, haproxy)
@@ -1449,9 +1455,9 @@ func TestDeploymentSubReconciler_ConfigChecksumAnnotation(t *testing.T) {
 		t.Fatalf("failed to get deployment: %v", err)
 	}
 
-	checksum := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+	checksum := deploy.Spec.Template.Annotations[ConfigChecksumAnnotation]
 	if checksum == "" {
-		t.Errorf("expected config checksum annotation %q to be set on pod template", configChecksumAnnotation)
+		t.Errorf("expected config checksum annotation %q to be set on pod template", ConfigChecksumAnnotation)
 	}
 }
 
@@ -1459,6 +1465,7 @@ func TestDeploymentSubReconciler_UpdateOnConfigChange(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	haproxy := newTestHAProxy()
+	haproxy.Spec.ReloadStrategy = operatorv1alpha1.HAProxyReloadStrategyRestart
 	c := newTestClient(scheme, haproxy)
 	reconciler := NewDeploymentSubReconciler(c, scheme)
 
@@ -1470,7 +1477,7 @@ func TestDeploymentSubReconciler_UpdateOnConfigChange(t *testing.T) {
 	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, deploy); err != nil {
 		t.Fatalf("failed to get deployment: %v", err)
 	}
-	checksumBefore := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+	checksumBefore := deploy.Spec.Template.Annotations[ConfigChecksumAnnotation]
 
 	// Change config by adding upstream service (changes generated HAProxy config)
 	haproxy.Spec.UpstreamService = "new-upstream"
@@ -1481,7 +1488,7 @@ func TestDeploymentSubReconciler_UpdateOnConfigChange(t *testing.T) {
 	if err := c.Get(ctx, client.ObjectKey{Name: "test-haproxy", Namespace: "test-namespace"}, deploy); err != nil {
 		t.Fatalf("failed to get deployment after update: %v", err)
 	}
-	checksumAfter := deploy.Spec.Template.Annotations[configChecksumAnnotation]
+	checksumAfter := deploy.Spec.Template.Annotations[ConfigChecksumAnnotation]
 
 	if checksumBefore == checksumAfter {
 		t.Error("expected config checksum annotation to change when upstream service changes")

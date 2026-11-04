@@ -48,6 +48,36 @@ spec:
           spec:
             description: HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
             properties:
+              aclFiles:
+                description: ACLFiles are IP/CIDR blocklists matched on source address
+                  and x-forwarded-for.
+                items:
+                  properties:
+                    configMapRef:
+                      properties:
+                        key:
+                          minLength: 1
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      required:
+                      - key
+                      - name
+                      type: object
+                    name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - configMapRef
+                  - name
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               additionalLabels:
                 additionalProperties:
                   type: string
@@ -966,6 +996,89 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              backends:
+                description: HAProxyBackendsSpec configures the upstream per frontend.
+                properties:
+                  grpc:
+                    description: Grpc also serves grpcsPort when tlsSecretName is
+                      unset.
+                    properties:
+                      healthCheck:
+                        default: TCP
+                        description: HealthCheck GRPC POSTs /grpc.health.v1.Health/Check
+                          and expects HTTP 200.
+                        enum:
+                        - TCP
+                        - GRPC
+                        type: string
+                      port:
+                        description: Port defaults to 50211 for HTTP and 50212 for
+                          HTTPS.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      protocol:
+                        description: Protocol defaults to HTTP for grpc and HTTPS
+                          for grpcs.
+                        enum:
+                        - HTTP
+                        - HTTPS
+                        type: string
+                      tls:
+                        description: HAProxyBackendTLSSpec configures upstream TLS.
+                          Certificates are not verified (verify none).
+                        properties:
+                          serverName:
+                            description: ServerName is sent as SNI.
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  grpcs:
+                    properties:
+                      healthCheck:
+                        default: TCP
+                        description: HealthCheck GRPC POSTs /grpc.health.v1.Health/Check
+                          and expects HTTP 200.
+                        enum:
+                        - TCP
+                        - GRPC
+                        type: string
+                      port:
+                        description: Port defaults to 50211 for HTTP and 50212 for
+                          HTTPS.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      protocol:
+                        description: Protocol defaults to HTTP for grpc and HTTPS
+                          for grpcs.
+                        enum:
+                        - HTTP
+                        - HTTPS
+                        type: string
+                      tls:
+                        description: HAProxyBackendTLSSpec configures upstream TLS.
+                          Certificates are not verified (verify none).
+                        properties:
+                          serverName:
+                            description: ServerName is sent as SNI.
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: backends.grpc.tls requires protocol HTTPS
+                  rule: '!has(self.grpc) || !has(self.grpc.tls) || (has(self.grpc.protocol)
+                    && self.grpc.protocol == ''HTTPS'')'
+                - message: backends.grpcs.tls requires protocol HTTPS
+                  rule: '!has(self.grpcs) || !has(self.grpcs.tls) || !has(self.grpcs.protocol)
+                    || self.grpcs.protocol == ''HTTPS'''
               env:
                 description: Env are environment variables for the container.
                 items:
@@ -1465,6 +1578,11 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              maxConnections:
+                default: 10000
+                format: int32
+                minimum: 1
+                type: integer
               metricsPort:
                 default: 9090
                 description: MetricsPort is the Prometheus metrics port.
@@ -1481,6 +1599,33 @@ spec:
                 description: Orbit is the owning Orbit's name.
                 minLength: 1
                 type: string
+              reloadStrategy:
+                default: HotReload
+                description: ReloadStrategy HotReload reloads in place via a sidecar;
+                  Restart rolls the pod.
+                enum:
+                - HotReload
+                - Restart
+                type: string
+              reloader:
+                properties:
+                  image:
+                    description: Image defaults to spec.image; needs sh, readlink
+                      and nc or bash.
+                    maxLength: 512
+                    type: string
+                    x-kubernetes-validations:
+                    - message: image must be pinned by a tag or a sha256 digest
+                      rule: self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+                    - message: image must not use the mutable 'latest' tag
+                      rule: '!self.lowerAscii().matches('':latest(@sha256:[a-f0-9]{64})?$'')'
+                  intervalSeconds:
+                    default: 5
+                    format: int32
+                    maximum: 300
+                    minimum: 1
+                    type: integer
+                type: object
               serviceAnnotations:
                 additionalProperties:
                   type: string
@@ -1843,6 +1988,28 @@ spec:
                 format: int64
                 minimum: 0
                 type: integer
+              timeouts:
+                properties:
+                  client:
+                    default: 120s
+                    type: string
+                  connect:
+                    default: 10s
+                    type: string
+                  hardStopAfter:
+                    default: 30m
+                    description: HardStopAfter caps how long old workers drain after
+                      a reload.
+                    type: string
+                  httpKeepAlive:
+                    type: string
+                  server:
+                    default: 120s
+                    type: string
+                  tunnel:
+                    default: 3600s
+                    type: string
+                type: object
               tlsSecretName:
                 description: |-
                   TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on grpcsPort.
@@ -1900,6 +2067,11 @@ spec:
             x-kubernetes-validations:
             - message: ingressSpec is required when serviceType is Ingress
               rule: self.serviceType != 'Ingress' || has(self.ingressSpec)
+            - message: backends.grpcs requires tlsSecretName
+              rule: '!has(self.backends) || !has(self.backends.grpcs) || (has(self.tlsSecretName)
+                && size(self.tlsSecretName) > 0)'
+            - message: port 9999 is reserved for the HAProxy master CLI
+              rule: '!(9999 in [self.grpcPort, self.grpcsPort, self.metricsPort])'
           status:
             description: HAProxyCapsuleStatus defines the observed state of HAProxyCapsule
             properties:

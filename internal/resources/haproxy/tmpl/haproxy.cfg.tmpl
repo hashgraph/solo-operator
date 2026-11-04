@@ -1,43 +1,65 @@
 global
     log stdout format raw local0
+    maxconn {{.MaxConnections}}
+    hard-stop-after {{.Timeouts.HardStopAfter}}ms
+    ssl-default-bind-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:RSA+AESGCM:RSA+AES:!aNULL:!MD5:!DSS
+    ssl-default-bind-options ssl-min-ver TLSv1.2
 
 defaults
     log global
-    mode tcp
-    option tcplog
-    timeout connect 10s
-    timeout client 120s
-    timeout server 120s
-    # HAPI uses long-lived gRPC/HTTP-2 channels (special-file uploads, record/block
-    # streaming, idle clients between calls). timeout tunnel governs an established
-    # connection and must be large enough that these are not reaped mid-stream; the
-    # short client/server inactivity timers would otherwise RST the channel on any
-    # lull, aborting the in-flight op on a single-node network (see #1229).
-    timeout tunnel 3600s
+    mode http
+    option httplog
+    maxconn {{.MaxConnections}}
+    timeout connect {{.Timeouts.Connect}}ms
+    timeout client {{.Timeouts.Client}}ms
+    timeout server {{.Timeouts.Server}}ms
+{{- if .Timeouts.HTTPKeepAlive}}
+    timeout http-keep-alive {{.Timeouts.HTTPKeepAlive}}ms
+{{- end}}
+    # HAPI keeps long-lived gRPC/HTTP-2 channels (uploads, streaming); see #1229.
+    timeout tunnel {{.Timeouts.Tunnel}}ms
 
 frontend grpc_frontend
-    bind *:{{.GrpcPort}}
-    default_backend consensus_nodes
+    bind *:{{.GrpcPort}} proto h2
+{{- template "acls" .ACLs}}
+    default_backend {{.Grpc.Name}}
 
 frontend grpcs_frontend
-    bind *:{{.GrpcsPort}}{{if .TLSEnabled}} ssl crt /etc/haproxy/certs/tls.crt alpn h2
-    mode http{{end}}
-    default_backend consensus_nodes{{if .TLSEnabled}}_tls{{end}}
-
-backend consensus_nodes
-    balance roundrobin
-    server upstream {{.UpstreamService}}:{{.GrpcPort}} check
-
-{{if .TLSEnabled -}}
-backend consensus_nodes_tls
-    mode http
-    balance roundrobin
-    server upstream {{.UpstreamService}}:{{.GrpcsPort}} ssl verify none check
-
-{{end -}}
+    bind *:{{.GrpcsPort}}{{if .Grpcs}} ssl crt {{.TLSCertPath}} alpn h2{{else}} proto h2{{end}}
+{{- template "acls" .ACLs}}
+    default_backend {{with .Grpcs}}{{.Name}}{{else}}{{.Grpc.Name}}{{end}}
+{{template "backend" .Grpc}}
+{{- with .Grpcs}}{{template "backend" .}}{{end}}
 listen stats
     bind *:{{.MetricsPort}}
     mode http
+    http-request use-service prometheus-exporter if { path /metrics }
     stats enable
     stats uri /stats
     stats refresh 10s
+{{define "acls"}}
+{{- range .}}
+    tcp-request connection reject if { src -f {{.}} }
+{{- end}}
+{{- range .}}
+    http-request deny if { hdr_ip(x-forwarded-for) -f {{.}} }
+{{- end}}
+{{- end}}
+
+{{- define "backend"}}
+backend {{.Name}}
+    mode http
+    http-reuse safe
+{{- if .GRPCCheck}}
+    option httpchk
+    http-check send meth POST uri /grpc.health.v1.Health/Check ver HTTP/2 hdr content-type application/grpc hdr te trailers
+    http-check expect status 200
+{{- end}}
+    server upstream {{.Host}}:{{.Port}}
+{{- if .HTTPS}} ssl alpn h2
+{{- with .ServerName}} sni str({{.}}){{end}}
+{{- if .CAFile}} verify required ca-file {{.CAFile}}{{with .ServerName}} verifyhost {{.}}{{end}}
+{{- else}} verify none{{end}}
+{{- else}} proto h2{{end}} check
+{{- if .GRPCCheck}}{{if .HTTPS}} check-alpn h2{{else}} check-proto h2{{end}}{{end}} inter 10s downinter 10s observe layer4 error-limit 5 on-error mark-down
+{{end}}
