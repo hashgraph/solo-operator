@@ -1358,8 +1358,8 @@ func TestHAProxyConfig_TLS(t *testing.T) {
 	if !strings.Contains(cfg, "consensus_nodes_tls") {
 		t.Errorf("expected consensus_nodes_tls backend in TLS config, config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "ssl verify none") {
-		t.Errorf("expected ssl verify none on TLS backend, config:\n%s", cfg)
+	if !strings.Contains(cfg, "server upstream node1:50212 ssl verify none alpn h2 check") {
+		t.Errorf("expected TLS backend to negotiate HTTP/2 with the node (alpn h2), config:\n%s", cfg)
 	}
 }
 
