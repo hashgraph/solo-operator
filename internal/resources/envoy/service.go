@@ -132,8 +132,6 @@ func (r *ServiceSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1a
 func (r *ServiceSubReconciler) buildService(envoy *operatorv1alpha1.EnvoyProxy) *corev1.Service {
 	selectorLabels := CommonLabels(envoy)
 	resourceLabels := ResourceLabels(envoy)
-	proxyPort := GetProxyPort(envoy)
-	metricsPort := GetMetricsPort(envoy)
 
 	// Map ProxyServiceType to a valid K8s ServiceType.
 	// Ingress uses a ClusterIP service; the Ingress resource is managed by IngressSubReconciler.
@@ -173,10 +171,7 @@ func (r *ServiceSubReconciler) buildService(envoy *operatorv1alpha1.EnvoyProxy) 
 		Spec: corev1.ServiceSpec{
 			Type:     svcType,
 			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{Name: "grpc", Port: proxyPort, TargetPort: intstr.FromInt32(proxyPort), Protocol: corev1.ProtocolTCP},
-				{Name: "metrics", Port: metricsPort, TargetPort: intstr.FromInt32(metricsPort), Protocol: corev1.ProtocolTCP},
-			},
+			Ports:    servicePorts(envoy),
 		},
 	}
 
@@ -247,4 +242,13 @@ func (r *ServiceSubReconciler) needsUpdate(existing, desired *corev1.Service) bo
 	}
 
 	return false
+}
+
+func servicePorts(envoy *operatorv1alpha1.EnvoyProxy) []corev1.ServicePort {
+	metricsPort := GetMetricsPort(envoy)
+	ports := []corev1.ServicePort{{Name: "metrics", Port: metricsPort, TargetPort: intstr.FromInt32(metricsPort), Protocol: corev1.ProtocolTCP}}
+	for _, l := range ResolveListeners(envoy) {
+		ports = append(ports, corev1.ServicePort{Name: l.PortName, Port: l.Port, TargetPort: intstr.FromInt32(l.Port), Protocol: corev1.ProtocolTCP})
+	}
+	return ports
 }

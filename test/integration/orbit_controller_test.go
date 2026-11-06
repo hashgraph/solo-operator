@@ -174,7 +174,7 @@ var _ = Describe("Orbit Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "envoy-node0", Namespace: ns},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       orbitName,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
 				},
 			}
