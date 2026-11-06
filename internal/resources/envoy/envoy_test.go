@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -229,15 +230,16 @@ func TestBuildDeployment_ProbeOverrides(t *testing.T) {
 	if c.ReadinessProbe.TimeoutSeconds != 3 || c.ReadinessProbe.TCPSocket == nil {
 		t.Errorf("readiness override not applied: %+v", c.ReadinessProbe)
 	}
-	if *c.LivenessProbe != *buildProbe(c.LivenessProbe.ProbeHandler, nil, defaultLivenessProbe) {
+	want := defaultLivenessProbe
+	want.ProbeHandler = c.LivenessProbe.ProbeHandler
+	if *c.LivenessProbe != want {
 		t.Errorf("liveness should use defaults, got %+v", c.LivenessProbe)
 	}
 }
 
 func TestBuildDeployment_ProbesDisabled(t *testing.T) {
 	envoy := newTestEnvoy()
-	disabled := false
-	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{Enabled: &disabled}
+	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{Enabled: ptr.To(false)}
 	deploy, err := NewDeploymentSubReconciler(nil, newTestScheme()).buildDeployment(envoy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

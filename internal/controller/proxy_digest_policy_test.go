@@ -40,7 +40,7 @@ func TestValidateProxyDigestPolicy(t *testing.T) {
 			if tt.orbit != nil {
 				b = b.WithObjects(tt.orbit)
 			}
-			err := validateProxyDigestPolicy(context.Background(), b.Build(), "orbit", "EnvoyProxy", "ep", tt.image)
+			err := validateProxyDigestPolicy(context.Background(), b.Build(), "orbit", "ep", tt.image)
 			if !tt.terminal {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)

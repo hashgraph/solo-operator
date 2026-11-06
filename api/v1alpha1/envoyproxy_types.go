@@ -141,7 +141,6 @@ type EnvoyTimeoutsSpec struct {
 	Drain *metav1.Duration `json:"drain,omitempty"`
 }
 
-// EnvoyProbeSpec tunes one container probe; unset fields keep the operator defaults.
 type EnvoyProbeSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
@@ -160,23 +159,18 @@ type EnvoyProbeSpec struct {
 	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
 }
 
-// EnvoyProbesSpec configures the startup (GET /healthz), liveness (GET /healthz) and
-// readiness (TCP on the first listener) probes. Probes are never set when spec.files is used.
+// EnvoyProbesSpec is ignored when spec.files is set.
 type EnvoyProbesSpec struct {
-	// Enabled toggles all three probes.
 	// +kubebuilder:default=true
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// Startup defaults: initialDelaySeconds 5, periodSeconds 5, timeoutSeconds 1, failureThreshold 12.
 	// +optional
 	Startup *EnvoyProbeSpec `json:"startup,omitempty"`
 
-	// Liveness defaults: initialDelaySeconds 0, periodSeconds 10, timeoutSeconds 1, failureThreshold 3.
 	// +optional
 	Liveness *EnvoyProbeSpec `json:"liveness,omitempty"`
 
-	// Readiness defaults: initialDelaySeconds 5, periodSeconds 5, timeoutSeconds 1, failureThreshold 3.
 	// +optional
 	Readiness *EnvoyProbeSpec `json:"readiness,omitempty"`
 }

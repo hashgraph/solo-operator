@@ -1624,17 +1624,12 @@ spec:
                 minLength: 1
                 type: string
               probes:
-                description: |-
-                  EnvoyProbesSpec configures the startup (GET /healthz), liveness (GET /healthz) and
-                  readiness (TCP on the first listener) probes. Probes are never set when spec.files is used.
+                description: EnvoyProbesSpec is ignored when spec.files is set.
                 properties:
                   enabled:
                     default: true
-                    description: Enabled toggles all three probes.
                     type: boolean
                   liveness:
-                    description: 'Liveness defaults: initialDelaySeconds 0, periodSeconds
-                      10, timeoutSeconds 1, failureThreshold 3.'
                     properties:
                       failureThreshold:
                         format: int32
@@ -1654,8 +1649,6 @@ spec:
                         type: integer
                     type: object
                   readiness:
-                    description: 'Readiness defaults: initialDelaySeconds 5, periodSeconds
-                      5, timeoutSeconds 1, failureThreshold 3.'
                     properties:
                       failureThreshold:
                         format: int32
@@ -1675,8 +1668,6 @@ spec:
                         type: integer
                     type: object
                   startup:
-                    description: 'Startup defaults: initialDelaySeconds 5, periodSeconds
-                      5, timeoutSeconds 1, failureThreshold 12.'
                     properties:
                       failureThreshold:
                         format: int32

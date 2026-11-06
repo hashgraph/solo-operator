@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -73,28 +74,14 @@ var (
 	defaultReadinessProbe = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 3, SuccessThreshold: 1}
 )
 
-func ProbesEnabled(envoy *operatorv1alpha1.EnvoyProxy) bool {
-	p := envoy.Spec.Probes
-	return p == nil || p.Enabled == nil || *p.Enabled
-}
-
 func buildProbe(handler corev1.ProbeHandler, spec *operatorv1alpha1.EnvoyProbeSpec, defaults corev1.Probe) *corev1.Probe {
 	probe := defaults
 	probe.ProbeHandler = handler
-	if spec == nil {
-		return &probe
-	}
-	if spec.InitialDelaySeconds != nil {
-		probe.InitialDelaySeconds = *spec.InitialDelaySeconds
-	}
-	if spec.PeriodSeconds != nil {
-		probe.PeriodSeconds = *spec.PeriodSeconds
-	}
-	if spec.TimeoutSeconds != nil {
-		probe.TimeoutSeconds = *spec.TimeoutSeconds
-	}
-	if spec.FailureThreshold != nil {
-		probe.FailureThreshold = *spec.FailureThreshold
+	if spec != nil {
+		probe.InitialDelaySeconds = ptr.Deref(spec.InitialDelaySeconds, probe.InitialDelaySeconds)
+		probe.PeriodSeconds = ptr.Deref(spec.PeriodSeconds, probe.PeriodSeconds)
+		probe.TimeoutSeconds = ptr.Deref(spec.TimeoutSeconds, probe.TimeoutSeconds)
+		probe.FailureThreshold = ptr.Deref(spec.FailureThreshold, probe.FailureThreshold)
 	}
 	return &probe
 }
@@ -149,11 +136,8 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	}
 
 	// spec.files may not expose /healthz or the listeners, so probes are omitted then.
-	if len(envoy.Spec.Files) == 0 && ProbesEnabled(envoy) {
-		probes := envoy.Spec.Probes
-		if probes == nil {
-			probes = &operatorv1alpha1.EnvoyProbesSpec{}
-		}
+	probes := ptr.Deref(envoy.Spec.Probes, operatorv1alpha1.EnvoyProbesSpec{})
+	if len(envoy.Spec.Files) == 0 && ptr.Deref(probes.Enabled, true) {
 		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy)), Scheme: corev1.URISchemeHTTP}}
 		container.StartupProbe = buildProbe(healthz, probes.Startup, defaultStartupProbe)
 		container.LivenessProbe = buildProbe(healthz, probes.Liveness, defaultLivenessProbe)
