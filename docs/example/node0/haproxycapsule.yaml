@@ -58,6 +58,34 @@ spec:
   # TLS termination on grpcsPort — needs a kubernetes.io/tls secret (cert-manager works directly).
   # tlsSecretName: haproxy-node0-tls
 
+  # reloadStrategy: HotReload   # default
+  # reloader:
+  #   image: haproxy:2.8.10-alpine3.20   # defaults to spec.image
+  #   intervalSeconds: 5
+
+  # backends:
+  #   grpc:
+  #     protocol: HTTPS
+  #     healthCheck: TCP        # default; or GRPC
+  #   grpcs:                    # requires tlsSecretName
+  #     tls:
+  #       serverName: node0.example.com
+
+  # aclFiles:
+  #   - name: ofac
+  #     configMapRef:
+  #       name: node0-ofac-list
+  #       key: blocklist.acl
+
+  # timeouts:
+  #   connect: 10s
+  #   client: 120s
+  #   server: 120s
+  #   tunnel: 3600s
+  #   # httpKeepAlive: 10s
+  #   hardStopAfter: 30m
+  # maxConnections: 10000
+
   # ingressSpec:
   #   ingressClassName: nginx
   #   rules:

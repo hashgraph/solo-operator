@@ -48,6 +48,34 @@ spec:
           spec:
             description: HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
             properties:
+              aclFiles:
+                items:
+                  properties:
+                    configMapRef:
+                      properties:
+                        key:
+                          minLength: 1
+                          type: string
+                        name:
+                          minLength: 1
+                          type: string
+                      required:
+                      - key
+                      - name
+                      type: object
+                    name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - configMapRef
+                  - name
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               additionalLabels:
                 additionalProperties:
                   type: string
@@ -966,6 +994,79 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              backends:
+                description: HAProxyBackendsSpec configures upstreams.
+                properties:
+                  grpc:
+                    properties:
+                      healthCheck:
+                        default: TCP
+                        description: HAProxyBackendHealthCheck is the upstream check
+                          type.
+                        enum:
+                        - TCP
+                        - GRPC
+                        type: string
+                      port:
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      protocol:
+                        description: HAProxyBackendProtocol is the upstream protocol.
+                        enum:
+                        - HTTP
+                        - HTTPS
+                        type: string
+                      tls:
+                        description: 'HAProxyBackendTLSSpec configures upstream TLS.
+                          TODO: verify Required with a CA reference.'
+                        properties:
+                          serverName:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  grpcs:
+                    properties:
+                      healthCheck:
+                        default: TCP
+                        description: HAProxyBackendHealthCheck is the upstream check
+                          type.
+                        enum:
+                        - TCP
+                        - GRPC
+                        type: string
+                      port:
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      protocol:
+                        description: HAProxyBackendProtocol is the upstream protocol.
+                        enum:
+                        - HTTP
+                        - HTTPS
+                        type: string
+                      tls:
+                        description: 'HAProxyBackendTLSSpec configures upstream TLS.
+                          TODO: verify Required with a CA reference.'
+                        properties:
+                          serverName:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: backends.grpc.tls requires protocol HTTPS
+                  rule: '!has(self.grpc) || !has(self.grpc.tls) || (has(self.grpc.protocol)
+                    && self.grpc.protocol == ''HTTPS'')'
+                - message: backends.grpcs.tls requires protocol HTTPS
+                  rule: '!has(self.grpcs) || !has(self.grpcs.tls) || !has(self.grpcs.protocol)
+                    || self.grpcs.protocol == ''HTTPS'''
               env:
                 description: Env are environment variables for the container.
                 items:
@@ -1465,6 +1566,11 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              maxConnections:
+                default: 10000
+                format: int32
+                minimum: 1
+                type: integer
               metricsPort:
                 default: 9090
                 description: MetricsPort is the Prometheus metrics port.
@@ -1481,6 +1587,32 @@ spec:
                 description: Orbit is the owning Orbit's name.
                 minLength: 1
                 type: string
+              reloadStrategy:
+                default: HotReload
+                description: HAProxyReloadStrategy is the reload mode.
+                enum:
+                - HotReload
+                - Restart
+                type: string
+              reloader:
+                properties:
+                  image:
+                    description: Image defaults to spec.image; needs sh, readlink
+                      and nc or bash.
+                    maxLength: 512
+                    type: string
+                    x-kubernetes-validations:
+                    - message: image must be pinned by a tag or a sha256 digest
+                      rule: self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+                    - message: image must not use the mutable 'latest' tag
+                      rule: '!self.lowerAscii().matches('':latest(@sha256:[a-f0-9]{64})?$'')'
+                  intervalSeconds:
+                    default: 5
+                    format: int32
+                    maximum: 300
+                    minimum: 1
+                    type: integer
+                type: object
               serviceAnnotations:
                 additionalProperties:
                   type: string
@@ -1843,6 +1975,26 @@ spec:
                 format: int64
                 minimum: 0
                 type: integer
+              timeouts:
+                properties:
+                  client:
+                    default: 120s
+                    type: string
+                  connect:
+                    default: 10s
+                    type: string
+                  hardStopAfter:
+                    default: 30m
+                    type: string
+                  httpKeepAlive:
+                    type: string
+                  server:
+                    default: 120s
+                    type: string
+                  tunnel:
+                    default: 3600s
+                    type: string
+                type: object
               tlsSecretName:
                 description: |-
                   TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on grpcsPort.
@@ -1889,9 +2041,8 @@ spec:
                   type: object
                 type: array
               upstreamService:
-                description: |-
-                  UpstreamService is the consensus node Service to route traffic to.
-                  Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+                description: UpstreamService defaults to the CR name minus "haproxy-".
+                maxLength: 253
                 pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
                 type: string
             required:
@@ -1900,6 +2051,11 @@ spec:
             x-kubernetes-validations:
             - message: ingressSpec is required when serviceType is Ingress
               rule: self.serviceType != 'Ingress' || has(self.ingressSpec)
+            - message: backends.grpcs requires tlsSecretName
+              rule: '!has(self.backends) || !has(self.backends.grpcs) || (has(self.tlsSecretName)
+                && size(self.tlsSecretName) > 0)'
+            - message: port 9999 is reserved for the HAProxy master CLI
+              rule: '!(9999 in [self.grpcPort, self.grpcsPort, self.metricsPort])'
           status:
             description: HAProxyCapsuleStatus defines the observed state of HAProxyCapsule
             properties:

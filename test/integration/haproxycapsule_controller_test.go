@@ -160,8 +160,8 @@ var _ = Describe("HAProxyCapsule Controller", func() {
 				}
 				// Check for TLS volume
 				for _, vol := range createdDeploy.Spec.Template.Spec.Volumes {
-					if vol.Name == "tls-secrets" && vol.Secret != nil {
-						return vol.Secret.SecretName == tlsSecretName
+					if vol.Name == "tls-secrets" && vol.Projected != nil {
+						return vol.Projected.Sources[0].Secret.Name == tlsSecretName
 					}
 				}
 				return false

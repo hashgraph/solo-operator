@@ -61,8 +61,129 @@ type HAProxyHealthCheckSpec struct {
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 }
 
+// HAProxyReloadStrategy is the reload mode.
+// +kubebuilder:validation:Enum=HotReload;Restart
+type HAProxyReloadStrategy string
+
+const (
+	HAProxyReloadStrategyHotReload HAProxyReloadStrategy = "HotReload"
+	HAProxyReloadStrategyRestart   HAProxyReloadStrategy = "Restart"
+)
+
+type HAProxyReloaderSpec struct {
+	// Image defaults to spec.image; needs sh, readlink and nc or bash.
+	// +kubebuilder:validation:MaxLength=512
+	// +kubebuilder:validation:XValidation:rule="self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="image must be pinned by a tag or a sha256 digest"
+	// +kubebuilder:validation:XValidation:rule="!self.lowerAscii().matches(':latest(@sha256:[a-f0-9]{64})?$')",message="image must not use the mutable 'latest' tag"
+	// +optional
+	Image string `json:"image,omitempty"`
+
+	// +kubebuilder:default=5
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=300
+	// +optional
+	IntervalSeconds int32 `json:"intervalSeconds,omitempty"`
+}
+
+// HAProxyBackendProtocol is the upstream protocol.
+// +kubebuilder:validation:Enum=HTTP;HTTPS
+type HAProxyBackendProtocol string
+
+const (
+	HAProxyBackendProtocolHTTP  HAProxyBackendProtocol = "HTTP"
+	HAProxyBackendProtocolHTTPS HAProxyBackendProtocol = "HTTPS"
+)
+
+// HAProxyBackendHealthCheck is the upstream check type.
+// +kubebuilder:validation:Enum=TCP;GRPC
+type HAProxyBackendHealthCheck string
+
+const (
+	HAProxyBackendHealthCheckTCP  HAProxyBackendHealthCheck = "TCP"
+	HAProxyBackendHealthCheckGRPC HAProxyBackendHealthCheck = "GRPC"
+)
+
+// HAProxyBackendTLSSpec configures upstream TLS. TODO: verify Required with a CA reference.
+type HAProxyBackendTLSSpec struct {
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
+	// +optional
+	ServerName string `json:"serverName,omitempty"`
+}
+
+type HAProxyBackendSpec struct {
+	// +optional
+	Protocol HAProxyBackendProtocol `json:"protocol,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// +kubebuilder:default=TCP
+	// +optional
+	HealthCheck HAProxyBackendHealthCheck `json:"healthCheck,omitempty"`
+
+	// +optional
+	TLS *HAProxyBackendTLSSpec `json:"tls,omitempty"`
+}
+
+// HAProxyBackendsSpec configures upstreams.
+// +kubebuilder:validation:XValidation:rule="!has(self.grpc) || !has(self.grpc.tls) || (has(self.grpc.protocol) && self.grpc.protocol == 'HTTPS')",message="backends.grpc.tls requires protocol HTTPS"
+// +kubebuilder:validation:XValidation:rule="!has(self.grpcs) || !has(self.grpcs.tls) || !has(self.grpcs.protocol) || self.grpcs.protocol == 'HTTPS'",message="backends.grpcs.tls requires protocol HTTPS"
+type HAProxyBackendsSpec struct {
+	// +optional
+	Grpc *HAProxyBackendSpec `json:"grpc,omitempty"`
+
+	// +optional
+	Grpcs *HAProxyBackendSpec `json:"grpcs,omitempty"`
+}
+
+type HAProxyConfigMapKeyRef struct {
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+}
+
+type HAProxyACLFile struct {
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$`
+	Name string `json:"name"`
+
+	ConfigMapRef HAProxyConfigMapKeyRef `json:"configMapRef"`
+}
+
+type HAProxyTimeoutsSpec struct {
+	// +kubebuilder:default="10s"
+	// +optional
+	Connect *metav1.Duration `json:"connect,omitempty"`
+
+	// +kubebuilder:default="120s"
+	// +optional
+	Client *metav1.Duration `json:"client,omitempty"`
+
+	// +kubebuilder:default="120s"
+	// +optional
+	Server *metav1.Duration `json:"server,omitempty"`
+
+	// +kubebuilder:default="3600s"
+	// +optional
+	Tunnel *metav1.Duration `json:"tunnel,omitempty"`
+
+	// +optional
+	HTTPKeepAlive *metav1.Duration `json:"httpKeepAlive,omitempty"`
+
+	// +kubebuilder:default="30m"
+	// +optional
+	HardStopAfter *metav1.Duration `json:"hardStopAfter,omitempty"`
+}
+
 // HAProxyCapsuleSpec defines the desired state of HAProxyCapsule
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
+// +kubebuilder:validation:XValidation:rule="!has(self.backends) || !has(self.backends.grpcs) || (has(self.tlsSecretName) && size(self.tlsSecretName) > 0)",message="backends.grpcs requires tlsSecretName"
+// +kubebuilder:validation:XValidation:rule="!(9999 in [self.grpcPort, self.grpcsPort, self.metricsPort])",message="port 9999 is reserved for the HAProxy master CLI"
 type HAProxyCapsuleSpec struct {
 	// Orbit is the owning Orbit's name.
 	// +kubebuilder:validation:MinLength=1
@@ -151,8 +272,8 @@ type HAProxyCapsuleSpec struct {
 	// +optional
 	MetricsPort int32 `json:"metricsPort,omitempty"`
 
-	// UpstreamService is the consensus node Service to route traffic to.
-	// Defaults to the CR name with "haproxy-" stripped (haproxy-node1 → node1). Accepts any DNS name or FQDN.
+	// UpstreamService defaults to the CR name minus "haproxy-".
+	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
 	// +optional
 	UpstreamService string `json:"upstreamService,omitempty"`
@@ -160,6 +281,30 @@ type HAProxyCapsuleSpec struct {
 	// HealthCheck configures probes. Defaults match the GKE reference deployment.
 	// +optional
 	HealthCheck *HAProxyHealthCheckSpec `json:"healthCheck,omitempty"`
+
+	// +optional
+	Backends *HAProxyBackendsSpec `json:"backends,omitempty"`
+
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=16
+	// +optional
+	ACLFiles []HAProxyACLFile `json:"aclFiles,omitempty"`
+
+	// +optional
+	Timeouts *HAProxyTimeoutsSpec `json:"timeouts,omitempty"`
+
+	// +kubebuilder:default=10000
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MaxConnections int32 `json:"maxConnections,omitempty"`
+
+	// +kubebuilder:default=HotReload
+	// +optional
+	ReloadStrategy HAProxyReloadStrategy `json:"reloadStrategy,omitempty"`
+
+	// +optional
+	Reloader *HAProxyReloaderSpec `json:"reloader,omitempty"`
 }
 
 // HAProxyCapsuleStatus defines the observed state of HAProxyCapsule
