@@ -53,7 +53,7 @@ var _ = Describe("Orbit Invariants Validation", func() {
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       "",
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
-					ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 				},
 			}
 			err := k8sClient.Create(ctx, ep)

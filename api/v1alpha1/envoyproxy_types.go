@@ -141,6 +141,16 @@ type EnvoyTimeoutsSpec struct {
 	Drain *metav1.Duration `json:"drain,omitempty"`
 }
 
+// EnvoyServiceType represents how the Envoy Service is exposed
+// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
+type EnvoyServiceType string
+
+const (
+	EnvoyServiceTypeClusterIP    EnvoyServiceType = "ClusterIP"
+	EnvoyServiceTypeIngress      EnvoyServiceType = "Ingress"
+	EnvoyServiceTypeLoadBalancer EnvoyServiceType = "LoadBalancer"
+)
+
 type EnvoyProbeSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
@@ -226,7 +236,7 @@ type EnvoyProxySpec struct {
 	// ServiceType is the Kubernetes Service type.
 	// +kubebuilder:default=LoadBalancer
 	// +optional
-	ServiceType ProxyServiceType `json:"serviceType,omitempty"`
+	ServiceType EnvoyServiceType `json:"serviceType,omitempty"`
 
 	// ServiceSpec overrides the generated Service spec.
 	// +optional

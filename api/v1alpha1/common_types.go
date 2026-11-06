@@ -7,16 +7,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProxyServiceType represents how a proxy service is exposed
-// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
-type ProxyServiceType string
-
-const (
-	ProxyServiceTypeClusterIP    ProxyServiceType = "ClusterIP"
-	ProxyServiceTypeIngress      ProxyServiceType = "Ingress"
-	ProxyServiceTypeLoadBalancer ProxyServiceType = "LoadBalancer"
-)
-
 // Phase represents the lifecycle phase of a resource.
 type Phase string
 

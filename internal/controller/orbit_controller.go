@@ -105,235 +105,55 @@ func (r *OrbitReconciler) handleDeletion(ctx context.Context, orbitObj *operator
 	return ctrl.Result{}, r.Update(ctx, orbitObj)
 }
 
-func deleteOrbitOwned(ctx context.Context, c client.Client, items []client.Object, orbitName string, getOrbit func(client.Object) string) (int, error) {
+func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (int, error) {
+	kinds := []struct {
+		list    client.ObjectList
+		orbitOf func(client.Object) string
+	}{
+		{&operatorv1alpha1.HelmCapsuleList{}, func(o client.Object) string {
+			if ref := o.(*operatorv1alpha1.HelmCapsule).Spec.OrbitRef; ref != nil {
+				return ref.Name
+			}
+			return ""
+		}},
+		{&operatorv1alpha1.ConsensusCapsuleList{}, func(o client.Object) string { return o.(*operatorv1alpha1.ConsensusCapsule).Spec.Orbit }},
+		{&operatorv1alpha1.EnvoyProxyList{}, func(o client.Object) string { return o.(*operatorv1alpha1.EnvoyProxy).Spec.Orbit }},
+		{&operatorv1alpha1.Log4j2ConfigList{}, func(o client.Object) string { return o.(*operatorv1alpha1.Log4j2Config).Spec.Orbit }},
+		{&operatorv1alpha1.NodeSettingsList{}, func(o client.Object) string { return o.(*operatorv1alpha1.NodeSettings).Spec.Orbit }},
+		{&operatorv1alpha1.ApplicationPropertiesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.ApplicationProperties).Spec.Orbit }},
+		{&operatorv1alpha1.ApiPermissionPropertiesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.ApiPermissionProperties).Spec.Orbit }},
+		{&operatorv1alpha1.NodePropertiesConfigList{}, func(o client.Object) string { return o.(*operatorv1alpha1.NodePropertiesConfig).Spec.Orbit }},
+		{&operatorv1alpha1.ThrottlesConfigList{}, func(o client.Object) string { return o.(*operatorv1alpha1.ThrottlesConfig).Spec.Orbit }},
+		{&operatorv1alpha1.FeeSchedulesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.FeeSchedules).Spec.Orbit }},
+		{&operatorv1alpha1.SimpleFeesSchedulesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.SimpleFeesSchedules).Spec.Orbit }},
+		{&operatorv1alpha1.ApplicationOverridePropertiesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.ApplicationOverrideProperties).Spec.Orbit }},
+		{&operatorv1alpha1.BootstrapPropertiesList{}, func(o client.Object) string { return o.(*operatorv1alpha1.BootstrapProperties).Spec.Orbit }},
+		{&operatorv1alpha1.BlockNodesConfigList{}, func(o client.Object) string { return o.(*operatorv1alpha1.BlockNodesConfig).Spec.Orbit }},
+		{&operatorv1alpha1.NetworkGenesisList{}, func(o client.Object) string { return o.(*operatorv1alpha1.NetworkGenesis).Spec.Orbit }},
+	}
+
 	remaining := 0
-	for _, item := range items {
-		if getOrbit(item) != orbitName {
-			continue
+	for _, k := range kinds {
+		if err := r.List(ctx, k.list); err != nil {
+			return remaining, err
 		}
-		remaining++
-		if item.GetDeletionTimestamp().IsZero() {
-			if err := c.Delete(ctx, item); err != nil && !apierrors.IsNotFound(err) {
-				return remaining, err
+		items, err := apimeta.ExtractList(k.list)
+		if err != nil {
+			return remaining, err
+		}
+		for _, item := range items {
+			obj := item.(client.Object)
+			if k.orbitOf(obj) != orbitObj.Name {
+				continue
+			}
+			remaining++
+			if obj.GetDeletionTimestamp().IsZero() {
+				if err := r.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+					return remaining, err
+				}
 			}
 		}
 	}
-	return remaining, nil
-}
-
-func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *operatorv1alpha1.Orbit) (int, error) {
-	orbitName := orbitObj.Name
-	remaining := 0
-	add := func(n int, err error) error { remaining += n; return err }
-
-	do := func(list client.ObjectList, toSlice func() []client.Object, getOrbit func(client.Object) string) error {
-		if err := r.List(ctx, list); err != nil {
-			return err
-		}
-		return add(deleteOrbitOwned(ctx, r.Client, toSlice(), orbitName, getOrbit))
-	}
-
-	helmList := &operatorv1alpha1.HelmCapsuleList{}
-	if err := do(helmList, func() []client.Object {
-		s := make([]client.Object, len(helmList.Items))
-		for i := range helmList.Items {
-			s[i] = &helmList.Items[i]
-		}
-		return s
-	}, func(o client.Object) string {
-		hc := o.(*operatorv1alpha1.HelmCapsule)
-		if hc.Spec.OrbitRef == nil {
-			return ""
-		}
-		return hc.Spec.OrbitRef.Name
-	}); err != nil {
-		return remaining, err
-	}
-
-	type entry struct {
-		list     client.ObjectList
-		getItems func() []client.Object
-		getOrbit func(client.Object) string
-	}
-
-	ccList := &operatorv1alpha1.ConsensusCapsuleList{}
-	epList := &operatorv1alpha1.EnvoyProxyList{}
-	l4jList := &operatorv1alpha1.Log4j2ConfigList{}
-	nsList := &operatorv1alpha1.NodeSettingsList{}
-	apList := &operatorv1alpha1.ApplicationPropertiesList{}
-	apiPermList := &operatorv1alpha1.ApiPermissionPropertiesList{}
-	npList := &operatorv1alpha1.NodePropertiesConfigList{}
-	tcList := &operatorv1alpha1.ThrottlesConfigList{}
-	fsList := &operatorv1alpha1.FeeSchedulesList{}
-	sfsList := &operatorv1alpha1.SimpleFeesSchedulesList{}
-	aoList := &operatorv1alpha1.ApplicationOverridePropertiesList{}
-	bpList := &operatorv1alpha1.BootstrapPropertiesList{}
-	bncList := &operatorv1alpha1.BlockNodesConfigList{}
-	ngList := &operatorv1alpha1.NetworkGenesisList{}
-
-	for _, e := range []entry{
-		{
-			ccList,
-			func() []client.Object {
-				s := make([]client.Object, len(ccList.Items))
-				for i := range ccList.Items {
-					s[i] = &ccList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.ConsensusCapsule).Spec.Orbit },
-		},
-		{
-			epList,
-			func() []client.Object {
-				s := make([]client.Object, len(epList.Items))
-				for i := range epList.Items {
-					s[i] = &epList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.EnvoyProxy).Spec.Orbit },
-		},
-		{
-			l4jList,
-			func() []client.Object {
-				s := make([]client.Object, len(l4jList.Items))
-				for i := range l4jList.Items {
-					s[i] = &l4jList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.Log4j2Config).Spec.Orbit },
-		},
-		{
-			nsList,
-			func() []client.Object {
-				s := make([]client.Object, len(nsList.Items))
-				for i := range nsList.Items {
-					s[i] = &nsList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.NodeSettings).Spec.Orbit },
-		},
-		{
-			apList,
-			func() []client.Object {
-				s := make([]client.Object, len(apList.Items))
-				for i := range apList.Items {
-					s[i] = &apList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.ApplicationProperties).Spec.Orbit },
-		},
-		{
-			apiPermList,
-			func() []client.Object {
-				s := make([]client.Object, len(apiPermList.Items))
-				for i := range apiPermList.Items {
-					s[i] = &apiPermList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.ApiPermissionProperties).Spec.Orbit },
-		},
-		{
-			npList,
-			func() []client.Object {
-				s := make([]client.Object, len(npList.Items))
-				for i := range npList.Items {
-					s[i] = &npList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.NodePropertiesConfig).Spec.Orbit },
-		},
-		{
-			tcList,
-			func() []client.Object {
-				s := make([]client.Object, len(tcList.Items))
-				for i := range tcList.Items {
-					s[i] = &tcList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.ThrottlesConfig).Spec.Orbit },
-		},
-		{
-			fsList,
-			func() []client.Object {
-				s := make([]client.Object, len(fsList.Items))
-				for i := range fsList.Items {
-					s[i] = &fsList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.FeeSchedules).Spec.Orbit },
-		},
-		{
-			sfsList,
-			func() []client.Object {
-				s := make([]client.Object, len(sfsList.Items))
-				for i := range sfsList.Items {
-					s[i] = &sfsList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.SimpleFeesSchedules).Spec.Orbit },
-		},
-		{
-			aoList,
-			func() []client.Object {
-				s := make([]client.Object, len(aoList.Items))
-				for i := range aoList.Items {
-					s[i] = &aoList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string {
-				return o.(*operatorv1alpha1.ApplicationOverrideProperties).Spec.Orbit
-			},
-		},
-		{
-			bpList,
-			func() []client.Object {
-				s := make([]client.Object, len(bpList.Items))
-				for i := range bpList.Items {
-					s[i] = &bpList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.BootstrapProperties).Spec.Orbit },
-		},
-		{
-			bncList,
-			func() []client.Object {
-				s := make([]client.Object, len(bncList.Items))
-				for i := range bncList.Items {
-					s[i] = &bncList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.BlockNodesConfig).Spec.Orbit },
-		},
-		{
-			ngList,
-			func() []client.Object {
-				s := make([]client.Object, len(ngList.Items))
-				for i := range ngList.Items {
-					s[i] = &ngList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.NetworkGenesis).Spec.Orbit },
-		},
-	} {
-		if err := do(e.list, e.getItems, e.getOrbit); err != nil {
-			return remaining, err
-		}
-	}
-
 	return remaining, nil
 }
 

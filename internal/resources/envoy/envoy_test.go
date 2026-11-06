@@ -419,7 +419,7 @@ func TestServiceSubReconciler(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -453,7 +453,7 @@ func TestServiceSubReconciler_ClusterIP(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -476,7 +476,7 @@ func TestServiceSubReconciler_IngressType(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -500,7 +500,7 @@ func TestIngressSubReconciler_Skipped(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -518,7 +518,7 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -565,7 +565,7 @@ func TestIngressSubReconciler_SkippedForClusterIP(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -583,7 +583,7 @@ func TestIngressSubReconciler_NilIngressSpec(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	envoy.Spec.IngressSpec = nil
 	c := newTestClient(scheme, envoy)
 
@@ -602,7 +602,7 @@ func TestIngressSubReconciler_IngressClassName(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	className := "nginx"
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
@@ -645,7 +645,7 @@ func TestIngressSubReconciler_Labels(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -686,7 +686,7 @@ func TestIngressSubReconciler_Update(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -730,7 +730,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -762,7 +762,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 	}
 
 	// Switch away from Ingress
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
 		t.Fatalf("delete reconcile failed: %v", err)
 	}
@@ -1047,7 +1047,7 @@ func TestServiceSubReconciler_ClusterIP_NoExternalTrafficPolicy(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewServiceSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -1187,23 +1187,23 @@ func TestServiceSubReconciler_MetricsPort_Custom(t *testing.T) {
 func TestGetServiceType(t *testing.T) {
 	tests := []struct {
 		name     string
-		svcType  operatorv1alpha1.ProxyServiceType
-		expected operatorv1alpha1.ProxyServiceType
+		svcType  operatorv1alpha1.EnvoyServiceType
+		expected operatorv1alpha1.EnvoyServiceType
 	}{
 		{
 			name:     "empty falls back to LoadBalancer",
 			svcType:  "",
-			expected: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+			expected: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 		},
 		{
 			name:     "explicit ClusterIP",
-			svcType:  operatorv1alpha1.ProxyServiceTypeClusterIP,
-			expected: operatorv1alpha1.ProxyServiceTypeClusterIP,
+			svcType:  operatorv1alpha1.EnvoyServiceTypeClusterIP,
+			expected: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 		},
 		{
 			name:     "explicit LoadBalancer",
-			svcType:  operatorv1alpha1.ProxyServiceTypeLoadBalancer,
-			expected: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+			svcType:  operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
+			expected: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 		},
 	}
 
@@ -1317,7 +1317,7 @@ func TestServiceSubReconciler_UpdateOnTypeChange(t *testing.T) {
 	}
 
 	// Switch to ClusterIP
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
 		t.Fatalf("unexpected error on update: %v", err)
 	}

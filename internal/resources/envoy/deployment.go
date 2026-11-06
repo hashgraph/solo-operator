@@ -10,7 +10,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -58,20 +57,16 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 		return ctrl.Result{}, err
 	}
 
-	if r.needsUpdate(existing, desired) {
-		common.Debug(ctx, common.ReasonDeploymentUpdated).Msg("Updating Envoy deployment")
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
-	}
-
-	return ctrl.Result{}, nil
+	// No DeepEqual guard: server-side defaulting makes local diffs phantom (see consensus StatefulSet, #1219).
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 }
 
 var (
-	defaultStartupProbe   = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 12, SuccessThreshold: 1}
-	defaultLivenessProbe  = corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3, SuccessThreshold: 1}
-	defaultReadinessProbe = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 3, SuccessThreshold: 1}
+	defaultStartupProbe   = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 12}
+	defaultLivenessProbe  = corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3}
+	defaultReadinessProbe = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 3}
 )
 
 func buildProbe(handler corev1.ProbeHandler, spec *operatorv1alpha1.EnvoyProbeSpec, defaults corev1.Probe) *corev1.Probe {
@@ -138,7 +133,7 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	// spec.files may not expose /healthz or the listeners, so probes are omitted then.
 	probes := ptr.Deref(envoy.Spec.Probes, operatorv1alpha1.EnvoyProbesSpec{})
 	if len(envoy.Spec.Files) == 0 && ptr.Deref(probes.Enabled, true) {
-		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy)), Scheme: corev1.URISchemeHTTP}}
+		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy))}}
 		container.StartupProbe = buildProbe(healthz, probes.Startup, defaultStartupProbe)
 		container.LivenessProbe = buildProbe(healthz, probes.Liveness, defaultLivenessProbe)
 		// A rejected LDS leaves the traffic ports unbound while /healthz still answers.
@@ -196,73 +191,4 @@ func buildContainerPorts(envoy *operatorv1alpha1.EnvoyProxy, listeners []Listene
 		ports = append(ports, corev1.ContainerPort{Name: "admin", ContainerPort: GetAdminPort(envoy), Protocol: corev1.ProtocolTCP})
 	}
 	return ports
-}
-
-func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {
-	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
-		return true
-	}
-
-	ep := existing.Spec.Template.Spec
-	dp := desired.Spec.Template.Spec
-
-	if !equality.Semantic.DeepEqual(ep.NodeSelector, dp.NodeSelector) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Affinity, dp.Affinity) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Tolerations, dp.Tolerations) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.TerminationGracePeriodSeconds, dp.TerminationGracePeriodSeconds) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Volumes, dp.Volumes) {
-		return true
-	}
-
-	if len(ep.Containers) != len(dp.Containers) {
-		return true
-	}
-	for i := range dp.Containers {
-		ec := ep.Containers[i]
-		dc := dp.Containers[i]
-		if ec.Name != dc.Name || ec.Image != dc.Image {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.Args, dc.Args) || !equality.Semantic.DeepEqual(ec.Resources, dc.Resources) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.Ports, dc.Ports) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.Env, dc.Env) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.VolumeMounts, dc.VolumeMounts) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.StartupProbe, dc.StartupProbe) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.LivenessProbe, dc.LivenessProbe) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.ReadinessProbe, dc.ReadinessProbe) {
-			return true
-		}
-	}
-
-	// Check pod template labels bidirectionally (captures AdditionalLabels additions and removals)
-	if len(existing.Spec.Template.Labels) != len(desired.Spec.Template.Labels) {
-		return true
-	}
-	for k, v := range desired.Spec.Template.Labels {
-		if existing.Spec.Template.Labels[k] != v {
-			return true
-		}
-	}
-
-	return existing.Spec.Template.Annotations[ConfigChecksumAnnotation] != desired.Spec.Template.Annotations[ConfigChecksumAnnotation]
 }

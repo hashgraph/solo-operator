@@ -165,7 +165,7 @@ var _ = Describe("Orbit Controller", func() {
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       orbitName,
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
-					ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 				},
 			}
 			Expect(k8sClient.Create(ctx, ep)).Should(Succeed())

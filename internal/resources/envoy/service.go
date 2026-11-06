@@ -133,13 +133,13 @@ func (r *ServiceSubReconciler) buildService(envoy *operatorv1alpha1.EnvoyProxy) 
 	selectorLabels := CommonLabels(envoy)
 	resourceLabels := ResourceLabels(envoy)
 
-	// Map ProxyServiceType to a valid K8s ServiceType.
+	// Map EnvoyServiceType to a valid K8s ServiceType.
 	// Ingress uses a ClusterIP service; the Ingress resource is managed by IngressSubReconciler.
 	svcType := corev1.ServiceTypeLoadBalancer
 	switch envoy.Spec.ServiceType {
-	case operatorv1alpha1.ProxyServiceTypeClusterIP, operatorv1alpha1.ProxyServiceTypeIngress:
+	case operatorv1alpha1.EnvoyServiceTypeClusterIP, operatorv1alpha1.EnvoyServiceTypeIngress:
 		svcType = corev1.ServiceTypeClusterIP
-	case operatorv1alpha1.ProxyServiceTypeLoadBalancer:
+	case operatorv1alpha1.EnvoyServiceTypeLoadBalancer:
 		svcType = corev1.ServiceTypeLoadBalancer
 	}
 
