@@ -1,0 +1,156 @@
+resources:
+{{- range .Listeners}}
+  - '@type': type.googleapis.com/envoy.config.listener.v3.Listener
+    name: {{.Name}}
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: {{.Port}}
+{{- if $.ACLRanges}}
+    filter_chain_matcher:
+      matcher_tree:
+        input:
+          name: envoy.matching.inputs.source_ip
+          typed_config:
+            '@type': type.googleapis.com/envoy.extensions.matching.common_inputs.network.v3.SourceIPInput
+        custom_match:
+          name: acl
+          typed_config:
+            '@type': type.googleapis.com/xds.type.matcher.v3.IPMatcher
+            range_matchers:
+              - ranges: {{$.ACLRanges}}
+                on_match:
+                  action:
+                    name: blocked
+                    typed_config:
+                      '@type': type.googleapis.com/google.protobuf.StringValue
+                      value: blocked
+      on_no_match:
+        action:
+          name: main
+          typed_config:
+            '@type': type.googleapis.com/google.protobuf.StringValue
+            value: main
+{{- end}}
+    filter_chains:
+      - name: main
+        filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              codec_type: AUTO
+              stat_prefix: {{.Name}}
+{{- if .TrustedProxyCIDRs}}
+              original_ip_detection_extensions:
+                - name: envoy.http.original_ip_detection.xff
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.http.original_ip_detection.xff.v3.XffConfig
+                    xff_trusted_cidrs:
+                      cidrs: {{.TrustedProxyCIDRs}}
+{{- else}}
+              use_remote_address: true
+{{- end}}
+              common_http_protocol_options:
+                idle_timeout: {{$.Timeouts.Client}}
+              stream_idle_timeout: {{$.Timeouts.Stream}}
+              access_log:
+                - name: envoy.access_loggers.stdout
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+              route_config:
+                name: {{.Name}}
+                virtual_hosts:
+                  - name: {{.Name}}
+                    domains:
+                      - '*'
+                    routes:
+                      - match:
+                          prefix: /
+                        route:
+                          cluster: node_{{.Name}}
+                          timeout: 0s
+                          max_stream_duration:
+                            grpc_timeout_header_max: 0s
+{{- with .CORS}}
+                    typed_per_filter_config:
+                      envoy.filters.http.cors:
+                        '@type': type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
+                        allow_origin_string_match:
+                          {{- range .AllowOrigins}}
+                          - prefix: '{{.}}'
+                          {{- end}}
+                        allow_methods: '{{.AllowMethods}}'
+                        allow_headers: '{{.AllowHeaders}}'
+                        max_age: '{{.MaxAge}}'
+                        expose_headers: '{{.ExposeHeaders}}'
+{{- end}}
+              http_filters:
+{{- if and $.ACLRanges .TrustedProxyCIDRs}}
+                - name: envoy.filters.http.rbac
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+                    matcher:
+                      matcher_tree:
+                        input:
+                          name: envoy.matching.inputs.source_ip
+                          typed_config:
+                            '@type': type.googleapis.com/envoy.extensions.matching.common_inputs.network.v3.SourceIPInput
+                        custom_match:
+                          name: acl
+                          typed_config:
+                            '@type': type.googleapis.com/xds.type.matcher.v3.IPMatcher
+                            range_matchers:
+                              - ranges: {{$.ACLRanges}}
+                                on_match:
+                                  action:
+                                    name: blocked
+                                    typed_config:
+                                      '@type': type.googleapis.com/envoy.config.rbac.v3.Action
+                                      name: blocked
+                                      action: DENY
+                      on_no_match:
+                        action:
+                          name: allowed
+                          typed_config:
+                            '@type': type.googleapis.com/envoy.config.rbac.v3.Action
+                            name: allowed
+                            action: ALLOW
+{{- end}}
+{{- if .CORS}}
+                - name: envoy.filters.http.grpc_web
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                - name: envoy.filters.http.cors
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+{{- end}}
+                - name: envoy.filters.http.router
+                  typed_config:
+                    '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+{{- if .TLSSecretName}}
+        transport_socket:
+          name: envoy.transport_sockets.tls
+          typed_config:
+            '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+            common_tls_context:
+              alpn_protocols: [{{.ALPN}}]
+              tls_params:
+                tls_minimum_protocol_version: TLSv1_2
+                cipher_suites: [ECDHE-ECDSA-AES128-GCM-SHA256, ECDHE-RSA-AES128-GCM-SHA256, ECDHE-ECDSA-AES256-GCM-SHA384, ECDHE-RSA-AES256-GCM-SHA384, ECDHE-ECDSA-AES128-SHA, ECDHE-RSA-AES128-SHA, ECDHE-ECDSA-AES256-SHA, ECDHE-RSA-AES256-SHA, AES128-GCM-SHA256, AES256-GCM-SHA384, AES128-SHA, AES256-SHA]
+              tls_certificate_sds_secret_configs:
+                - name: {{.Name}}_tls
+                  sds_config:
+                    resource_api_version: V3
+                    path_config_source:
+                      path: {{$.ConfigDir}}/sds-{{.Name}}.yaml
+                      watched_directory:
+                        path: {{$.ConfigDir}}
+{{- end}}
+{{- if $.ACLRanges}}
+      - name: blocked
+        filters:
+          - name: envoy.filters.network.direct_response
+            typed_config:
+              '@type': type.googleapis.com/envoy.extensions.filters.network.direct_response.v3.Config
+{{- end}}
+{{- end}}

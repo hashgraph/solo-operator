@@ -10,9 +10,14 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -46,6 +51,7 @@ func NewEnvoyProxyReconciler(c client.Client, scheme *runtime.Scheme) *EnvoyProx
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for EnvoyProxy resources
 func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -142,14 +148,35 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 	return common.WarnOnConflict(ctx, r.Status().Update(ctx, envoyObj))
 }
 
+const fieldEnvoyACLConfigMaps = "envoy.aclConfigMaps"
+
 // SetupWithManager sets up the controller with the Manager
 func (r *EnvoyProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &operatorv1alpha1.EnvoyProxy{}, fieldEnvoyACLConfigMaps, func(o client.Object) []string {
+		return envoy.ReferencedConfigMaps(o.(*operatorv1alpha1.EnvoyProxy))
+	}); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.EnvoyProxy{}).
+		For(&operatorv1alpha1.EnvoyProxy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&networkingv1.Ingress{}).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapACLConfigMap)).
 		Named("envoyproxy").
 		Complete(r)
+}
+
+func (r *EnvoyProxyReconciler) mapACLConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	list := &operatorv1alpha1.EnvoyProxyList{}
+	if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace()), client.MatchingFields{fieldEnvoyACLConfigMaps: obj.GetName()}); err != nil {
+		common.Err(ctx, err, ReasonListFailed).Msg("Failed to list EnvoyProxies for ACL ConfigMap")
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for _, item := range list.Items {
+		reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: item.Name, Namespace: item.Namespace}})
+	}
+	return reqs
 }

@@ -51,6 +51,25 @@ spec:
           spec:
             description: EnvoyProxySpec defines the desired state of EnvoyProxy
             properties:
+              aclFiles:
+                items:
+                  properties:
+                    key:
+                      minLength: 1
+                      type: string
+                    name:
+                      minLength: 1
+                      type: string
+                  required:
+                  - key
+                  - name
+                  type: object
+                maxItems: 16
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - key
+                x-kubernetes-list-type: map
               additionalLabels:
                 additionalProperties:
                   type: string
@@ -976,35 +995,6 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
-              corsConfig:
-                description: CORSConfig customizes CORS in the operator-generated
-                  config. Ignored if Files is set.
-                properties:
-                  allowHeaders:
-                    description: AllowHeaders overrides the list of allowed request
-                      headers.
-                    items:
-                      type: string
-                    type: array
-                  allowMethods:
-                    description: AllowMethods overrides the allowed HTTP methods.
-                    type: string
-                  allowOrigins:
-                    description: AllowOrigins is a list of allowed origins (prefix
-                      match). Defaults to wildcard.
-                    items:
-                      type: string
-                    type: array
-                  exposeHeaders:
-                    description: ExposeHeaders overrides the list of headers exposed
-                      to the browser.
-                    items:
-                      type: string
-                    type: array
-                  maxAge:
-                    description: MaxAge overrides the preflight cache duration.
-                    type: string
-                type: object
               env:
                 description: Env are environment variables for the container.
                 items:
@@ -1179,11 +1169,11 @@ spec:
               files:
                 additionalProperties:
                   type: string
-                description: Files overrides the operator-generated envoy.yaml. Map
-                  of filename → content.
+                description: Files overlays the generated envoy.yaml, lds.yaml, cds.yaml
+                  and sds-*.yaml by key.
                 type: object
               image:
-                default: envoyproxy/envoy-distroless:v1.21.6
+                default: envoyproxy/envoy:distroless-v1.40.2
                 description: Image is the Envoy container image.
                 maxLength: 512
                 type: string
@@ -1452,6 +1442,168 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              listeners:
+                default:
+                  grpcWeb: {}
+                description: EnvoyListenersSpec defaults ports to 8081, 50211 and
+                  50212; upstreams to HTTP 50211, except grpcs to HTTPS 50212.
+                properties:
+                  grpc:
+                    properties:
+                      port:
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      tlsSecretName:
+                        type: string
+                      upstream:
+                        properties:
+                          healthCheck:
+                            default: TCP
+                            description: EnvoyHealthCheckType is the upstream health
+                              check.
+                            enum:
+                            - TCP
+                            - GRPC
+                            type: string
+                          port:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          protocol:
+                            description: EnvoyUpstreamProtocol is the upstream protocol.
+                            enum:
+                            - HTTP
+                            - HTTPS
+                            type: string
+                          serverName:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  grpcWeb:
+                    properties:
+                      cors:
+                        description: CORSConfig customizes CORS in the operator-generated
+                          envoy.yaml. All fields are optional.
+                        properties:
+                          allowHeaders:
+                            description: AllowHeaders overrides the list of allowed
+                              request headers.
+                            items:
+                              type: string
+                            type: array
+                          allowMethods:
+                            description: AllowMethods overrides the allowed HTTP methods.
+                            type: string
+                          allowOrigins:
+                            description: AllowOrigins is a list of allowed origins
+                              (prefix match). Defaults to wildcard.
+                            items:
+                              type: string
+                            type: array
+                          exposeHeaders:
+                            description: ExposeHeaders overrides the list of headers
+                              exposed to the browser.
+                            items:
+                              type: string
+                            type: array
+                          maxAge:
+                            description: MaxAge overrides the preflight cache duration.
+                            type: string
+                        type: object
+                      port:
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      tlsSecretName:
+                        type: string
+                      trustedProxyCIDRs:
+                        items:
+                          description: EnvoyCIDR is an IPv4 or IPv6 CIDR.
+                          maxLength: 43
+                          type: string
+                          x-kubernetes-validations:
+                          - message: must be a CIDR
+                            rule: isCIDR(self)
+                        maxItems: 64
+                        type: array
+                      upstream:
+                        properties:
+                          healthCheck:
+                            default: TCP
+                            description: EnvoyHealthCheckType is the upstream health
+                              check.
+                            enum:
+                            - TCP
+                            - GRPC
+                            type: string
+                          port:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          protocol:
+                            description: EnvoyUpstreamProtocol is the upstream protocol.
+                            enum:
+                            - HTTP
+                            - HTTPS
+                            type: string
+                          serverName:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                  grpcs:
+                    properties:
+                      port:
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      tlsSecretName:
+                        type: string
+                      upstream:
+                        properties:
+                          healthCheck:
+                            default: TCP
+                            description: EnvoyHealthCheckType is the upstream health
+                              check.
+                            enum:
+                            - TCP
+                            - GRPC
+                            type: string
+                          port:
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                          protocol:
+                            description: EnvoyUpstreamProtocol is the upstream protocol.
+                            enum:
+                            - HTTP
+                            - HTTPS
+                            type: string
+                          serverName:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$
+                            type: string
+                        type: object
+                    type: object
+                type: object
+                x-kubernetes-validations:
+                - message: grpcs requires tlsSecretName
+                  rule: '!has(self.grpcs) || has(self.grpcs.tlsSecretName)'
+              maxConnections:
+                default: 10000
+                format: int32
+                minimum: 1
+                type: integer
               metricsPort:
                 default: 9090
                 description: MetricsPort is the Prometheus metrics port.
@@ -1468,19 +1620,71 @@ spec:
                 description: Orbit is the owning Orbit's name.
                 minLength: 1
                 type: string
-              proxyPort:
-                default: 8081
-                description: ProxyPort is the gRPC-Web listener port.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               replicas:
                 default: 2
                 description: Replicas is the number of proxy replicas.
                 format: int32
                 minimum: 0
                 type: integer
+              resources:
+                description: ResourceRequirements describes the compute resource requirements.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
               serviceAnnotations:
                 additionalProperties:
                   type: string
@@ -1843,11 +2047,24 @@ spec:
                 format: int64
                 minimum: 0
                 type: integer
-              tlsSecretName:
-                description: |-
-                  TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on proxyPort.
-                  Works directly with cert-manager Certificate secrets.
-                type: string
+              timeouts:
+                properties:
+                  client:
+                    default: 120s
+                    type: string
+                  connect:
+                    default: 10s
+                    type: string
+                  drain:
+                    default: 30m
+                    type: string
+                  server:
+                    default: 120s
+                    type: string
+                  stream:
+                    default: 3600s
+                    type: string
+                type: object
               tolerations:
                 description: Tolerations allow pods to schedule on tainted nodes.
                 items:
@@ -1888,13 +2105,6 @@ spec:
                       type: string
                   type: object
                 type: array
-              upstreamPort:
-                default: 50211
-                description: UpstreamPort is the upstream gRPC port.
-                format: int32
-                maximum: 65535
-                minimum: 1
-                type: integer
               upstreamService:
                 description: |-
                   UpstreamService is the consensus node Service to route traffic to.
@@ -1907,6 +2117,10 @@ spec:
             x-kubernetes-validations:
             - message: ingressSpec is required when serviceType is Ingress
               rule: self.serviceType != 'Ingress' || has(self.ingressSpec)
+            - message: aclFiles with a LoadBalancer Service require externalTrafficPolicy
+                Local
+              rule: '!has(self.aclFiles) || size(self.aclFiles) == 0 || self.serviceType
+                != ''LoadBalancer'' || self.externalTrafficPolicy == ''Local'''
           status:
             description: EnvoyProxyStatus defines the observed state of EnvoyProxy
             properties:

@@ -294,10 +294,9 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image:     "envoyproxy/envoy-distroless:v1.21.6",
+						Image:     "envoyproxy/envoy:distroless-v1.40.2",
 						Orbit:     testNamespace,
 						Replicas:  &replicas,
-						ProxyPort: 8080,
 						AdminPort: 9901,
 					},
 				}
@@ -309,7 +308,7 @@ var _ = Describe("E2E Tests", func() {
 				created := &operatorv1alpha1.EnvoyProxy{}
 				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-envoy", Namespace: testNamespace}, created)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(created.Spec.Image).To(Equal("envoyproxy/envoy-distroless:v1.21.6"))
+				Expect(created.Spec.Image).To(Equal("envoyproxy/envoy:distroless-v1.40.2"))
 				Expect(*created.Spec.Replicas).To(Equal(int32(2)))
 
 				// Cleanup
@@ -323,7 +322,7 @@ var _ = Describe("E2E Tests", func() {
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image: "envoyproxy/envoy-distroless:v1.21.6",
+						Image: "envoyproxy/envoy:distroless-v1.40.2",
 						Orbit: testNamespace,
 					},
 				}
@@ -333,27 +332,28 @@ var _ = Describe("E2E Tests", func() {
 				created := &operatorv1alpha1.EnvoyProxy{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-envoy-defaults", Namespace: testNamespace}, created)).To(Succeed())
 
-				Expect(created.Spec.ProxyPort).To(Equal(int32(8081)), "ProxyPort should default to 8081")
+				Expect(created.Spec.Listeners).NotTo(BeNil(), "listeners should default to grpcWeb")
+				Expect(created.Spec.Listeners.GRPCWeb).NotTo(BeNil(), "listeners should default to grpcWeb")
 				Expect(created.Spec.AdminPort).To(Equal(int32(9901)), "AdminPort should default to 9901")
 				Expect(created.Spec.MetricsPort).To(Equal(int32(9090)), "MetricsPort should default to 9090")
-				Expect(created.Spec.UpstreamPort).To(Equal(int32(50211)), "UpstreamPort should default to 50211")
 
 				Expect(k8sClient.Delete(ctx, envoy)).To(Succeed())
 			})
 
-			It("should persist custom UpstreamService and UpstreamPort", func() {
+			It("should persist custom UpstreamService and listener ports", func() {
 				envoy := &operatorv1alpha1.EnvoyProxy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-envoy-custom",
 						Namespace: testNamespace,
 					},
 					Spec: operatorv1alpha1.EnvoyProxySpec{
-						Image:           "envoyproxy/envoy-distroless:v1.21.6",
+						Image:           "envoyproxy/envoy:distroless-v1.40.2",
 						Orbit:           testNamespace,
-						ProxyPort:       8082,
 						MetricsPort:     9091,
 						UpstreamService: "my-consensus-node",
-						UpstreamPort:    50311,
+						Listeners: &operatorv1alpha1.EnvoyListenersSpec{GRPCWeb: &operatorv1alpha1.EnvoyGRPCWebListenerSpec{
+							EnvoyListenerSpec: operatorv1alpha1.EnvoyListenerSpec{Port: 8082, Upstream: &operatorv1alpha1.EnvoyUpstreamSpec{Port: 50311}},
+						}},
 					},
 				}
 
@@ -362,10 +362,10 @@ var _ = Describe("E2E Tests", func() {
 				created := &operatorv1alpha1.EnvoyProxy{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Name: "test-envoy-custom", Namespace: testNamespace}, created)).To(Succeed())
 
-				Expect(created.Spec.ProxyPort).To(Equal(int32(8082)))
+				Expect(created.Spec.Listeners.GRPCWeb.Port).To(Equal(int32(8082)))
 				Expect(created.Spec.MetricsPort).To(Equal(int32(9091)))
 				Expect(created.Spec.UpstreamService).To(Equal("my-consensus-node"))
-				Expect(created.Spec.UpstreamPort).To(Equal(int32(50311)))
+				Expect(created.Spec.Listeners.GRPCWeb.Upstream.Port).To(Equal(int32(50311)))
 
 				Expect(k8sClient.Delete(ctx, envoy)).To(Succeed())
 			})

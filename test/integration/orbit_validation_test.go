@@ -66,7 +66,7 @@ var _ = Describe("Orbit Invariants Validation", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "ep-no-orbit", Namespace: testNS1},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       "",
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
 				},
 			}

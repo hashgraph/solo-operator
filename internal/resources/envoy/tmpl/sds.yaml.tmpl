@@ -1,0 +1,10 @@
+resources:
+  - '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.Secret
+    name: {{.Name}}_tls
+    tls_certificate:
+      certificate_chain:
+        filename: {{.TLSDir}}/tls.crt
+      private_key:
+        filename: {{.TLSDir}}/tls.key
+      watched_directory:
+        path: {{.TLSDir}}

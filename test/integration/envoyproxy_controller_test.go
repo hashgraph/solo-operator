@@ -50,9 +50,8 @@ var _ = Describe("EnvoyProxy Controller", func() {
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:     envoyNamespace,
-					Image:     "envoyproxy/envoy-distroless:v1.21.6",
+					Image:     "envoyproxy/envoy:distroless-v1.40.2",
 					Replicas:  &replicas,
-					ProxyPort: 8081,
 					AdminPort: 9901,
 				},
 			}
@@ -82,7 +81,7 @@ var _ = Describe("EnvoyProxy Controller", func() {
 				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("envoyproxy/envoy-distroless:v1.21.6"))
+			Expect(createdDeploy.Spec.Template.Spec.Containers[0].Image).To(Equal("envoyproxy/envoy:distroless-v1.40.2"))
 			Expect(*createdDeploy.Spec.Replicas).To(Equal(int32(2)))
 
 			By("Verifying the Deployment has probes configured")
@@ -102,7 +101,8 @@ var _ = Describe("EnvoyProxy Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 			Expect(createdSvc.Spec.Type).To(Equal(corev1.ServiceTypeLoadBalancer))
-			Expect(createdSvc.Spec.Ports[0].Port).To(Equal(int32(8081)))
+			Expect(createdSvc.Spec.Ports[1].Name).To(Equal("grpc-web"))
+			Expect(createdSvc.Spec.Ports[1].Port).To(Equal(int32(8081)))
 
 			By("Cleaning up")
 			Expect(k8sClient.Delete(ctx, envoy)).Should(Succeed())
@@ -148,7 +148,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit: envoyNamespace,
-					Image: "envoyproxy/envoy-distroless:v1.21.6",
+					Image: "envoyproxy/envoy:distroless-v1.40.2",
 					Files: map[string]string{
 						"envoy.yaml": customConfig,
 					},
@@ -201,7 +201,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:    envoyNamespace,
-					Image:    "envoyproxy/envoy-distroless:v1.21.6",
+					Image:    "envoyproxy/envoy:distroless-v1.40.2",
 					Replicas: &replicas,
 				},
 			}
@@ -265,8 +265,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:     envoyNamespace,
-					Image:     "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort: 8081,
+					Image:     "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort: 9901,
 				},
 			}
@@ -334,8 +333,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       envoyNamespace,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort:   8081,
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
 					MetricsPort: 9100,
 				},
@@ -403,14 +401,15 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:     envoyNamespace,
-					Image:     "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort: 8081,
+					Image:     "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort: 9901,
-					CORSConfig: &operatorv1alpha1.CORSConfig{
-						AllowOrigins: []string{"https://example.com"},
-						AllowMethods: "GET, POST",
-						MaxAge:       "3600",
-					},
+					Listeners: &operatorv1alpha1.EnvoyListenersSpec{GRPCWeb: &operatorv1alpha1.EnvoyGRPCWebListenerSpec{
+						CORS: &operatorv1alpha1.CORSConfig{
+							AllowOrigins: []string{"https://example.com"},
+							AllowMethods: "GET, POST",
+							MaxAge:       "3600",
+						},
+					}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, envoy)).Should(Succeed())
@@ -423,10 +422,10 @@ static_resources:
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			cfg := createdCM.Data["envoy.yaml"]
+			cfg := createdCM.Data["lds.yaml"]
 			Expect(strings.Contains(cfg, "https://example.com")).To(BeTrue(), "config should contain the custom origin")
 			Expect(strings.Contains(cfg, "GET, POST")).To(BeTrue(), "config should contain the custom methods")
-			Expect(strings.Contains(cfg, `"3600"`)).To(BeTrue(), "config should contain the custom max age")
+			Expect(strings.Contains(cfg, "max_age: '3600'")).To(BeTrue(), "config should contain the custom max age")
 
 			By("Verifying the default wildcard origin is not present")
 			Expect(strings.Contains(cfg, "prefix: '*'")).To(BeFalse(), "default wildcard origin should be replaced by custom origins")
@@ -463,8 +462,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:     envoyNamespace,
-					Image:     "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort: 8081,
+					Image:     "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort: 9901,
 					NodeSelector: map[string]string{
 						"sphere.hashgraph.io/role": "auxiliary",
@@ -528,8 +526,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:     envoyNamespace,
-					Image:     "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort: 8081,
+					Image:     "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort: 9901,
 					AdditionalLabels: map[string]string{
 						"operator.solo.hiero.org/node-id":   "0",
@@ -605,8 +602,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       envoyNamespace,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort:   8081,
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
 				},
@@ -636,8 +632,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       envoyNamespace,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort:   8081,
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
 					ServiceAnnotations: map[string]string{
@@ -703,9 +698,11 @@ static_resources:
 					Namespace: envoyNamespace,
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
-					Orbit:         envoyNamespace,
-					Image:         "envoyproxy/envoy-distroless:v1.21.6",
-					TLSSecretName: tlsSecretName,
+					Orbit: envoyNamespace,
+					Image: "envoyproxy/envoy:distroless-v1.40.2",
+					Listeners: &operatorv1alpha1.EnvoyListenersSpec{GRPCWeb: &operatorv1alpha1.EnvoyGRPCWebListenerSpec{
+						EnvoyListenerSpec: operatorv1alpha1.EnvoyListenerSpec{TLSSecretName: tlsSecretName},
+					}},
 				},
 			}
 			Expect(k8sClient.Create(ctx, envoy)).Should(Succeed())
@@ -717,8 +714,8 @@ static_resources:
 				err := k8sClient.Get(ctx, cmLookupKey, createdCM)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
-			Expect(createdCM.Data["envoy.yaml"]).To(ContainSubstring("transport_socket"))
-			Expect(createdCM.Data["envoy.yaml"]).To(ContainSubstring("DownstreamTlsContext"))
+			Expect(createdCM.Data["lds.yaml"]).To(ContainSubstring("transport_socket"))
+			Expect(createdCM.Data["lds.yaml"]).To(ContainSubstring("DownstreamTlsContext"))
 
 			By("Verifying the Deployment has a TLS volume")
 			deployLookupKey := types.NamespacedName{Name: envoyName, Namespace: envoyNamespace}
@@ -732,7 +729,7 @@ static_resources:
 			Expect(volumes).To(HaveLen(2), "expected config + tls volumes")
 			tlsVolumeFound := false
 			for _, v := range volumes {
-				if v.Name == "tls" {
+				if v.Name == "tls-grpc-web" {
 					tlsVolumeFound = true
 					Expect(v.Secret).ToNot(BeNil())
 					Expect(v.Secret.SecretName).To(Equal(tlsSecretName))
@@ -743,9 +740,9 @@ static_resources:
 			container := createdDeploy.Spec.Template.Spec.Containers[0]
 			tlsMountFound := false
 			for _, m := range container.VolumeMounts {
-				if m.Name == "tls" {
+				if m.Name == "tls-grpc-web" {
 					tlsMountFound = true
-					Expect(m.MountPath).To(Equal("/etc/envoy/certs"))
+					Expect(m.MountPath).To(Equal("/etc/envoy-tls/grpc-web"))
 				}
 			}
 			Expect(tlsMountFound).To(BeTrue(), "TLS volume mount not found in container")
@@ -782,8 +779,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       envoyNamespace,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort:   8081,
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
 				},
@@ -833,8 +829,7 @@ static_resources:
 				},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       envoyNamespace,
-					Image:       "envoyproxy/envoy-distroless:v1.21.6",
-					ProxyPort:   8081,
+					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
 					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
 					ExposeAdmin: true,

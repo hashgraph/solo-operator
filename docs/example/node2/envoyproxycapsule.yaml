@@ -5,14 +5,21 @@ metadata:
   namespace: solo-orbit
 spec:
   orbit: solo-orbit
-  image: envoyproxy/envoy-distroless:v1.21.6
+  image: envoyproxy/envoy:distroless-v1.40.2
   replicas: 1
-  proxyPort: 8080
+  listeners:
+    grpcWeb:
+      port: 8080
+      # tlsSecretName: envoy-node2-tls
+      # upstream:
+      #   port: 50211
+      # cors:
+      #   allowOrigins: ["*"]
+      #   allowMethods: "GET, PUT, DELETE, POST, OPTIONS"
   metricsPort: 9090
 
   # upstreamService: node2   # defaults to CR name minus "envoy-" prefix; any DNS name works
   # upstreamService: node2.solo-orbit.svc.cluster.local
-  # upstreamPort: 50211
 
   # serviceType: LoadBalancer   # default
   # serviceType: ClusterIP
@@ -45,13 +52,6 @@ spec:
   #         topologyKey: kubernetes.io/hostname
 
   # terminationGracePeriodSeconds: 10
-
-  # TLS termination on proxyPort — needs a kubernetes.io/tls secret (cert-manager works directly).
-  # tlsSecretName: envoy-node2-tls
-
-  # corsConfig:   # only used with the operator-generated envoy.yaml
-  #   allowOrigins: ["*"]
-  #   allowMethods: "GET, PUT, DELETE, POST, OPTIONS"
 
   # ingressSpec:
   #   ingressClassName: nginx
