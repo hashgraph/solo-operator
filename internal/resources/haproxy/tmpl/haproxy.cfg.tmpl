@@ -32,7 +32,8 @@ backend consensus_nodes
 backend consensus_nodes_tls
     mode http
     balance roundrobin
-    server upstream {{.UpstreamService}}:{{.GrpcsPort}} ssl verify none check
+    # alpn h2: the node gRPC port speaks only HTTP/2; without it HAProxy sends HTTP/1.1 and clients get 502.
+    server upstream {{.UpstreamService}}:{{.GrpcsPort}} ssl verify none alpn h2 check
 
 {{end -}}
 listen stats
