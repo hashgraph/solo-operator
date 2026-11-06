@@ -1836,6 +1836,13 @@ func (in *EnvoyProxyStatus) DeepCopyInto(out *EnvoyProxyStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
+		*out = make([]Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.DeploymentConditions != nil {
+		in, out := &in.DeploymentConditions, &out.DeploymentConditions
 		*out = make([]appsv1.DeploymentCondition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])

@@ -10,6 +10,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -69,6 +70,38 @@ var _ = Describe("EnvoyProxy ACL files", func() {
 		By("keeping the last rendered list when the ConfigMap disappears")
 		Expect(k8sClient.Delete(ctx, cm)).To(Succeed())
 		Consistently(lds(proxy.Name), "2s", interval).Should(ContainSubstring("address_prefix: '198.51.100.0'"))
+
+		Expect(k8sClient.Delete(ctx, proxy)).To(Succeed())
+	})
+
+	It("reports a missing ACL ConfigMap on the Reconciled condition", func() {
+		proxy := &operatorv1alpha1.EnvoyProxy{
+			ObjectMeta: metav1.ObjectMeta{Name: "envoy-node1", Namespace: ns},
+			Spec: operatorv1alpha1.EnvoyProxySpec{
+				Orbit:       ns,
+				ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+				ACLFiles:    []operatorv1alpha1.EnvoyConfigMapKeyRef{{Name: "node1-ofac-list", Key: "blocklist.acl"}},
+			},
+		}
+		Expect(k8sClient.Create(ctx, proxy)).To(Succeed())
+		reconciled := func() *metav1.Condition {
+			p := &operatorv1alpha1.EnvoyProxy{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: proxy.Name, Namespace: ns}, p); err != nil {
+				return nil
+			}
+			return apimeta.FindStatusCondition(p.Status.Conditions, operatorv1alpha1.EnvoyProxyConditionTypeReconciled)
+		}
+		Eventually(reconciled, timeout, interval).Should(And(
+			Not(BeNil()),
+			HaveField("Status", metav1.ConditionFalse),
+			HaveField("Reason", "ACLSourceMissing"),
+		))
+
+		Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "node1-ofac-list", Namespace: ns},
+			Data:       map[string]string{"blocklist.acl": "203.0.113.7\n"},
+		})).To(Succeed())
+		Eventually(reconciled, timeout, interval).Should(HaveField("Status", metav1.ConditionTrue))
 
 		Expect(k8sClient.Delete(ctx, proxy)).To(Succeed())
 	})

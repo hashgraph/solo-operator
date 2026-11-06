@@ -5,10 +5,14 @@ package controller
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -84,25 +88,16 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if err := validateProxyDigestPolicy(ctx, r.Client, envoyObj.Spec.Orbit, "EnvoyProxy", envoyObj.Name, envoy.GetImage(envoyObj)); err != nil {
-		return ctrl.Result{}, err
+	var result ctrl.Result
+	err := validateProxyDigestPolicy(ctx, r.Client, envoyObj.Spec.Orbit, "EnvoyProxy", envoyObj.Name, envoy.GetImage(envoyObj))
+	if err == nil {
+		result, err = r.subreconciler.Reconcile(ctx, envoyObj)
 	}
-
-	// Run subreconcilers
-	result, err := r.subreconciler.Reconcile(ctx, envoyObj)
-	if err != nil {
-		return result, err
+	apimeta.SetStatusCondition(&envoyObj.Status.Conditions, reconciledCondition(envoyObj.Generation, err))
+	if statusErr := r.updateStatus(ctx, envoyObj); err == nil {
+		err = statusErr
 	}
-	if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
-	}
-
-	// Update status
-	if err := r.updateStatus(ctx, envoyObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return result, err
 }
 
 // handleDeletion handles the deletion of an EnvoyProxy resource
@@ -118,6 +113,27 @@ func (r *EnvoyProxyReconciler) handleDeletion(ctx context.Context, envoyObj *ope
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func reconciledCondition(generation int64, err error) metav1.Condition {
+	if err == nil {
+		return metav1.Condition{
+			Type: operatorv1alpha1.EnvoyProxyConditionTypeReconciled, Status: metav1.ConditionTrue,
+			ObservedGeneration: generation, Reason: "Reconciled", Message: "Envoy configuration is up to date",
+		}
+	}
+	reason, ok := errx.ReasonOf(err)
+	if !ok {
+		reason = "ReconcileFailed"
+	}
+	message := errx.Format(err)
+	if len(message) > 1024 {
+		message = message[:1024]
+	}
+	return metav1.Condition{
+		Type: operatorv1alpha1.EnvoyProxyConditionTypeReconciled, Status: metav1.ConditionFalse,
+		ObservedGeneration: generation, Reason: string(reason), Message: message,
+	}
 }
 
 // updateStatus updates the EnvoyProxy status
@@ -140,7 +156,7 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 		envoyObj.Status.AvailableReplicas = deploy.Status.AvailableReplicas
 		envoyObj.Status.UnavailableReplicas = deploy.Status.UnavailableReplicas
 		envoyObj.Status.UpdatedReplicas = deploy.Status.UpdatedReplicas
-		envoyObj.Status.Conditions = deploy.Status.Conditions
+		envoyObj.Status.DeploymentConditions = deploy.Status.Conditions
 	}
 
 	envoyObj.Status.ObservedGeneration = envoyObj.Generation

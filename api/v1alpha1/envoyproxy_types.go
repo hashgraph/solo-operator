@@ -294,16 +294,23 @@ type EnvoyProxyStatus struct {
 	// +optional
 	UpdatedReplicas int32 `json:"updatedReplicas,omitempty"`
 
-	// Conditions are the deployment conditions.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
-	Conditions []appsv1.DeploymentCondition `json:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
+
+	// +optional
+	DeploymentConditions []appsv1.DeploymentCondition `json:"deploymentConditions,omitempty"`
 }
+
+const EnvoyProxyConditionTypeReconciled = "Reconciled"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=envoy
 // +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".status.replicas"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas"
+// +kubebuilder:printcolumn:name="Reconciled",type="string",JSONPath=".status.conditions[?(@.type=='Reconciled')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // EnvoyProxy is the Schema for the envoyproxies API
