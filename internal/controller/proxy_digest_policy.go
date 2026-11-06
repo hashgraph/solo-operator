@@ -15,7 +15,7 @@ import (
 )
 
 // validateProxyDigestPolicy enforces the Orbit's requireDigestOnDeploy on a proxy image.
-func validateProxyDigestPolicy(ctx context.Context, c client.Client, orbitName, kind, name, image string) error {
+func validateProxyDigestPolicy(ctx context.Context, c client.Client, orbitName, name, image string) error {
 	orbit := &operatorv1alpha1.Orbit{}
 	if err := c.Get(ctx, client.ObjectKey{Name: orbitName}, orbit); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -28,7 +28,7 @@ func validateProxyDigestPolicy(ctx context.Context, c client.Client, orbitName, 
 	}
 	return reconcile.TerminalError(errx.WithHints(
 		errx.WithReason(
-			errImageDigestRequired.New("Orbit %q requires digest-pinned images on deploy, but %s %q uses unpinned image %q", orbitName, kind, name, image),
+			errImageDigestRequired.New("Orbit %q requires digest-pinned images on deploy, but EnvoyProxy %q uses unpinned image %q", orbitName, name, image),
 			ReasonImageDigestRequired),
 		"Set spec.image to a reference ending in @sha256:<digest>, or set the Orbit's spec.requireDigestOnDeploy=false.",
 	))

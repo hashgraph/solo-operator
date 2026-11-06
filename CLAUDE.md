@@ -10,7 +10,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `Orbit` — cluster-scoped network configuration
 - `ConsensusCapsule` — namespace-scoped Hedera consensus node
 - `NetworkGenesis` — namespace-scoped network genesis operation (produces roster + address book ConfigMaps)
-- `HAProxyCapsule` — namespace-scoped HAProxy load balancer
 - `EnvoyProxy` — namespace-scoped Envoy proxy
 - `HelmCapsule` — Helm-managed deployments
 

@@ -93,7 +93,7 @@ func (r *IngressSubReconciler) needsUpdate(existing, desired *networkingv1.Ingre
 
 // buildIngress builds the desired Ingress from the IngressSpec, or returns nil when not desired.
 func (r *IngressSubReconciler) buildIngress(envoy *operatorv1alpha1.EnvoyProxy) *networkingv1.Ingress {
-	if envoy.Spec.ServiceType != operatorv1alpha1.ProxyServiceTypeIngress || envoy.Spec.IngressSpec == nil {
+	if envoy.Spec.ServiceType != operatorv1alpha1.EnvoyServiceTypeIngress || envoy.Spec.IngressSpec == nil {
 		return nil
 	}
 

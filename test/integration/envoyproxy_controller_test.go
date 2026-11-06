@@ -604,7 +604,7 @@ static_resources:
 					Orbit:       envoyNamespace,
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
-					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 				},
 			}
 			Expect(k8sClient.Create(ctx, envoy)).Should(Succeed())
@@ -634,7 +634,7 @@ static_resources:
 					Orbit:       envoyNamespace,
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
-					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 					ServiceAnnotations: map[string]string{
 						"cloud.google.com/neg": `{"ingress":true}`,
 					},
@@ -781,7 +781,7 @@ static_resources:
 					Orbit:       envoyNamespace,
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
-					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 				},
 			}
 			Expect(k8sClient.Create(ctx, envoy)).Should(Succeed())
@@ -831,7 +831,7 @@ static_resources:
 					Orbit:       envoyNamespace,
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
 					AdminPort:   9901,
-					ServiceType: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 					ExposeAdmin: true,
 				},
 			}

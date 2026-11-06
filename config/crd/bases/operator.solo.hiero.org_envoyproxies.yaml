@@ -1623,6 +1623,70 @@ spec:
                 description: Orbit is the owning Orbit's name.
                 minLength: 1
                 type: string
+              probes:
+                description: EnvoyProbesSpec is ignored when spec.files is set.
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  liveness:
+                    properties:
+                      failureThreshold:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  readiness:
+                    properties:
+                      failureThreshold:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  startup:
+                    properties:
+                      failureThreshold:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      initialDelaySeconds:
+                        format: int32
+                        minimum: 0
+                        type: integer
+                      periodSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      timeoutSeconds:
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                type: object
               replicas:
                 default: 2
                 description: Replicas is the number of proxy replicas.

@@ -128,11 +128,11 @@ func GetUpstreamService(envoy *operatorv1alpha1.EnvoyProxy) string {
 	return name
 }
 
-func GetServiceType(envoy *operatorv1alpha1.EnvoyProxy) operatorv1alpha1.ProxyServiceType {
+func GetServiceType(envoy *operatorv1alpha1.EnvoyProxy) operatorv1alpha1.EnvoyServiceType {
 	if envoy.Spec.ServiceType != "" {
 		return envoy.Spec.ServiceType
 	}
-	return operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	return operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.EnvoyProxy] {
