@@ -16,6 +16,7 @@ spec:
       # cors:
       #   allowOrigins: ["*"]
       #   allowMethods: "GET, PUT, DELETE, POST, OPTIONS"
+    grpc: {}
   metricsPort: 9090
 
   # upstreamService: node3   # defaults to CR name minus "envoy-" prefix; any DNS name works

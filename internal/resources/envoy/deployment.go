@@ -67,6 +67,38 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 	return ctrl.Result{}, nil
 }
 
+var (
+	defaultStartupProbe   = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 12, SuccessThreshold: 1}
+	defaultLivenessProbe  = corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3, SuccessThreshold: 1}
+	defaultReadinessProbe = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 3, SuccessThreshold: 1}
+)
+
+func ProbesEnabled(envoy *operatorv1alpha1.EnvoyProxy) bool {
+	p := envoy.Spec.Probes
+	return p == nil || p.Enabled == nil || *p.Enabled
+}
+
+func buildProbe(handler corev1.ProbeHandler, spec *operatorv1alpha1.EnvoyProbeSpec, defaults corev1.Probe) *corev1.Probe {
+	probe := defaults
+	probe.ProbeHandler = handler
+	if spec == nil {
+		return &probe
+	}
+	if spec.InitialDelaySeconds != nil {
+		probe.InitialDelaySeconds = *spec.InitialDelaySeconds
+	}
+	if spec.PeriodSeconds != nil {
+		probe.PeriodSeconds = *spec.PeriodSeconds
+	}
+	if spec.TimeoutSeconds != nil {
+		probe.TimeoutSeconds = *spec.TimeoutSeconds
+	}
+	if spec.FailureThreshold != nil {
+		probe.FailureThreshold = *spec.FailureThreshold
+	}
+	return &probe
+}
+
 func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyProxy) (*appsv1.Deployment, error) {
 	checksum, err := restartChecksum(envoy)
 	if err != nil {
@@ -117,16 +149,20 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 	}
 
 	// spec.files may not expose /healthz or the listeners, so probes are omitted then.
-	if len(envoy.Spec.Files) == 0 {
-		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy))}}
-		container.StartupProbe = &corev1.Probe{ProbeHandler: healthz, InitialDelaySeconds: 5, PeriodSeconds: 5, FailureThreshold: 12}
-		container.LivenessProbe = &corev1.Probe{ProbeHandler: healthz, PeriodSeconds: 10, FailureThreshold: 3}
+	if len(envoy.Spec.Files) == 0 && ProbesEnabled(envoy) {
+		probes := envoy.Spec.Probes
+		if probes == nil {
+			probes = &operatorv1alpha1.EnvoyProbesSpec{}
+		}
+		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy)), Scheme: corev1.URISchemeHTTP}}
+		container.StartupProbe = buildProbe(healthz, probes.Startup, defaultStartupProbe)
+		container.LivenessProbe = buildProbe(healthz, probes.Liveness, defaultLivenessProbe)
 		// A rejected LDS leaves the traffic ports unbound while /healthz still answers.
 		ready := healthz
 		if len(listeners) > 0 {
 			ready = corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(listeners[0].Port)}}
 		}
-		container.ReadinessProbe = &corev1.Probe{ProbeHandler: ready, InitialDelaySeconds: 5, PeriodSeconds: 5}
+		container.ReadinessProbe = buildProbe(ready, probes.Readiness, defaultReadinessProbe)
 	}
 
 	return &appsv1.Deployment{

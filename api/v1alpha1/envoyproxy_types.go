@@ -141,6 +141,46 @@ type EnvoyTimeoutsSpec struct {
 	Drain *metav1.Duration `json:"drain,omitempty"`
 }
 
+// EnvoyProbeSpec tunes one container probe; unset fields keep the operator defaults.
+type EnvoyProbeSpec struct {
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
+}
+
+// EnvoyProbesSpec configures the startup (GET /healthz), liveness (GET /healthz) and
+// readiness (TCP on the first listener) probes. Probes are never set when spec.files is used.
+type EnvoyProbesSpec struct {
+	// Enabled toggles all three probes.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Startup defaults: initialDelaySeconds 5, periodSeconds 5, timeoutSeconds 1, failureThreshold 12.
+	// +optional
+	Startup *EnvoyProbeSpec `json:"startup,omitempty"`
+
+	// Liveness defaults: initialDelaySeconds 0, periodSeconds 10, timeoutSeconds 1, failureThreshold 3.
+	// +optional
+	Liveness *EnvoyProbeSpec `json:"liveness,omitempty"`
+
+	// Readiness defaults: initialDelaySeconds 5, periodSeconds 5, timeoutSeconds 1, failureThreshold 3.
+	// +optional
+	Readiness *EnvoyProbeSpec `json:"readiness,omitempty"`
+}
+
 // EnvoyProxySpec defines the desired state of EnvoyProxy
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 // +kubebuilder:validation:XValidation:rule="!has(self.aclFiles) || size(self.aclFiles) == 0 || self.serviceType != 'LoadBalancer' || self.externalTrafficPolicy == 'Local'",message="aclFiles with a LoadBalancer Service require externalTrafficPolicy Local"
@@ -262,6 +302,9 @@ type EnvoyProxySpec struct {
 
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	Probes *EnvoyProbesSpec `json:"probes,omitempty"`
 }
 
 // EnvoyProxyStatus defines the observed state of EnvoyProxy

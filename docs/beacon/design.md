@@ -380,7 +380,7 @@ Field reference (vs yahcli):
 | `defaultPayer`, `defaultNodeAccount`, `shard`, `realm` | kept, same names | drop-in migration from yahcli; `shard`/`realm` default `0`/`0` and propagate to nodes |
 | `nodes[].id`, `.account` | kept | node id + fee-collection account num |
 | `nodes[].host` | renamed from `ipv4Addr` (**`ipv4Addr` still accepted as an alias**) | supports IP **or** FQDN (Solo service DNS) |
-| `nodes[].port` | new, default `50211` | Solo/Envoy/HAProxy may expose non-default HAPI ports |
+| `nodes[].port` | new, default `50211` | Solo/Envoy may expose non-default HAPI ports |
 | `nodes[].tls` | new, default `false` | TLS HAPI (`:50212`) when the endpoint requires it |
 | `allowedReceiverAccountIds` | kept, Phase-2 | only used by `accounts send` |
 | _(mirror node)_ | not yet | reserved for a future optional field; no MVP flow needs it |

@@ -133,7 +133,6 @@ rules:
   - consensuscapsules/status
   - envoyproxies/status
   - feeschedules/status
-  - haproxycapsules/status
   - helmcapsules/status
   - log4j2configs/status
   - networkgeneses/status
@@ -165,7 +164,6 @@ rules:
   resources:
   - consensuscapsules/finalizers
   - envoyproxies/finalizers
-  - haproxycapsules/finalizers
   - helmcapsules/finalizers
   - networkgeneses/finalizers
   - networkupgradeexecutes/finalizers
@@ -178,7 +176,6 @@ rules:
   - operator.solo.hiero.org
   resources:
   - envoyproxies
-  - haproxycapsules
   - helmcapsules
   - networkgeneses
   verbs:

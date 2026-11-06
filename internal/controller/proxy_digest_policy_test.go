@@ -16,7 +16,7 @@ import (
 )
 
 func TestValidateProxyDigestPolicy(t *testing.T) {
-	const pinned = "haproxy:2.8.10@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	const pinned = "envoyproxy/envoy:v1.40.2@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	orbit := func(require bool) *operatorv1alpha1.Orbit {
 		return &operatorv1alpha1.Orbit{
 			ObjectMeta: metav1.ObjectMeta{Name: "orbit"},
@@ -29,10 +29,10 @@ func TestValidateProxyDigestPolicy(t *testing.T) {
 		image    string
 		terminal bool
 	}{
-		{"policy off allows tag", orbit(false), "haproxy:2.8.10", false},
+		{"policy off allows tag", orbit(false), "envoyproxy/envoy:v1.40.2", false},
 		{"policy on allows digest", orbit(true), pinned, false},
-		{"policy on rejects tag", orbit(true), "haproxy:2.8.10", true},
-		{"missing orbit is not blocking", nil, "haproxy:2.8.10", false},
+		{"policy on rejects tag", orbit(true), "envoyproxy/envoy:v1.40.2", true},
+		{"missing orbit is not blocking", nil, "envoyproxy/envoy:v1.40.2", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestValidateProxyDigestPolicy(t *testing.T) {
 			if tt.orbit != nil {
 				b = b.WithObjects(tt.orbit)
 			}
-			err := validateProxyDigestPolicy(context.Background(), b.Build(), "orbit", "HAProxyCapsule", "hap", tt.image)
+			err := validateProxyDigestPolicy(context.Background(), b.Build(), "orbit", "EnvoyProxy", "ep", tt.image)
 			if !tt.terminal {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)

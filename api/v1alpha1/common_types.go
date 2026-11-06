@@ -784,39 +784,5 @@ type ConsensusNodeChangeset struct {
 	Logging []NodeLoggingConfiguration `json:"logging,omitempty"`
 }
 
-// HaproxyChangeset defines changes for HAProxy
-type HaproxyChangeset struct {
-	// Haproxy contains HAProxy-specific changes
-	// +optional
-	Haproxy *HaproxyConfig `json:"haproxy,omitempty"`
-
-	// ServiceType is the Kubernetes service type
-	// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
-	// +kubebuilder:default=LoadBalancer
-	// +optional
-	ServiceType string `json:"serviceType,omitempty"`
-
-	// ServiceSpec is the full service specification
-	// +optional
-	ServiceSpec *corev1.ServiceSpec `json:"serviceSpec,omitempty"`
-}
-
-// HaproxyConfig contains HAProxy configuration
-type HaproxyConfig struct {
-	// SoftwareVersionSource specifies the image source
-	// +optional
-	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
-
-	// User is the stats username
-	// +kubebuilder:default="user"
-	// +optional
-	User string `json:"user,omitempty"`
-
-	// Auth is the stats authentication
-	// +kubebuilder:default="auth"
-	// +optional
-	Auth string `json:"auth,omitempty"`
-}
-
 // Condition is an alias for metav1.Condition
 type Condition = metav1.Condition

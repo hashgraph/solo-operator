@@ -207,6 +207,47 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_ProbeOverrides(t *testing.T) {
+	envoy := newTestEnvoy()
+	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{
+		Startup:   &operatorv1alpha1.EnvoyProbeSpec{FailureThreshold: int32Ptr(720), InitialDelaySeconds: int32Ptr(60)},
+		Readiness: &operatorv1alpha1.EnvoyProbeSpec{TimeoutSeconds: int32Ptr(3)},
+	}
+	r := NewDeploymentSubReconciler(nil, newTestScheme())
+	deploy, err := r.buildDeployment(envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := deploy.Spec.Template.Spec.Containers[0]
+
+	if c.StartupProbe.FailureThreshold != 720 || c.StartupProbe.InitialDelaySeconds != 60 {
+		t.Errorf("startup override not applied: %+v", c.StartupProbe)
+	}
+	if c.StartupProbe.PeriodSeconds != defaultStartupProbe.PeriodSeconds {
+		t.Errorf("unset startup field should keep default, got period %d", c.StartupProbe.PeriodSeconds)
+	}
+	if c.ReadinessProbe.TimeoutSeconds != 3 || c.ReadinessProbe.TCPSocket == nil {
+		t.Errorf("readiness override not applied: %+v", c.ReadinessProbe)
+	}
+	if *c.LivenessProbe != *buildProbe(c.LivenessProbe.ProbeHandler, nil, defaultLivenessProbe) {
+		t.Errorf("liveness should use defaults, got %+v", c.LivenessProbe)
+	}
+}
+
+func TestBuildDeployment_ProbesDisabled(t *testing.T) {
+	envoy := newTestEnvoy()
+	disabled := false
+	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{Enabled: &disabled}
+	deploy, err := NewDeploymentSubReconciler(nil, newTestScheme()).buildDeployment(envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := deploy.Spec.Template.Spec.Containers[0]
+	if c.StartupProbe != nil || c.LivenessProbe != nil || c.ReadinessProbe != nil {
+		t.Error("expected no probes when probes.enabled is false")
+	}
+}
+
 func int32Ptr(i int32) *int32 {
 	return &i
 }

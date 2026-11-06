@@ -44,7 +44,6 @@ func NewOrbitReconciler(c client.Client, scheme *runtime.Scheme) *OrbitReconcile
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=orbits/finalizers,verbs=update,roleName=manager-role
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=consensuscapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=helmcapsules,verbs=get;list;watch;delete
-// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=haproxycapsules,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=log4j2configs,verbs=get;list;watch;delete
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=nodesettings,verbs=get;list;watch;delete
@@ -158,7 +157,6 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 	}
 
 	ccList := &operatorv1alpha1.ConsensusCapsuleList{}
-	hpList := &operatorv1alpha1.HAProxyCapsuleList{}
 	epList := &operatorv1alpha1.EnvoyProxyList{}
 	l4jList := &operatorv1alpha1.Log4j2ConfigList{}
 	nsList := &operatorv1alpha1.NodeSettingsList{}
@@ -184,17 +182,6 @@ func (r *OrbitReconciler) deleteOwnedCapsules(ctx context.Context, orbitObj *ope
 				return s
 			},
 			func(o client.Object) string { return o.(*operatorv1alpha1.ConsensusCapsule).Spec.Orbit },
-		},
-		{
-			hpList,
-			func() []client.Object {
-				s := make([]client.Object, len(hpList.Items))
-				for i := range hpList.Items {
-					s[i] = &hpList.Items[i]
-				}
-				return s
-			},
-			func(o client.Object) string { return o.(*operatorv1alpha1.HAProxyCapsule).Spec.Orbit },
 		},
 		{
 			epList,
@@ -407,7 +394,6 @@ func (r *OrbitReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&operatorv1alpha1.Orbit{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(&operatorv1alpha1.ConsensusCapsule{}, handler.EnqueueRequestsFromMapFunc(mapOrbitRef(func(o *operatorv1alpha1.ConsensusCapsule) string { return o.Spec.Orbit }))).
 		Watches(&operatorv1alpha1.HelmCapsule{}, handler.EnqueueRequestsFromMapFunc(r.mapHelmCapsuleToOrbit)).
-		Watches(&operatorv1alpha1.HAProxyCapsule{}, handler.EnqueueRequestsFromMapFunc(mapOrbitRef(func(o *operatorv1alpha1.HAProxyCapsule) string { return o.Spec.Orbit }))).
 		Watches(&operatorv1alpha1.EnvoyProxy{}, handler.EnqueueRequestsFromMapFunc(mapOrbitRef(func(o *operatorv1alpha1.EnvoyProxy) string { return o.Spec.Orbit }))).
 		Watches(&operatorv1alpha1.Log4j2Config{}, handler.EnqueueRequestsFromMapFunc(mapOrbitRef(func(o *operatorv1alpha1.Log4j2Config) string { return o.Spec.Orbit }))).
 		Watches(&operatorv1alpha1.NodeSettings{}, handler.EnqueueRequestsFromMapFunc(mapOrbitRef(func(o *operatorv1alpha1.NodeSettings) string { return o.Spec.Orbit }))).

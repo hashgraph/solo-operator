@@ -67,7 +67,7 @@ vars:
   CONFIG: "{{.BEACON_HOME}}/config.yaml"
   # Node HAPI endpoint exposed to the host.
   NS: solo-orbit
-  PF_SVC: haproxy-node0
+  PF_SVC: envoy-node0
   PORT: "50211"
   # How far out (minutes) to schedule the upgrade freeze.
   FREEZE_DELAY_MIN: "3"
