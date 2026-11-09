@@ -50,7 +50,7 @@ var _ = Describe("EnvoyProxy ACL files", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "envoy-node0", Namespace: ns},
 			Spec: operatorv1alpha1.EnvoyProxySpec{
 				Orbit:       ns,
-				ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+				ServiceType: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 				Listeners:   &operatorv1alpha1.EnvoyListenersSpec{GRPC: &operatorv1alpha1.EnvoyListenerSpec{}},
 				ACLFiles:    []operatorv1alpha1.EnvoyConfigMapKeyRef{{Name: cm.Name, Key: "blocklist.acl"}},
 			},
@@ -79,7 +79,7 @@ var _ = Describe("EnvoyProxy ACL files", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "envoy-node1", Namespace: ns},
 			Spec: operatorv1alpha1.EnvoyProxySpec{
 				Orbit:       ns,
-				ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+				ServiceType: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 				ACLFiles:    []operatorv1alpha1.EnvoyConfigMapKeyRef{{Name: "node1-ofac-list", Key: "blocklist.acl"}},
 			},
 		}

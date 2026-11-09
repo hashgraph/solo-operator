@@ -7,16 +7,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProxyServiceType represents how a proxy service is exposed
-// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
-type ProxyServiceType string
-
-const (
-	ProxyServiceTypeClusterIP    ProxyServiceType = "ClusterIP"
-	ProxyServiceTypeIngress      ProxyServiceType = "Ingress"
-	ProxyServiceTypeLoadBalancer ProxyServiceType = "LoadBalancer"
-)
-
 // Phase represents the lifecycle phase of a resource.
 type Phase string
 
@@ -782,40 +772,6 @@ type ConsensusNodeChangeset struct {
 	// Logging contains logging configuration changes
 	// +optional
 	Logging []NodeLoggingConfiguration `json:"logging,omitempty"`
-}
-
-// HaproxyChangeset defines changes for HAProxy
-type HaproxyChangeset struct {
-	// Haproxy contains HAProxy-specific changes
-	// +optional
-	Haproxy *HaproxyConfig `json:"haproxy,omitempty"`
-
-	// ServiceType is the Kubernetes service type
-	// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
-	// +kubebuilder:default=LoadBalancer
-	// +optional
-	ServiceType string `json:"serviceType,omitempty"`
-
-	// ServiceSpec is the full service specification
-	// +optional
-	ServiceSpec *corev1.ServiceSpec `json:"serviceSpec,omitempty"`
-}
-
-// HaproxyConfig contains HAProxy configuration
-type HaproxyConfig struct {
-	// SoftwareVersionSource specifies the image source
-	// +optional
-	SoftwareVersionSource *SoftwareVersionSource `json:"softwareVersionSource,omitempty"`
-
-	// User is the stats username
-	// +kubebuilder:default="user"
-	// +optional
-	User string `json:"user,omitempty"`
-
-	// Auth is the stats authentication
-	// +kubebuilder:default="auth"
-	// +optional
-	Auth string `json:"auth,omitempty"`
 }
 
 // Condition is an alias for metav1.Condition

@@ -141,6 +141,50 @@ type EnvoyTimeoutsSpec struct {
 	Drain *metav1.Duration `json:"drain,omitempty"`
 }
 
+// EnvoyServiceType represents how the Envoy Service is exposed
+// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
+type EnvoyServiceType string
+
+const (
+	EnvoyServiceTypeClusterIP    EnvoyServiceType = "ClusterIP"
+	EnvoyServiceTypeIngress      EnvoyServiceType = "Ingress"
+	EnvoyServiceTypeLoadBalancer EnvoyServiceType = "LoadBalancer"
+)
+
+type EnvoyProbeSpec struct {
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
+}
+
+// EnvoyProbesSpec is ignored when spec.files is set.
+type EnvoyProbesSpec struct {
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// +optional
+	Startup *EnvoyProbeSpec `json:"startup,omitempty"`
+
+	// +optional
+	Liveness *EnvoyProbeSpec `json:"liveness,omitempty"`
+
+	// +optional
+	Readiness *EnvoyProbeSpec `json:"readiness,omitempty"`
+}
+
 // EnvoyProxySpec defines the desired state of EnvoyProxy
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
 // +kubebuilder:validation:XValidation:rule="!has(self.aclFiles) || size(self.aclFiles) == 0 || self.serviceType != 'LoadBalancer' || self.externalTrafficPolicy == 'Local'",message="aclFiles with a LoadBalancer Service require externalTrafficPolicy Local"
@@ -192,7 +236,7 @@ type EnvoyProxySpec struct {
 	// ServiceType is the Kubernetes Service type.
 	// +kubebuilder:default=LoadBalancer
 	// +optional
-	ServiceType ProxyServiceType `json:"serviceType,omitempty"`
+	ServiceType EnvoyServiceType `json:"serviceType,omitempty"`
 
 	// ServiceSpec overrides the generated Service spec.
 	// +optional
@@ -262,6 +306,9 @@ type EnvoyProxySpec struct {
 
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	Probes *EnvoyProbesSpec `json:"probes,omitempty"`
 }
 
 // EnvoyProxyStatus defines the observed state of EnvoyProxy

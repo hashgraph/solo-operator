@@ -112,7 +112,7 @@ Prerequisites: a Solo network running on kind, and `keys/` populated.
 1. Expose one node's HAPI gRPC to your host (the freeze flow needs just one):
 
    ```bash
-   kubectl -n solo port-forward svc/haproxy-node1-svc 50211:50211
+   kubectl -n solo port-forward svc/envoy-node1 50211:50211
    ```
 
 2. Point `config.yaml` at it (`host: 127.0.0.1`, `port: 50211`, `tls: false`).
@@ -127,7 +127,7 @@ Prerequisites: a Solo network running on kind, and `keys/` populated.
 
 Run the `beacon` image as a `Job`. Small inputs are a ConfigMap + Secret; the
 config's `nodes[].host` uses Service DNS (e.g.
-`haproxy-node1-svc.solo.svc.cluster.local`).
+`envoy-node1.solo.svc.cluster.local`).
 
 ```bash
 kubectl apply -f examples/configmap-config.yaml   # config.yaml
@@ -266,8 +266,7 @@ task deploy:single                           # node0 + genesis; waits for Ready
 cd "$ROOT/docs/example"
 task setup
 task deploy                                  # orbit + 4 nodes + genesis
-kubectl apply -f node0/haproxycapsule.yaml
-kubectl -n solo-orbit rollout status deploy/haproxy-node0 --timeout=120s
+kubectl -n solo-orbit rollout status deploy/envoy-node0 --timeout=120s
 ```
 
 </details>
@@ -300,7 +299,7 @@ EOF
 
 **4. Drive the upgrade**
 
-Port-forward in a **separate terminal**: `kubectl -n solo-orbit port-forward svc/haproxy-node0 50211:50211`
+Port-forward in a **separate terminal**: `kubectl -n solo-orbit port-forward svc/envoy-node0 50211:50211`
 
 ```bash
 cd "$ROOT"

@@ -47,27 +47,13 @@ var _ = Describe("Orbit Invariants Validation", func() {
 			Expect(err.Error()).To(ContainSubstring("spec.orbitRef"))
 		})
 
-		It("Rejects HAProxyCapsule when orbit is empty", func() {
-			hp := &operatorv1alpha1.HAProxyCapsule{
-				ObjectMeta: metav1.ObjectMeta{Name: "hp-no-orbit", Namespace: testNS1},
-				Spec: operatorv1alpha1.HAProxyCapsuleSpec{
-					Orbit:       "",
-					Image:       "haproxy:2.8.10-alpine3.20",
-					ServiceType: operatorv1alpha1.HAProxyServiceTypeClusterIP,
-				},
-			}
-			err := k8sClient.Create(ctx, hp)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("spec.orbit"))
-		})
-
 		It("Rejects EnvoyProxy when orbit is empty", func() {
 			ep := &operatorv1alpha1.EnvoyProxy{
 				ObjectMeta: metav1.ObjectMeta{Name: "ep-no-orbit", Namespace: testNS1},
 				Spec: operatorv1alpha1.EnvoyProxySpec{
 					Orbit:       "",
 					Image:       "envoyproxy/envoy:distroless-v1.40.2",
-					ServiceType: operatorv1alpha1.ProxyServiceTypeClusterIP,
+					ServiceType: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 				},
 			}
 			err := k8sClient.Create(ctx, ep)
