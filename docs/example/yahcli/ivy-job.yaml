@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: yahcli-ivy-${TARGET}
+  namespace: solo-orbit
+  labels:
+    app.kubernetes.io/name: yahcli-ivy
+    app.kubernetes.io/instance: ${TARGET}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: ${DEADLINE_SECS}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: yahcli-ivy
+        app.kubernetes.io/instance: ${TARGET}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: yahcli
+          image: ${YAHCLI_IMG}
+          imagePullPolicy: IfNotPresent
+          workingDir: /launch
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              cp /cfg/config.yml /launch/config.yml
+              mkdir -p /launch/${TARGET}/keys
+              cp /keys/account2.pem /keys/account2.pass /launch/${TARGET}/keys/
+              exec /opt/bin/screened-launch.sh -n ${TARGET} -p 2 ivy scenarios ${IVY_SCENARIOS}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {memory: 2Gi}
+          volumeMounts:
+            - {name: launch, mountPath: /launch}
+            - {name: cfg, mountPath: /cfg, readOnly: true}
+            - {name: keys, mountPath: /keys, readOnly: true}
+      volumes:
+        - {name: launch, emptyDir: {}}
+        - {name: cfg, configMap: {name: yahcli-ivy-config}}
+        - {name: keys, secret: {secretName: yahcli-ivy-keys}}

@@ -123,6 +123,9 @@ func NewConsensusCapsuleReconciler(c client.Client, scheme *runtime.Scheme, rest
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=get;create
 // +kubebuilder:rbac:groups="",resources=pods/status,verbs=patch
+// Held only so the UC sidecar Role can delegate them (RBAC escalation check); see consensus.buildRole.
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=networkupgradeprepares;networkupgradefreezes;networkupgradeexecutes;networkupgradefreezeaborts,verbs=create;patch
+// +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=log4j2configs;nodesettings;applicationproperties;applicationoverrideproperties;bootstrapproperties;nodepropertiesconfigs;throttlesconfigs;feeschedules;simplefeesschedules;apipermissionproperties;blocknodesconfigs,verbs=create
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch,roleName=manager-role
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch,roleName=manager-role
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete

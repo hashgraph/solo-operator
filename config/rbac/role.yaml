@@ -118,6 +118,7 @@ rules:
   - simplefeesschedules
   - throttlesconfigs
   verbs:
+  - create
   - delete
   - get
   - list
@@ -192,8 +193,10 @@ rules:
   - networkupgradefreezes
   - networkupgradeprepares
   verbs:
+  - create
   - get
   - list
+  - patch
   - update
   - watch
 - apiGroups:

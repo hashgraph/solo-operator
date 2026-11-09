@@ -3,9 +3,13 @@
 package consensus
 
 import (
+	"os"
+	"slices"
+	"strings"
 	"testing"
 
 	rbacv1 "k8s.io/api/rbac/v1"
+	"sigs.k8s.io/yaml"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 )
@@ -146,4 +150,45 @@ func TestBuildRole_NoConfigMapOrSecretRead(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestBuildRole_DelegableByOperator guards the RBAC escalation check: the API server rejects
+// the UC Role unless the operator's own ClusterRole already holds every grant in it.
+func TestBuildRole_DelegableByOperator(t *testing.T) {
+	data, err := os.ReadFile("../../../config/rbac/role.yaml")
+	if err != nil {
+		t.Fatalf("read operator role: %v", err)
+	}
+	var held []rbacv1.PolicyRule
+	for _, doc := range strings.Split(string(data), "\n---\n") {
+		cr := rbacv1.ClusterRole{}
+		if err := yaml.Unmarshal([]byte(doc), &cr); err != nil {
+			t.Fatalf("parse operator role: %v", err)
+		}
+		held = append(held, cr.Rules...)
+	}
+
+	capsule := newTestCapsule()
+	capsule.Spec.PodProperties.Containers.UC = &operatorv1alpha1.UcSidecar{Enabled: true}
+	for _, rule := range (&RoleSubReconciler{}).buildRole(capsule, true).Rules {
+		for _, group := range rule.APIGroups {
+			for _, res := range rule.Resources {
+				for _, verb := range rule.Verbs {
+					if !holds(held, group, res, verb) {
+						t.Errorf("UC Role grants %s %s/%s, which the operator ClusterRole does not hold", verb, group, res)
+					}
+				}
+			}
+		}
+	}
+}
+
+func holds(rules []rbacv1.PolicyRule, group, resource, verb string) bool {
+	for _, r := range rules {
+		if len(r.ResourceNames) == 0 && slices.Contains(r.APIGroups, group) &&
+			slices.Contains(r.Resources, resource) && slices.Contains(r.Verbs, verb) {
+			return true
+		}
+	}
+	return false
 }
