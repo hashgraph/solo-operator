@@ -115,6 +115,13 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(nodeList.Items)).To(BeNumerically(">", 0))
 	fmt.Fprintf(GinkgoWriter, "Connected to cluster with %d nodes\n", len(nodeList.Items))
+
+	if testEnv.KubeconfigPath != "" && os.Getenv("E2E_SKIP_OPERATOR") != "true" {
+		By("Installing the operator")
+		Expect(testEnv.InstallOperator()).To(Succeed())
+	}
+	operatorReady = operatorRunning(ctx)
+	fmt.Fprintf(GinkgoWriter, "Operator running: %t\n", operatorReady)
 })
 
 var _ = AfterSuite(func() {

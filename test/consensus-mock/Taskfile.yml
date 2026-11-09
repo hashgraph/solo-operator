@@ -97,6 +97,12 @@ tasks:
     cmds:
       - docker build -t {{.MOCK_IMG}} .
 
+  docker:build:e2e:
+    desc: "Build a binary-only consensus-mock image for test/e2e (tag with MOCK_IMG=...)"
+    deps: [hash]
+    cmds:
+      - docker build --target selector -t {{.MOCK_IMG}} .
+
   build:manifest:
     internal: true
     desc: "Generate manifests/consensus-node-components.yaml with real deterministic layer hashes for IMAGE"
