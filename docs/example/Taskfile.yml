@@ -493,8 +493,20 @@ tasks:
           kubectl delete ${KIND} -n solo-orbit --all --ignore-not-found --wait=false
         done
 
+  operator:upgrade:
+    desc: Upgrade the operator in the existing kind cluster and apply envoy-node0
+    cmds:
+      - task: root:helm:sync-crds
+      - task: root:docker:build
+      - task: root:kind:load
+      - helm upgrade --install solo-operator ../../charts/solo-operator -n solo-operator --create-namespace --wait --timeout 120s --set image.tag=dev --set image.pullPolicy=Never
+      - kubectl -n solo-operator rollout restart deploy -l app.kubernetes.io/name=solo-operator
+      - kubectl -n solo-operator rollout status deploy -l app.kubernetes.io/name=solo-operator --timeout=120s
+      - kubectl apply -f node0/envoyproxycapsule.yaml
+      - kubectl -n solo-orbit rollout status deploy/envoy-node0 --timeout=180s
+
   yahcli:build:
-    desc: "Build {{.YAHCLI_IMG}} from hiero-consensus-node v{{.CN_VERSION}} (no published image matches the node version)"
+    desc: "Build {{.YAHCLI_IMG}} from hiero-consensus-node v{{.CN_VERSION}}"
     status:
       - docker image inspect {{.YAHCLI_IMG}} >/dev/null 2>&1
     cmds:
@@ -510,7 +522,7 @@ tasks:
         "$SRC/hedera-node/yahcli/run/build.sh" {{.CN_VERSION}}
 
   test:ivy:
-    desc: "Run yahcli ivy scenarios against node0 directly, then through envoy-node0 (after deploy:single or deploy)"
+    desc: "Run yahcli ivy scenarios against node0 and envoy-node0"
     deps: [yahcli:build]
     vars:
       IVY_SCENARIOS: '{{.IVY_SCENARIOS | default "--crypto --file --consensus --xfers"}}'

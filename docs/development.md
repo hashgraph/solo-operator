@@ -42,7 +42,8 @@ Most workflows are driven by [Task](https://taskfile.dev/); run `task --list` fo
 | `task docker:build` | Build the operator Docker image |
 | `task test:unit` | Unit tests with coverage |
 | `task test:integration` | Integration tests (requires envtest) |
-| `task test:e2e` | E2E tests (requires a kind cluster) |
+| `task test:e2e` | E2E tests on kind: builds images, installs the operator (`E2E_SKIP_BUILD=true` reuses images) |
+| `task test:e2e:proxy` | Only the EnvoyProxy E2E specs |
 | `task generate` | Regenerate CRD manifests + DeepCopy methods (run after editing `api/v1alpha1/`) |
 | `task lint` | Run golangci-lint (auto-fix where possible) |
 

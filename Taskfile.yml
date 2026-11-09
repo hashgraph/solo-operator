@@ -144,7 +144,13 @@ tasks:
   test:e2e:
     desc: Run E2E tests against kind cluster
     cmds:
-      - go test ./test/e2e/... -v
+      - go test ./test/e2e/... -v -timeout 45m {{.CLI_ARGS}}
+
+  test:e2e:proxy:
+    desc: Run only the proxy E2E specs
+    cmds:
+      - task: test:e2e
+        vars: { CLI_ARGS: '-ginkgo.label-filter=proxy' }
 
   test:coverage:
     desc: Run tests with coverage report

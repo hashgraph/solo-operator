@@ -72,11 +72,12 @@ The proxy derives its upstream from the CR name (e.g. `envoy-node1` → upstream
 `task test:ivy` runs the yahcli `ivy scenarios` (crypto, file, consensus, xfers) twice: first against `node0` directly, then through `envoy-node0`. A failure that only shows up through the proxy points at Envoy, not the node.
 
 ```shell
-task deploy:single   # or task deploy
+task deploy:single      # or task deploy
+task operator:upgrade   # existing cluster only
 task test:ivy
 ```
 
-- No published yahcli image matches consensus-node `0.77.2`, so `yahcli:build` clones `hiero-consensus-node` at `v0.77.2` into `/tmp` and builds `gcr.io/hedera-registry/yahcli:0.77.2`. It needs a JDK and takes a while the first time; later runs reuse the image.
+- No published yahcli image matches consensus-node `0.77.2`, so `yahcli:build` clones `hiero-consensus-node` at `v0.77.2` into `/tmp` and builds `gcr.io/hedera-registry/yahcli:0.77.2`. It needs JDK 25 (`JAVA_HOME`) and takes a while the first time; later runs reuse the image.
 - Override with `CN_VERSION=...` when the node version changes, and `IVY_SCENARIOS="--crypto ..."` to pick scenarios.
 - Each run is a Job in `solo-orbit` (`yahcli-ivy-direct`, `yahcli-ivy-proxy`); see `kubectl -n solo-orbit logs job/yahcli-ivy-proxy`.
 
