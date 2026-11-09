@@ -140,8 +140,22 @@ tasks:
     cmds:
       - task: deploy:genesis
       - echo ">> Waiting for all consensus node pods to be ready..."
-      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - task: wait:nodes
+        vars: { COUNT: '4' }
       - echo ">> All 4 nodes deployed, genesis completed, and pods ready"
+
+  wait:nodes:
+    internal: true
+    vars:
+      COUNT: '{{.COUNT | default "1"}}'
+    cmds:
+      # kubectl wait -l fails outright until the StatefulSet pods exist.
+      - |
+        for i in $(seq 150); do
+          [ "$(kubectl get pod -n solo-orbit -l app.kubernetes.io/component=consensus-node -o name | wc -l)" -ge {{.COUNT}} ] && break
+          sleep 2
+        done
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
 
   deploy:single:
     desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
@@ -158,7 +172,7 @@ tasks:
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
       - echo ">> Waiting for node0 pod to be ready..."
-      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - task: wait:nodes
       - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/envoy-node0 50211 50211"
 
   cluster:
