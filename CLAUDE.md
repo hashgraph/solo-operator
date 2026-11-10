@@ -10,7 +10,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `Orbit` — cluster-scoped network configuration
 - `ConsensusCapsule` — namespace-scoped Hedera consensus node
 - `NetworkGenesis` — namespace-scoped network genesis operation (produces roster + address book ConfigMaps)
-- `HAProxyCapsule` — namespace-scoped HAProxy load balancer
 - `EnvoyProxy` — namespace-scoped Envoy proxy
 - `HelmCapsule` — Helm-managed deployments
 
@@ -54,6 +53,7 @@ task build:binary        # build manager binary to bin/manager
 task test:unit           # unit tests with coverage
 task test:integration    # integration tests with envtest
 task test:e2e            # E2E tests against a kind cluster
+task test:e2e:proxy      # EnvoyProxy E2E specs only
 
 # Code generation (run after modifying api/v1alpha1/ types)
 task generate            # run all generators (manifests + deepcopy + rbac)

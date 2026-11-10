@@ -2,7 +2,7 @@
 #
 # beacon's network config, pointed at the consensus-mock ConsensusCapsule's
 # own Service (internal/resources/consensus/service.go names it after the
-# capsule — "node0" — with a ClusterIP grpc port 50211). No HAProxy is
+# capsule — "node0" — with a ClusterIP grpc port 50211). No proxy is
 # deployed in this trimmed single-node harness, so beacon talks to the node
 # directly. Mirrors docs/beacon/examples/configmap-config.yaml.
 apiVersion: v1

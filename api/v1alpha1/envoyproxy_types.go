@@ -32,15 +32,169 @@ type CORSConfig struct {
 	MaxAge string `json:"maxAge,omitempty"`
 }
 
+// EnvoyUpstreamProtocol is the upstream protocol.
+// +kubebuilder:validation:Enum=HTTP;HTTPS
+type EnvoyUpstreamProtocol string
+
+const (
+	EnvoyUpstreamProtocolHTTP  EnvoyUpstreamProtocol = "HTTP"
+	EnvoyUpstreamProtocolHTTPS EnvoyUpstreamProtocol = "HTTPS"
+)
+
+// EnvoyHealthCheckType is the upstream health check.
+// +kubebuilder:validation:Enum=TCP;GRPC
+type EnvoyHealthCheckType string
+
+const (
+	EnvoyHealthCheckTCP  EnvoyHealthCheckType = "TCP"
+	EnvoyHealthCheckGRPC EnvoyHealthCheckType = "GRPC"
+)
+
+type EnvoyUpstreamSpec struct {
+	// +optional
+	Protocol EnvoyUpstreamProtocol `json:"protocol,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$`
+	// +optional
+	ServerName string `json:"serverName,omitempty"`
+
+	// +kubebuilder:default=TCP
+	// +optional
+	HealthCheck EnvoyHealthCheckType `json:"healthCheck,omitempty"`
+}
+
+type EnvoyListenerSpec struct {
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// +optional
+	TLSSecretName string `json:"tlsSecretName,omitempty"`
+
+	// +optional
+	Upstream *EnvoyUpstreamSpec `json:"upstream,omitempty"`
+}
+
+type EnvoyGRPCWebListenerSpec struct {
+	EnvoyListenerSpec `json:",inline"`
+
+	// +optional
+	CORS *CORSConfig `json:"cors,omitempty"`
+
+	// +kubebuilder:validation:MaxItems=64
+	// +optional
+	TrustedProxyCIDRs []EnvoyCIDR `json:"trustedProxyCIDRs,omitempty"`
+}
+
+// EnvoyListenersSpec defaults ports to 8081, 50211 and 50212; upstreams to HTTP 50211, except grpcs to HTTPS 50212.
+// +kubebuilder:validation:XValidation:rule="!has(self.grpcs) || has(self.grpcs.tlsSecretName)",message="grpcs requires tlsSecretName"
+type EnvoyListenersSpec struct {
+	// +optional
+	GRPCWeb *EnvoyGRPCWebListenerSpec `json:"grpcWeb,omitempty"`
+
+	// +optional
+	GRPC *EnvoyListenerSpec `json:"grpc,omitempty"`
+
+	// +optional
+	GRPCS *EnvoyListenerSpec `json:"grpcs,omitempty"`
+}
+
+type EnvoyConfigMapKeyRef struct {
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+}
+
+// EnvoyCIDR is an IPv4 or IPv6 CIDR.
+// +kubebuilder:validation:MaxLength=43
+// +kubebuilder:validation:XValidation:rule="isCIDR(self)",message="must be a CIDR"
+type EnvoyCIDR string
+
+type EnvoyTimeoutsSpec struct {
+	// +kubebuilder:default="10s"
+	// +optional
+	Connect *metav1.Duration `json:"connect,omitempty"`
+
+	// +kubebuilder:default="120s"
+	// +optional
+	Client *metav1.Duration `json:"client,omitempty"`
+
+	// +kubebuilder:default="120s"
+	// +optional
+	Server *metav1.Duration `json:"server,omitempty"`
+
+	// +kubebuilder:default="3600s"
+	// +optional
+	Stream *metav1.Duration `json:"stream,omitempty"`
+
+	// +kubebuilder:default="30m"
+	// +optional
+	Drain *metav1.Duration `json:"drain,omitempty"`
+}
+
+// EnvoyServiceType represents how the Envoy Service is exposed
+// +kubebuilder:validation:Enum=ClusterIP;Ingress;LoadBalancer
+type EnvoyServiceType string
+
+const (
+	EnvoyServiceTypeClusterIP    EnvoyServiceType = "ClusterIP"
+	EnvoyServiceTypeIngress      EnvoyServiceType = "Ingress"
+	EnvoyServiceTypeLoadBalancer EnvoyServiceType = "LoadBalancer"
+)
+
+type EnvoyProbeSpec struct {
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	InitialDelaySeconds *int32 `json:"initialDelaySeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	PeriodSeconds *int32 `json:"periodSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	TimeoutSeconds *int32 `json:"timeoutSeconds,omitempty"`
+
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	FailureThreshold *int32 `json:"failureThreshold,omitempty"`
+}
+
+// EnvoyProbesSpec is ignored when spec.files is set.
+type EnvoyProbesSpec struct {
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// +optional
+	Startup *EnvoyProbeSpec `json:"startup,omitempty"`
+
+	// +optional
+	Liveness *EnvoyProbeSpec `json:"liveness,omitempty"`
+
+	// +optional
+	Readiness *EnvoyProbeSpec `json:"readiness,omitempty"`
+}
+
 // EnvoyProxySpec defines the desired state of EnvoyProxy
 // +kubebuilder:validation:XValidation:rule="self.serviceType != 'Ingress' || has(self.ingressSpec)",message="ingressSpec is required when serviceType is Ingress"
+// +kubebuilder:validation:XValidation:rule="!has(self.aclFiles) || size(self.aclFiles) == 0 || self.serviceType != 'LoadBalancer' || self.externalTrafficPolicy == 'Local'",message="aclFiles with a LoadBalancer Service require externalTrafficPolicy Local"
 type EnvoyProxySpec struct {
 	// Orbit is the owning Orbit's name.
 	// +kubebuilder:validation:MinLength=1
 	Orbit string `json:"orbit"`
 
 	// Image is the Envoy container image.
-	// +kubebuilder:default="envoyproxy/envoy-distroless:v1.21.6"
+	// +kubebuilder:default="envoyproxy/envoy:distroless-v1.40.2"
 	// +kubebuilder:validation:MaxLength=512
 	// +kubebuilder:validation:XValidation:rule="self.matches('@sha256:[a-f0-9]{64}$') || self.matches(':[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')",message="image must be pinned by a tag or a sha256 digest"
 	// +kubebuilder:validation:XValidation:rule="!self.lowerAscii().matches(':latest(@sha256:[a-f0-9]{64})?$')",message="image must not use the mutable 'latest' tag"
@@ -57,12 +211,9 @@ type EnvoyProxySpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 
-	// ProxyPort is the gRPC-Web listener port.
-	// +kubebuilder:default=8081
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default={grpcWeb: {}}
 	// +optional
-	ProxyPort int32 `json:"proxyPort,omitempty"`
+	Listeners *EnvoyListenersSpec `json:"listeners,omitempty"`
 
 	// AdminPort is the Envoy admin interface port.
 	// +kubebuilder:default=9901
@@ -78,14 +229,14 @@ type EnvoyProxySpec struct {
 	// +optional
 	MetricsPort int32 `json:"metricsPort,omitempty"`
 
-	// Files overrides the operator-generated envoy.yaml. Map of filename → content.
+	// Files overlays the generated envoy.yaml, lds.yaml, cds.yaml and sds-*.yaml by key.
 	// +optional
 	Files map[string]string `json:"files,omitempty"`
 
 	// ServiceType is the Kubernetes Service type.
 	// +kubebuilder:default=LoadBalancer
 	// +optional
-	ServiceType ProxyServiceType `json:"serviceType,omitempty"`
+	ServiceType EnvoyServiceType `json:"serviceType,omitempty"`
 
 	// ServiceSpec overrides the generated Service spec.
 	// +optional
@@ -119,13 +270,6 @@ type EnvoyProxySpec struct {
 	// +optional
 	UpstreamService string `json:"upstreamService,omitempty"`
 
-	// UpstreamPort is the upstream gRPC port.
-	// +kubebuilder:default=50211
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	// +optional
-	UpstreamPort int32 `json:"upstreamPort,omitempty"`
-
 	// ExternalTrafficPolicy controls routing for external traffic.
 	// +kubebuilder:validation:Enum=Cluster;Local
 	// +kubebuilder:default=Local
@@ -140,19 +284,31 @@ type EnvoyProxySpec struct {
 	// +optional
 	AdditionalLabels map[string]string `json:"additionalLabels,omitempty"`
 
-	// CORSConfig customizes CORS in the operator-generated config. Ignored if Files is set.
-	// +optional
-	CORSConfig *CORSConfig `json:"corsConfig,omitempty"`
-
-	// TLSSecretName is a kubernetes.io/tls secret (tls.crt + tls.key). Enables TLS termination on proxyPort.
-	// Works directly with cert-manager Certificate secrets.
-	// +optional
-	TLSSecretName string `json:"tlsSecretName,omitempty"`
-
 	// ExposeAdmin binds the Envoy admin interface to 0.0.0.0 and adds the admin port to the container ports.
 	// By default admin is bound to 127.0.0.1 only (not reachable outside the pod).
 	// +optional
 	ExposeAdmin bool `json:"exposeAdmin,omitempty"`
+
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=key
+	// +kubebuilder:validation:MaxItems=16
+	// +optional
+	ACLFiles []EnvoyConfigMapKeyRef `json:"aclFiles,omitempty"`
+
+	// +optional
+	Timeouts *EnvoyTimeoutsSpec `json:"timeouts,omitempty"`
+
+	// +kubebuilder:default=10000
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	MaxConnections int32 `json:"maxConnections,omitempty"`
+
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	Probes *EnvoyProbesSpec `json:"probes,omitempty"`
 }
 
 // EnvoyProxyStatus defines the observed state of EnvoyProxy
@@ -185,16 +341,23 @@ type EnvoyProxyStatus struct {
 	// +optional
 	UpdatedReplicas int32 `json:"updatedReplicas,omitempty"`
 
-	// Conditions are the deployment conditions.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
-	Conditions []appsv1.DeploymentCondition `json:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
+
+	// +optional
+	DeploymentConditions []appsv1.DeploymentCondition `json:"deploymentConditions,omitempty"`
 }
+
+const EnvoyProxyConditionTypeReconciled = "Reconciled"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=envoy
 // +kubebuilder:printcolumn:name="Replicas",type="integer",JSONPath=".status.replicas"
 // +kubebuilder:printcolumn:name="Ready",type="integer",JSONPath=".status.readyReplicas"
+// +kubebuilder:printcolumn:name="Reconciled",type="string",JSONPath=".status.conditions[?(@.type=='Reconciled')].status"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // EnvoyProxy is the Schema for the envoyproxies API

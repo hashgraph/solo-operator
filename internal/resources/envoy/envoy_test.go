@@ -4,7 +4,6 @@ package envoy
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -122,40 +122,6 @@ func TestGetReplicas(t *testing.T) {
 	}
 }
 
-func TestGetProxyPort(t *testing.T) {
-	tests := []struct {
-		name      string
-		proxyPort int32
-		expected  int32
-	}{
-		{
-			name:      "default port",
-			proxyPort: 0,
-			expected:  DefaultProxyPort,
-		},
-		{
-			name:      "custom port",
-			proxyPort: 9090,
-			expected:  9090,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			envoy := &operatorv1alpha1.EnvoyProxy{
-				Spec: operatorv1alpha1.EnvoyProxySpec{
-					ProxyPort: tt.proxyPort,
-				},
-			}
-
-			got := GetProxyPort(envoy)
-			if got != tt.expected {
-				t.Errorf("expected %d, got %d", tt.expected, got)
-			}
-		})
-	}
-}
-
 func TestGetAdminPort(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -187,180 +153,6 @@ func TestGetAdminPort(t *testing.T) {
 				t.Errorf("expected %d, got %d", tt.expected, got)
 			}
 		})
-	}
-}
-
-func TestBuildEnv(t *testing.T) {
-	t.Run("default env vars", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{}
-
-		envVars := BuildEnv(envoy)
-
-		if len(envVars) != 2 {
-			t.Fatalf("expected 2 env vars, got %d", len(envVars))
-		}
-
-		// Check SERVICE_CLUSTER
-		found := false
-		for _, e := range envVars {
-			if e.Name == "SERVICE_CLUSTER" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected SERVICE_CLUSTER env var")
-		}
-
-		// Check SERVICE_NODE
-		found = false
-		for _, e := range envVars {
-			if e.Name == "SERVICE_NODE" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected SERVICE_NODE env var")
-		}
-	})
-
-	t.Run("custom env vars", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{
-			Spec: operatorv1alpha1.EnvoyProxySpec{
-				Env: []corev1.EnvVar{
-					{Name: "CUSTOM_VAR", Value: "custom_value"},
-				},
-			},
-		}
-
-		envVars := BuildEnv(envoy)
-
-		if len(envVars) != 1 {
-			t.Fatalf("expected 1 env var, got %d", len(envVars))
-		}
-		if envVars[0].Name != "CUSTOM_VAR" {
-			t.Errorf("expected CUSTOM_VAR, got %s", envVars[0].Name)
-		}
-	})
-}
-
-func TestDefaultEnvoyConfig(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			ProxyPort: 8080,
-		},
-	}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-
-	if _, ok := config[ConfigFileName]; !ok {
-		t.Errorf("expected %s to be present in config", ConfigFileName)
-	}
-}
-
-func TestDefaultEnvoyConfig_PrometheusListener(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			ProxyPort: 8081,
-		},
-	}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-	cfg := config[ConfigFileName]
-
-	if !containsStr(cfg, "prometheus_listener") {
-		t.Error("expected prometheus_listener in default envoy config")
-	}
-	if !containsStr(cfg, "/metrics") {
-		t.Error("expected /metrics route in default envoy config")
-	}
-	if !containsStr(cfg, "/stats/prometheus") {
-		t.Error("expected /stats/prometheus prefix_rewrite in default envoy config")
-	}
-}
-
-func TestDefaultEnvoyConfig_MetricsPort_Default(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-	cfg := config[ConfigFileName]
-
-	expected := fmt.Sprintf("port_value: %d", DefaultMetricsPort)
-	if !containsStr(cfg, expected) {
-		t.Errorf("expected metrics port %d in config, got:\n%s", DefaultMetricsPort, cfg)
-	}
-}
-
-func TestDefaultEnvoyConfig_MetricsPort_Custom(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			MetricsPort: 9091,
-		},
-	}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-	cfg := config[ConfigFileName]
-
-	if !containsStr(cfg, "port_value: 9091") {
-		t.Errorf("expected custom metrics port 9091 in config, got:\n%s", cfg)
-	}
-}
-
-func TestDefaultEnvoyConfig_CORSDefaults(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-	cfg := config[ConfigFileName]
-
-	if !containsStr(cfg, "x-grpc-web") {
-		t.Error("expected default gRPC-Web CORS headers in config")
-	}
-	if !containsStr(cfg, "custom-header-1") {
-		t.Error("expected custom-header-1 in default CORS config")
-	}
-	if !containsStr(cfg, "1728000") {
-		t.Error("expected default max_age 1728000 in config")
-	}
-	if !containsStr(cfg, "grpc-status,grpc-message") {
-		t.Error("expected default expose_headers in config")
-	}
-}
-
-func TestDefaultEnvoyConfig_CORSConfig_Override(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			CORSConfig: &operatorv1alpha1.CORSConfig{
-				AllowOrigins:  []string{"https://app.example.com"},
-				AllowMethods:  "GET, POST",
-				AllowHeaders:  []string{"content-type", "x-grpc-web"},
-				ExposeHeaders: []string{"grpc-status"},
-				MaxAge:        "3600",
-			},
-		},
-	}
-
-	config := mustDefaultEnvoyConfig(t, envoy)
-	cfg := config[ConfigFileName]
-
-	if !containsStr(cfg, "https://app.example.com") {
-		t.Error("expected custom AllowOrigins in config")
-	}
-	if !containsStr(cfg, "GET, POST") {
-		t.Error("expected custom AllowMethods in config")
-	}
-	if !containsStr(cfg, "content-type,x-grpc-web") {
-		t.Error("expected custom AllowHeaders in config")
-	}
-	if !containsStr(cfg, "grpc-status") {
-		t.Error("expected custom ExposeHeaders in config")
-	}
-	if !containsStr(cfg, "3600") {
-		t.Error("expected custom MaxAge in config")
-	}
-	// Default wildcard must not appear when overridden
-	if containsStr(cfg, "prefix: '*'") {
-		t.Error("default wildcard origin must not appear when AllowOrigins is overridden")
 	}
 }
 
@@ -411,106 +203,51 @@ func TestDeploymentSubReconciler_Probes(t *testing.T) {
 	if container.ReadinessProbe == nil {
 		t.Fatal("expected readiness probe to be set")
 	}
-	if container.ReadinessProbe.HTTPGet == nil || container.ReadinessProbe.HTTPGet.Path != "/healthz" {
-		t.Error("expected readiness probe GET /healthz")
+	if container.ReadinessProbe.TCPSocket == nil || container.ReadinessProbe.TCPSocket.Port.IntVal != DefaultGRPCWebPort {
+		t.Error("expected readiness probe on the grpc-web listener port")
 	}
 }
 
-func TestDefaultEnvoyConfig_TLS(t *testing.T) {
-	t.Run("no transport_socket without TLS", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{}
-		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
-		if containsStr(cfg, "transport_socket") {
-			t.Error("transport_socket must not appear when TLSSecretName is empty")
-		}
-	})
+func TestBuildDeployment_ProbeOverrides(t *testing.T) {
+	envoy := newTestEnvoy()
+	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{
+		Startup:   &operatorv1alpha1.EnvoyProbeSpec{FailureThreshold: int32Ptr(720), InitialDelaySeconds: int32Ptr(60)},
+		Readiness: &operatorv1alpha1.EnvoyProbeSpec{TimeoutSeconds: int32Ptr(3)},
+	}
+	r := NewDeploymentSubReconciler(nil, newTestScheme())
+	deploy, err := r.buildDeployment(envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := deploy.Spec.Template.Spec.Containers[0]
 
-	t.Run("transport_socket with TLS", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{
-			Spec: operatorv1alpha1.EnvoyProxySpec{TLSSecretName: "my-tls-secret"},
-		}
-		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
-		if !containsStr(cfg, "transport_socket") {
-			t.Error("expected transport_socket in config when TLSSecretName is set")
-		}
-		if !containsStr(cfg, TLSCertPath) {
-			t.Errorf("expected cert path %s in TLS config", TLSCertPath)
-		}
-		if !containsStr(cfg, TLSKeyPath) {
-			t.Errorf("expected key path %s in TLS config", TLSKeyPath)
-		}
-		if !containsStr(cfg, "DownstreamTlsContext") {
-			t.Error("expected DownstreamTlsContext in TLS config")
-		}
-	})
+	if c.StartupProbe.FailureThreshold != 720 || c.StartupProbe.InitialDelaySeconds != 60 {
+		t.Errorf("startup override not applied: %+v", c.StartupProbe)
+	}
+	if c.StartupProbe.PeriodSeconds != defaultStartupProbe.PeriodSeconds {
+		t.Errorf("unset startup field should keep default, got period %d", c.StartupProbe.PeriodSeconds)
+	}
+	if c.ReadinessProbe.TimeoutSeconds != 3 || c.ReadinessProbe.TCPSocket == nil {
+		t.Errorf("readiness override not applied: %+v", c.ReadinessProbe)
+	}
+	want := defaultLivenessProbe
+	want.ProbeHandler = c.LivenessProbe.ProbeHandler
+	if *c.LivenessProbe != want {
+		t.Errorf("liveness should use defaults, got %+v", c.LivenessProbe)
+	}
 }
 
-func TestDeployment_TLS(t *testing.T) {
-	ctx := context.Background()
-	scheme := newTestScheme()
-
-	t.Run("no TLS volume without TLSSecretName", func(t *testing.T) {
-		envoy := newTestEnvoy()
-		c := newTestClient(scheme, envoy)
-		_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, envoy)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		deploy := &appsv1.Deployment{}
-		if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
-			t.Fatalf("failed to get deployment: %v", err)
-		}
-		for _, v := range deploy.Spec.Template.Spec.Volumes {
-			if v.Name == TLSVolumeName {
-				t.Error("TLS volume must not be present when TLSSecretName is empty")
-			}
-		}
-		if len(deploy.Spec.Template.Spec.Volumes) != 1 {
-			t.Errorf("expected 1 volume, got %d", len(deploy.Spec.Template.Spec.Volumes))
-		}
-	})
-
-	t.Run("TLS volume present with TLSSecretName", func(t *testing.T) {
-		envoy := newTestEnvoy()
-		envoy.Spec.TLSSecretName = "my-tls-secret"
-		c := newTestClient(scheme, envoy)
-		_, err := NewDeploymentSubReconciler(c, scheme).Reconcile(ctx, envoy)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		deploy := &appsv1.Deployment{}
-		if err := c.Get(ctx, client.ObjectKey{Name: envoy.Name, Namespace: envoy.Namespace}, deploy); err != nil {
-			t.Fatalf("failed to get deployment: %v", err)
-		}
-		if len(deploy.Spec.Template.Spec.Volumes) != 2 {
-			t.Errorf("expected 2 volumes (config+tls), got %d", len(deploy.Spec.Template.Spec.Volumes))
-		}
-		found := false
-		for _, v := range deploy.Spec.Template.Spec.Volumes {
-			if v.Name == TLSVolumeName {
-				found = true
-				if v.Secret == nil || v.Secret.SecretName != "my-tls-secret" {
-					t.Error("TLS volume must reference the configured secret")
-				}
-			}
-		}
-		if !found {
-			t.Error("TLS volume not found in deployment")
-		}
-		container := deploy.Spec.Template.Spec.Containers[0]
-		foundMount := false
-		for _, m := range container.VolumeMounts {
-			if m.Name == TLSVolumeName {
-				foundMount = true
-				if m.MountPath != TLSMountPath {
-					t.Errorf("expected TLS mount path %s, got %s", TLSMountPath, m.MountPath)
-				}
-			}
-		}
-		if !foundMount {
-			t.Error("TLS volume mount not found in container")
-		}
-	})
+func TestBuildDeployment_ProbesDisabled(t *testing.T) {
+	envoy := newTestEnvoy()
+	envoy.Spec.Probes = &operatorv1alpha1.EnvoyProbesSpec{Enabled: ptr.To(false)}
+	deploy, err := NewDeploymentSubReconciler(nil, newTestScheme()).buildDeployment(envoy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := deploy.Spec.Template.Spec.Containers[0]
+	if c.StartupProbe != nil || c.LivenessProbe != nil || c.ReadinessProbe != nil {
+		t.Error("expected no probes when probes.enabled is false")
+	}
 }
 
 func int32Ptr(i int32) *int32 {
@@ -519,16 +256,6 @@ func int32Ptr(i int32) *int32 {
 
 func containsStr(s, substr string) bool {
 	return strings.Contains(s, substr)
-}
-
-// mustDefaultEnvoyConfig calls DefaultEnvoyConfig and fails the test on error.
-func mustDefaultEnvoyConfig(t *testing.T, envoy *operatorv1alpha1.EnvoyProxy) map[string]string {
-	t.Helper()
-	cfg, err := DefaultEnvoyConfig(envoy)
-	if err != nil {
-		t.Fatalf("DefaultEnvoyConfig returned unexpected error: %v", err)
-	}
-	return cfg
 }
 
 func newTestScheme() *runtime.Scheme {
@@ -554,9 +281,8 @@ func newTestEnvoy() *operatorv1alpha1.EnvoyProxy {
 			UID:       "test-uid",
 		},
 		Spec: operatorv1alpha1.EnvoyProxySpec{
-			Image:                         "envoyproxy/envoy-distroless:v1.21.6",
+			Image:                         "envoyproxy/envoy:distroless-v1.40.2",
 			Replicas:                      &replicas,
-			ProxyPort:                     8081,
 			AdminPort:                     9901,
 			TerminationGracePeriodSeconds: 10,
 		},
@@ -693,7 +419,7 @@ func TestServiceSubReconciler(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -716,13 +442,10 @@ func TestServiceSubReconciler(t *testing.T) {
 	}
 
 	if len(svc.Spec.Ports) != 2 {
-		t.Fatalf("expected 2 ports (grpc + metrics), got %d", len(svc.Spec.Ports))
+		t.Fatalf("expected 2 ports (metrics + grpc-web), got %d", len(svc.Spec.Ports))
 	}
-	if svc.Spec.Ports[0].Port != envoy.Spec.ProxyPort {
-		t.Errorf("expected proxy port %d, got %d", envoy.Spec.ProxyPort, svc.Spec.Ports[0].Port)
-	}
-	if svc.Spec.Ports[1].Port != DefaultMetricsPort {
-		t.Errorf("expected metrics port %d, got %d", DefaultMetricsPort, svc.Spec.Ports[1].Port)
+	if svc.Spec.Ports[0].Port != DefaultMetricsPort || svc.Spec.Ports[1].Port != DefaultGRPCWebPort {
+		t.Errorf("unexpected ports %+v", svc.Spec.Ports)
 	}
 }
 
@@ -730,7 +453,7 @@ func TestServiceSubReconciler_ClusterIP(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -753,7 +476,7 @@ func TestServiceSubReconciler_IngressType(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	c := newTestClient(scheme, envoy)
 
 	reconciler := NewServiceSubReconciler(c, scheme)
@@ -777,7 +500,7 @@ func TestIngressSubReconciler_Skipped(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -795,7 +518,7 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -810,7 +533,7 @@ func TestIngressSubReconciler_CreatesIngress(t *testing.T) {
 								Backend: networkingv1.IngressBackend{
 									Service: &networkingv1.IngressServiceBackend{
 										Name: "test-envoy",
-										Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+										Port: networkingv1.ServiceBackendPort{Number: DefaultGRPCWebPort},
 									},
 								},
 							},
@@ -842,7 +565,7 @@ func TestIngressSubReconciler_SkippedForClusterIP(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewIngressSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -860,7 +583,7 @@ func TestIngressSubReconciler_NilIngressSpec(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	envoy.Spec.IngressSpec = nil
 	c := newTestClient(scheme, envoy)
 
@@ -879,7 +602,7 @@ func TestIngressSubReconciler_IngressClassName(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	className := "nginx"
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
@@ -893,7 +616,7 @@ func TestIngressSubReconciler_IngressClassName(t *testing.T) {
 							{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 								Service: &networkingv1.IngressServiceBackend{
 									Name: "test-envoy",
-									Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+									Port: networkingv1.ServiceBackendPort{Number: DefaultGRPCWebPort},
 								},
 							}},
 						},
@@ -922,7 +645,7 @@ func TestIngressSubReconciler_Labels(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -932,7 +655,7 @@ func TestIngressSubReconciler_Labels(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-envoy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+								Port: networkingv1.ServiceBackendPort{Number: DefaultGRPCWebPort},
 							},
 						}},
 					},
@@ -963,7 +686,7 @@ func TestIngressSubReconciler_Update(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -973,7 +696,7 @@ func TestIngressSubReconciler_Update(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-envoy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+								Port: networkingv1.ServiceBackendPort{Number: DefaultGRPCWebPort},
 							},
 						}},
 					},
@@ -1007,7 +730,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeIngress
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeIngress
 	pathType := networkingv1.PathTypePrefix
 	envoy.Spec.IngressSpec = &networkingv1.IngressSpec{
 		Rules: []networkingv1.IngressRule{
@@ -1017,7 +740,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 						{Path: "/", PathType: &pathType, Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: "test-envoy",
-								Port: networkingv1.ServiceBackendPort{Number: DefaultProxyPort},
+								Port: networkingv1.ServiceBackendPort{Number: DefaultGRPCWebPort},
 							},
 						}},
 					},
@@ -1039,7 +762,7 @@ func TestIngressSubReconciler_DeletesOnServiceTypeChange(t *testing.T) {
 	}
 
 	// Switch away from Ingress
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
 		t.Fatalf("delete reconcile failed: %v", err)
 	}
@@ -1106,32 +829,6 @@ func TestExposeAdmin_ExposesAdminPort(t *testing.T) {
 	if !found {
 		t.Errorf("expected admin port %d to be exposed", DefaultAdminPort)
 	}
-}
-
-func TestExposeAdmin_AdminAddressInConfig(t *testing.T) {
-	t.Run("admin bound to 127.0.0.1 by default", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{}
-		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
-		if !containsStr(cfg, "address: 127.0.0.1") {
-			t.Error("expected admin to be bound to 127.0.0.1 by default")
-		}
-		if containsStr(cfg, "address: 0.0.0.0\n      port_value: 9901") {
-			t.Error("admin must not be on 0.0.0.0 by default")
-		}
-	})
-
-	t.Run("admin bound to 0.0.0.0 when ExposeAdmin=true", func(t *testing.T) {
-		envoy := &operatorv1alpha1.EnvoyProxy{
-			Spec: operatorv1alpha1.EnvoyProxySpec{
-				ExposeAdmin: true,
-				AdminPort:   9901,
-			},
-		}
-		cfg := mustDefaultEnvoyConfig(t, envoy)[ConfigFileName]
-		if !containsStr(cfg, "address: 0.0.0.0") {
-			t.Error("expected admin to be bound to 0.0.0.0 when ExposeAdmin=true")
-		}
-	})
 }
 
 func TestNewSubReconcilers(t *testing.T) {
@@ -1350,7 +1047,7 @@ func TestServiceSubReconciler_ClusterIP_NoExternalTrafficPolicy(t *testing.T) {
 	ctx := context.Background()
 	scheme := newTestScheme()
 	envoy := newTestEnvoy()
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	c := newTestClient(scheme, envoy)
 
 	_, err := NewServiceSubReconciler(c, scheme).Reconcile(ctx, envoy)
@@ -1490,23 +1187,23 @@ func TestServiceSubReconciler_MetricsPort_Custom(t *testing.T) {
 func TestGetServiceType(t *testing.T) {
 	tests := []struct {
 		name     string
-		svcType  operatorv1alpha1.ProxyServiceType
-		expected operatorv1alpha1.ProxyServiceType
+		svcType  operatorv1alpha1.EnvoyServiceType
+		expected operatorv1alpha1.EnvoyServiceType
 	}{
 		{
 			name:     "empty falls back to LoadBalancer",
 			svcType:  "",
-			expected: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+			expected: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 		},
 		{
 			name:     "explicit ClusterIP",
-			svcType:  operatorv1alpha1.ProxyServiceTypeClusterIP,
-			expected: operatorv1alpha1.ProxyServiceTypeClusterIP,
+			svcType:  operatorv1alpha1.EnvoyServiceTypeClusterIP,
+			expected: operatorv1alpha1.EnvoyServiceTypeClusterIP,
 		},
 		{
 			name:     "explicit LoadBalancer",
-			svcType:  operatorv1alpha1.ProxyServiceTypeLoadBalancer,
-			expected: operatorv1alpha1.ProxyServiceTypeLoadBalancer,
+			svcType:  operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
+			expected: operatorv1alpha1.EnvoyServiceTypeLoadBalancer,
 		},
 	}
 
@@ -1620,7 +1317,7 @@ func TestServiceSubReconciler_UpdateOnTypeChange(t *testing.T) {
 	}
 
 	// Switch to ClusterIP
-	envoy.Spec.ServiceType = operatorv1alpha1.ProxyServiceTypeClusterIP
+	envoy.Spec.ServiceType = operatorv1alpha1.EnvoyServiceTypeClusterIP
 	if _, err := reconciler.Reconcile(ctx, envoy); err != nil {
 		t.Fatalf("unexpected error on update: %v", err)
 	}
@@ -1757,38 +1454,6 @@ func TestDeploymentSubReconciler_ProbesDisabledWithCustomFiles(t *testing.T) {
 }
 
 // --- CORS YAML escaping tests ---
-
-func TestDefaultEnvoyConfig_CORSOrigin_SingleQuoteEscaped(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			CORSConfig: &operatorv1alpha1.CORSConfig{
-				AllowOrigins: []string{"https://it's.example.com"},
-			},
-		},
-	}
-	cfg, err := DefaultEnvoyConfig(envoy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// Single quote must be doubled for valid YAML single-quoted scalar
-	if !containsStr(cfg[ConfigFileName], "it''s.example.com") {
-		t.Errorf("expected single quote to be doubled in YAML output, got:\n%s", cfg[ConfigFileName])
-	}
-}
-
-func TestDefaultEnvoyConfig_CORSOrigin_NewlineRejected(t *testing.T) {
-	envoy := &operatorv1alpha1.EnvoyProxy{
-		Spec: operatorv1alpha1.EnvoyProxySpec{
-			CORSConfig: &operatorv1alpha1.CORSConfig{
-				AllowOrigins: []string{"https://evil.com\ninjected: true"},
-			},
-		},
-	}
-	_, err := DefaultEnvoyConfig(envoy)
-	if err == nil {
-		t.Error("expected error for CORS origin containing newline, got nil")
-	}
-}
 
 func TestYamlEscapeString(t *testing.T) {
 	tests := []struct {

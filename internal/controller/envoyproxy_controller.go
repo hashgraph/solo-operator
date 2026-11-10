@@ -5,14 +5,23 @@ package controller
 import (
 	"context"
 
+	"github.com/automa-saga/errx"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -46,6 +55,7 @@ func NewEnvoyProxyReconciler(c client.Client, scheme *runtime.Scheme) *EnvoyProx
 // +kubebuilder:rbac:groups=operator.solo.hiero.org,resources=envoyproxies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for EnvoyProxy resources
 func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -78,25 +88,16 @@ func (r *EnvoyProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	if err := validateProxyDigestPolicy(ctx, r.Client, envoyObj.Spec.Orbit, "EnvoyProxy", envoyObj.Name, envoy.GetImage(envoyObj)); err != nil {
-		return ctrl.Result{}, err
+	var result ctrl.Result
+	err := validateProxyDigestPolicy(ctx, r.Client, envoyObj.Spec.Orbit, envoyObj.Name, envoy.GetImage(envoyObj))
+	if err == nil {
+		result, err = r.subreconciler.Reconcile(ctx, envoyObj)
 	}
-
-	// Run subreconcilers
-	result, err := r.subreconciler.Reconcile(ctx, envoyObj)
-	if err != nil {
-		return result, err
+	apimeta.SetStatusCondition(&envoyObj.Status.Conditions, reconciledCondition(envoyObj.Generation, err))
+	if statusErr := r.updateStatus(ctx, envoyObj); err == nil {
+		err = statusErr
 	}
-	if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
-	}
-
-	// Update status
-	if err := r.updateStatus(ctx, envoyObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return result, err
 }
 
 // handleDeletion handles the deletion of an EnvoyProxy resource
@@ -112,6 +113,27 @@ func (r *EnvoyProxyReconciler) handleDeletion(ctx context.Context, envoyObj *ope
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func reconciledCondition(generation int64, err error) metav1.Condition {
+	if err == nil {
+		return metav1.Condition{
+			Type: operatorv1alpha1.EnvoyProxyConditionTypeReconciled, Status: metav1.ConditionTrue,
+			ObservedGeneration: generation, Reason: "Reconciled", Message: "Envoy configuration is up to date",
+		}
+	}
+	reason, ok := errx.ReasonOf(err)
+	if !ok {
+		reason = "ReconcileFailed"
+	}
+	message := errx.Format(err)
+	if len(message) > 1024 {
+		message = message[:1024]
+	}
+	return metav1.Condition{
+		Type: operatorv1alpha1.EnvoyProxyConditionTypeReconciled, Status: metav1.ConditionFalse,
+		ObservedGeneration: generation, Reason: string(reason), Message: message,
+	}
 }
 
 // updateStatus updates the EnvoyProxy status
@@ -134,7 +156,7 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 		envoyObj.Status.AvailableReplicas = deploy.Status.AvailableReplicas
 		envoyObj.Status.UnavailableReplicas = deploy.Status.UnavailableReplicas
 		envoyObj.Status.UpdatedReplicas = deploy.Status.UpdatedReplicas
-		envoyObj.Status.Conditions = deploy.Status.Conditions
+		envoyObj.Status.DeploymentConditions = deploy.Status.Conditions
 	}
 
 	envoyObj.Status.ObservedGeneration = envoyObj.Generation
@@ -142,14 +164,35 @@ func (r *EnvoyProxyReconciler) updateStatus(ctx context.Context, envoyObj *opera
 	return common.WarnOnConflict(ctx, r.Status().Update(ctx, envoyObj))
 }
 
+const fieldEnvoyACLConfigMaps = "envoy.aclConfigMaps"
+
 // SetupWithManager sets up the controller with the Manager
 func (r *EnvoyProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &operatorv1alpha1.EnvoyProxy{}, fieldEnvoyACLConfigMaps, func(o client.Object) []string {
+		return envoy.ReferencedConfigMaps(o.(*operatorv1alpha1.EnvoyProxy))
+	}); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1alpha1.EnvoyProxy{}).
+		For(&operatorv1alpha1.EnvoyProxy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&networkingv1.Ingress{}).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapACLConfigMap)).
 		Named("envoyproxy").
 		Complete(r)
+}
+
+func (r *EnvoyProxyReconciler) mapACLConfigMap(ctx context.Context, obj client.Object) []reconcile.Request {
+	list := &operatorv1alpha1.EnvoyProxyList{}
+	if err := r.List(ctx, list, client.InNamespace(obj.GetNamespace()), client.MatchingFields{fieldEnvoyACLConfigMaps: obj.GetName()}); err != nil {
+		common.Err(ctx, err, ReasonListFailed).Msg("Failed to list EnvoyProxies for ACL ConfigMap")
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for _, item := range list.Items {
+		reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Name: item.Name, Namespace: item.Namespace}})
+	}
+	return reqs
 }

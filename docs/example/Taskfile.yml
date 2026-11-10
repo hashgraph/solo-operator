@@ -8,6 +8,12 @@ includes:
 
 vars:
   BLOCKNODE: '{{.BLOCKNODE | default "false"}}'
+  # Must match the consensus-node imageTag in node*/consensus-capsule.yaml.
+  CN_VERSION: '{{.CN_VERSION | default "0.77.2"}}'
+  YAHCLI_IMG: 'gcr.io/hedera-registry/yahcli:{{.CN_VERSION}}'
+  YAHCLI_SRC: '{{.YAHCLI_SRC | default (print "/tmp/hiero-consensus-node-v" .CN_VERSION)}}'
+  # Well-known local 0.0.2 genesis key.
+  ACCOUNT2_KEY_HEX: "302e020100300506032b65700422042091132178e72057a1d7528025956fe39b0b847f200ab59b2fdd367017f3087137"
 
 tasks:
   setup:
@@ -134,8 +140,22 @@ tasks:
     cmds:
       - task: deploy:genesis
       - echo ">> Waiting for all consensus node pods to be ready..."
-      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
+      - task: wait:nodes
+        vars: { COUNT: '4' }
       - echo ">> All 4 nodes deployed, genesis completed, and pods ready"
+
+  wait:nodes:
+    internal: true
+    vars:
+      COUNT: '{{.COUNT | default "1"}}'
+    cmds:
+      # kubectl wait -l fails outright until the StatefulSet pods exist.
+      - |
+        for i in $(seq 150); do
+          [ "$(kubectl get pod -n solo-orbit -l app.kubernetes.io/component=consensus-node -o name | wc -l)" -ge {{.COUNT}} ] && break
+          sleep 2
+        done
+      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
 
   deploy:single:
     desc: "Deploy a single-node network (node0 only) + genesis — the lightweight path for local beacon testing"
@@ -147,14 +167,13 @@ tasks:
       # reaches ACTIVE trivially and will not starve a laptop the way four JVMs do.
       - kubectl apply -f node0/secrets.yaml
       - kubectl apply -f node0/consensus-capsule.yaml
-      - kubectl apply -f node0/haproxycapsule.yaml
       - kubectl apply -f node0/envoyproxycapsule.yaml
       - kubectl apply -f network-genesis/network-genesis.yaml
       - echo ">> Waiting for genesis to complete..."
       - kubectl wait --for=jsonpath='{.status.phase}'=Succeeded networkgenesis/network-genesis -n solo-orbit --timeout=300s
       - echo ">> Waiting for node0 pod to be ready..."
-      - kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=consensus-node -n solo-orbit --timeout=300s
-      - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/haproxy-node0 50211 50211"
+      - task: wait:nodes
+      - echo ">> Single-node network deployed (node0). Port-forward via kubectl -n solo-orbit port-forward svc/envoy-node0 50211 50211"
 
   cluster:
     desc: Create the kind cluster, MetalLB, and install the operator via Helm (skipped when the operator pod is ready)
@@ -214,7 +233,6 @@ tasks:
     cmds:
       - kubectl apply -f node0/secrets.yaml
       - kubectl apply -f node0/consensus-capsule.yaml
-      - kubectl apply -f node0/haproxycapsule.yaml
       - kubectl apply -f node0/envoyproxycapsule.yaml
 
   deploy:node1:
@@ -224,7 +242,6 @@ tasks:
     cmds:
       - kubectl apply -f node1/secrets.yaml
       - kubectl apply -f node1/consensus-capsule.yaml
-      - kubectl apply -f node1/haproxycapsule.yaml
       - kubectl apply -f node1/envoyproxycapsule.yaml
 
   deploy:node2:
@@ -234,7 +251,6 @@ tasks:
     cmds:
       - kubectl apply -f node2/secrets.yaml
       - kubectl apply -f node2/consensus-capsule.yaml
-      - kubectl apply -f node2/haproxycapsule.yaml
       - kubectl apply -f node2/envoyproxycapsule.yaml
 
   deploy:node3:
@@ -244,7 +260,6 @@ tasks:
     cmds:
       - kubectl apply -f node3/secrets.yaml
       - kubectl apply -f node3/consensus-capsule.yaml
-      - kubectl apply -f node3/haproxycapsule.yaml
       - kubectl apply -f node3/envoyproxycapsule.yaml
 
   destroy:blocknode:
@@ -490,6 +505,85 @@ tasks:
             kubectl patch ${NAME} -n solo-orbit --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
           done
           kubectl delete ${KIND} -n solo-orbit --all --ignore-not-found --wait=false
+        done
+
+  operator:upgrade:
+    desc: Upgrade the operator in the existing kind cluster and apply envoy-node0
+    cmds:
+      - task: root:helm:sync-crds
+      - task: root:docker:build
+      - task: root:kind:load
+      - helm upgrade --install solo-operator ../../charts/solo-operator -n solo-operator --create-namespace --wait --timeout 120s --set image.tag=dev --set image.pullPolicy=Never
+      - kubectl -n solo-operator rollout restart deploy -l app.kubernetes.io/name=solo-operator
+      - kubectl -n solo-operator rollout status deploy -l app.kubernetes.io/name=solo-operator --timeout=120s
+      - kubectl apply -f node0/envoyproxycapsule.yaml
+      - kubectl -n solo-orbit rollout status deploy/envoy-node0 --timeout=180s
+
+  yahcli:build:
+    desc: "Build {{.YAHCLI_IMG}} from hiero-consensus-node v{{.CN_VERSION}}"
+    status:
+      - docker image inspect {{.YAHCLI_IMG}} >/dev/null 2>&1
+    cmds:
+      - |
+        set -eu
+        SRC="{{.YAHCLI_SRC}}"
+        JAVA_BIN=java; [ -z "${JAVA_HOME:-}" ] || JAVA_BIN="$JAVA_HOME/bin/java"
+        JAVA_MAJOR="$("$JAVA_BIN" -version 2>&1 | sed -n 's/.*version "\([0-9]*\).*/\1/p' | head -1)"
+        if [ "$JAVA_MAJOR" != "25" ]; then
+          echo "yahcli v{{.CN_VERSION}} builds with JDK 25, found '${JAVA_MAJOR:-none}'; set JAVA_HOME to a JDK 25" >&2; exit 1
+        fi
+        [ -d "$SRC/.git" ] || git clone --depth 1 --branch v{{.CN_VERSION}} https://github.com/hiero-ledger/hiero-consensus-node.git "$SRC"
+        "$SRC/hedera-node/yahcli/run/build.sh" {{.CN_VERSION}}
+
+  test:ivy:
+    desc: "Run yahcli ivy scenarios against node0 and envoy-node0"
+    deps: [yahcli:build]
+    vars:
+      IVY_SCENARIOS: '{{.IVY_SCENARIOS | default "--crypto --file --consensus --xfers"}}'
+      IVY_TIMEOUT_SECS: '{{.IVY_TIMEOUT_SECS | default "1200"}}'
+    cmds:
+      - kind load docker-image {{.YAHCLI_IMG}} --name solo-operator
+      - |
+        set -eu
+        WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+        DIRECT_IP="$(kubectl -n solo-orbit get svc node0 -o jsonpath='{.spec.clusterIP}')"
+        PROXY_IP="$(kubectl -n solo-orbit get svc envoy-node0 -o jsonpath='{.spec.clusterIP}')"
+        cat > "$WORK/config.yml" <<EOF
+        defaultNetwork: direct
+        networks:
+          direct:
+            defaultPayer: 2
+            defaultNodeAccount: 3
+            nodes:
+              - { id: 0, account: 3, ipv4Addr: ${DIRECT_IP} }
+          proxy:
+            defaultPayer: 2
+            defaultNodeAccount: 3
+            nodes:
+              - { id: 0, account: 3, ipv4Addr: ${PROXY_IP} }
+        EOF
+        echo "{{.ACCOUNT2_KEY_HEX}}" | xxd -r -p |
+          openssl pkcs8 -topk8 -inform DER -v2 aes-256-cbc -v2prf hmacWithSHA384 -passout pass:yahcli-local -out "$WORK/account2.pem"
+        printf 'yahcli-local' > "$WORK/account2.pass"
+        kubectl -n solo-orbit create configmap yahcli-ivy-config --from-file=config.yml="$WORK/config.yml" --dry-run=client -o yaml | kubectl apply -f -
+        kubectl -n solo-orbit create secret generic yahcli-ivy-keys \
+          --from-file=account2.pem="$WORK/account2.pem" --from-file=account2.pass="$WORK/account2.pass" \
+          --dry-run=client -o yaml | kubectl apply -f -
+      - |
+        set -eu
+        export YAHCLI_IMG="{{.YAHCLI_IMG}}" IVY_SCENARIOS="{{.IVY_SCENARIOS}}" DEADLINE_SECS="{{.IVY_TIMEOUT_SECS}}"
+        for TARGET in direct proxy; do
+          export TARGET
+          JOB="yahcli-ivy-${TARGET}"
+          kubectl -n solo-orbit delete job "$JOB" --ignore-not-found --wait=true
+          envsubst '${TARGET} ${YAHCLI_IMG} ${IVY_SCENARIOS} ${DEADLINE_SECS}' < yahcli/ivy-job.yaml | kubectl apply -f -
+          echo ">> ivy ${IVY_SCENARIOS} via ${TARGET}..."
+          until [ -n "$(kubectl -n solo-orbit get job "$JOB" -o jsonpath='{.status.succeeded}{.status.failed}')" ]; do sleep 5; done
+          kubectl -n solo-orbit logs "job/$JOB" --tail=40
+          if [ "$(kubectl -n solo-orbit get job "$JOB" -o jsonpath='{.status.succeeded}')" != "1" ]; then
+            echo ">> ivy FAILED via ${TARGET} (full log: kubectl -n solo-orbit logs job/$JOB)"; exit 1
+          fi
+          echo ">> ivy passed via ${TARGET}"
         done
 
   cleanup:

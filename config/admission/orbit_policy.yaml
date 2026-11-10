@@ -24,7 +24,6 @@ spec:
           - consensuscapsules
           - envoyproxies
           - feeschedules
-          - haproxycapsules
           - helmcapsules
           - log4j2configs
           - networkgeneses

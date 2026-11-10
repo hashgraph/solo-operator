@@ -1,0 +1,74 @@
+resources:
+{{- range .Listeners}}
+  - '@type': type.googleapis.com/envoy.config.cluster.v3.Cluster
+    name: node_{{.Name}}
+    type: STRICT_DNS
+    dns_lookup_family: V4_PREFERRED
+    connect_timeout: {{$.Timeouts.Connect}}
+    lb_policy: ROUND_ROBIN
+    common_lb_config:
+      healthy_panic_threshold:
+        value: 0
+    circuit_breakers:
+      thresholds:
+        - max_connections: {{$.MaxConnections}}
+          max_pending_requests: {{$.MaxConnections}}
+          max_requests: {{$.MaxConnections}}
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        common_http_protocol_options:
+          idle_timeout: {{$.Timeouts.Server}}
+        explicit_http_config:
+          http2_protocol_options: {}
+    health_checks:
+      - timeout: 10s
+        interval: 10s
+        healthy_threshold: 2
+        unhealthy_threshold: 3
+{{- if .Upstream.GRPCCheck}}
+        http_health_check:
+          path: /grpc.health.v1.Health/Check
+          method: POST
+          codec_client_type: HTTP2
+          request_headers_to_add:
+            - header:
+                key: content-type
+                value: application/grpc
+            - header:
+                key: te
+                value: trailers
+{{- else}}
+        tcp_health_check: {}
+{{- end}}
+    outlier_detection:
+      split_external_local_origin_errors: true
+      consecutive_local_origin_failure: 5
+      enforcing_consecutive_local_origin_failure: 100
+      enforcing_consecutive_5xx: 0
+      enforcing_consecutive_gateway_failure: 0
+      enforcing_success_rate: 0
+      interval: 10s
+      base_ejection_time: 10s
+      max_ejection_percent: 100
+{{- if .Upstream.HTTPS}}
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+{{- with .Upstream.ServerName}}
+        sni: {{.}}
+{{- end}}
+        common_tls_context:
+          alpn_protocols: [h2]
+{{- end}}
+    load_assignment:
+      cluster_name: node_{{.Name}}
+      endpoints:
+        - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: {{.Upstream.Host}}
+                    port_value: {{.Upstream.Port}}
+{{- end}}

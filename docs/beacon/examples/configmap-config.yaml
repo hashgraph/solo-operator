@@ -19,6 +19,6 @@ data:
     nodes:
       - id: 0
         account: 3
-        host: haproxy-node1-svc.solo.svc.cluster.local
+        host: envoy-node1.solo.svc.cluster.local
         port: 50211
         tls: false           # local kind: plaintext gRPC, no cert verification

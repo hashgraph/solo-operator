@@ -58,8 +58,7 @@ Notes on how artifacts are published:
 | **Orbit** | Cluster | Network configuration and settings |
 | **ConsensusCapsule** | Namespace | Hedera consensus node deployments |
 | **NetworkGenesis** | Namespace | Network genesis operation (roster + address book ConfigMaps) |
-| **HAProxyCapsule** | Namespace | HAProxy load balancer for gRPC traffic |
-| **EnvoyProxy** | Namespace | Envoy proxy for HTTP/gRPC routing |
+| **EnvoyProxy** | Namespace | Envoy proxy for gRPC, gRPC-TLS and gRPC-Web traffic |
 
 The CRD type definitions live in [`api/v1alpha1/`](api/v1alpha1/), and the generated
 CRD schemas (with field-level documentation) are in [`config/crd/bases/`](config/crd/bases/).

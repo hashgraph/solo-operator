@@ -4,14 +4,17 @@ package envoy
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -32,14 +35,17 @@ func NewDeploymentSubReconciler(c client.Client, scheme *runtime.Scheme) *Deploy
 }
 
 func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
-	desired := r.buildDeployment(envoy)
+	desired, err := r.buildDeployment(envoy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if err := controllerutil.SetControllerReference(envoy, desired, r.Scheme); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	existing := &appsv1.Deployment{}
-	err := r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
+	err = r.Client.Get(ctx, client.ObjectKey{Name: desired.Name, Namespace: desired.Namespace}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			common.Info(ctx, common.ReasonDeploymentCreated).Msg("Creating Envoy deployment")
@@ -51,30 +57,94 @@ func (r *DeploymentSubReconciler) Reconcile(ctx context.Context, envoy *operator
 		return ctrl.Result{}, err
 	}
 
-	if r.needsUpdate(existing, desired) {
-		common.Debug(ctx, common.ReasonDeploymentUpdated).Msg("Updating Envoy deployment")
-		existing.Spec = desired.Spec
-		existing.Labels = desired.Labels
-		return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
-	}
-
-	return ctrl.Result{}, nil
+	// No DeepEqual guard: server-side defaulting makes local diffs phantom (see consensus StatefulSet, #1219).
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+	return ctrl.Result{}, common.WarnOnConflict(ctx, r.Client.Update(ctx, existing))
 }
 
-func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyProxy) *appsv1.Deployment {
+var (
+	defaultStartupProbe   = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 12}
+	defaultLivenessProbe  = corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3}
+	defaultReadinessProbe = corev1.Probe{InitialDelaySeconds: 5, PeriodSeconds: 5, TimeoutSeconds: 1, FailureThreshold: 3}
+)
+
+func buildProbe(handler corev1.ProbeHandler, spec *operatorv1alpha1.EnvoyProbeSpec, defaults corev1.Probe) *corev1.Probe {
+	probe := defaults
+	probe.ProbeHandler = handler
+	if spec != nil {
+		probe.InitialDelaySeconds = ptr.Deref(spec.InitialDelaySeconds, probe.InitialDelaySeconds)
+		probe.PeriodSeconds = ptr.Deref(spec.PeriodSeconds, probe.PeriodSeconds)
+		probe.TimeoutSeconds = ptr.Deref(spec.TimeoutSeconds, probe.TimeoutSeconds)
+		probe.FailureThreshold = ptr.Deref(spec.FailureThreshold, probe.FailureThreshold)
+	}
+	return &probe
+}
+
+func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyProxy) (*appsv1.Deployment, error) {
+	checksum, err := restartChecksum(envoy)
+	if err != nil {
+		return nil, err
+	}
+
 	replicas := GetReplicas(envoy)
-	selectorLabels := CommonLabels(envoy)
 	resourceLabels := ResourceLabels(envoy)
-	proxyPort := GetProxyPort(envoy)
-	metricsPort := GetMetricsPort(envoy)
-	adminPort := GetAdminPort(envoy)
+	listeners := ResolveListeners(envoy)
 
 	gracePeriod := envoy.Spec.TerminationGracePeriodSeconds
 	if gracePeriod == 0 {
 		gracePeriod = 10
 	}
 
-	deploy := &appsv1.Deployment{
+	container := corev1.Container{
+		Name:            ContainerName,
+		Image:           GetImage(envoy),
+		Args:            []string{"-c", ConfigMountPath + "/" + ConfigFileName, "--drain-time-s", strconv.FormatInt(GetDrainSeconds(envoy), 10)},
+		Ports:           buildContainerPorts(envoy, listeners),
+		Env:             envoy.Spec.Env,
+		SecurityContext: common.RestrictedSecurityContext(),
+	}
+	if envoy.Spec.Resources != nil {
+		container.Resources = *envoy.Spec.Resources
+	}
+	volumes := []corev1.Volume{{
+		Name: ConfigVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: ConfigMapName(envoy)}},
+		},
+	}}
+	container.VolumeMounts = []corev1.VolumeMount{{Name: ConfigVolumeName, MountPath: ConfigMountPath, ReadOnly: true}}
+	for _, l := range listeners {
+		if l.TLSSecretName == "" {
+			continue
+		}
+		volumes = append(volumes, corev1.Volume{
+			Name: l.TLSVolume(),
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: l.TLSSecretName,
+					Items:      []corev1.KeyToPath{{Key: "tls.crt", Path: "tls.crt"}, {Key: "tls.key", Path: "tls.key"}},
+				},
+			},
+		})
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: l.TLSVolume(), MountPath: l.TLSDir(), ReadOnly: true})
+	}
+
+	// spec.files may not expose /healthz or the listeners, so probes are omitted then.
+	probes := ptr.Deref(envoy.Spec.Probes, operatorv1alpha1.EnvoyProbesSpec{})
+	if len(envoy.Spec.Files) == 0 && ptr.Deref(probes.Enabled, true) {
+		healthz := corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromInt32(GetMetricsPort(envoy))}}
+		container.StartupProbe = buildProbe(healthz, probes.Startup, defaultStartupProbe)
+		container.LivenessProbe = buildProbe(healthz, probes.Liveness, defaultLivenessProbe)
+		// A rejected LDS leaves the traffic ports unbound while /healthz still answers.
+		ready := healthz
+		if len(listeners) > 0 {
+			ready = corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(listeners[0].Port)}}
+		}
+		container.ReadinessProbe = buildProbe(ready, probes.Readiness, defaultReadinessProbe)
+	}
+
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envoy.Name,
 			Namespace: envoy.Namespace,
@@ -82,207 +152,43 @@ func (r *DeploymentSubReconciler) buildDeployment(envoy *operatorv1alpha1.EnvoyP
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectorLabels,
-			},
+			Selector: &metav1.LabelSelector{MatchLabels: CommonLabels(envoy)},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: resourceLabels,
+					Labels:      resourceLabels,
+					Annotations: map[string]string{ConfigChecksumAnnotation: checksum},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:                  envoy.Spec.NodeSelector,
 					Affinity:                      envoy.Spec.Affinity,
 					Tolerations:                   envoy.Spec.Tolerations,
 					TerminationGracePeriodSeconds: &gracePeriod,
-					Containers: []corev1.Container{
-						{
-							Name:            ContainerName,
-							Image:           GetImage(envoy),
-							Args:            []string{"-c", "/etc/envoy/envoy.yaml"},
-							Ports:           buildContainerPorts(proxyPort, adminPort, metricsPort, envoy.Spec.ExposeAdmin),
-							VolumeMounts:    buildVolumeMounts(envoy),
-							Env:             BuildEnv(envoy),
-							StartupProbe:    buildStartupProbe(metricsPort, envoy),
-							LivenessProbe:   buildLivenessProbe(metricsPort, envoy),
-							ReadinessProbe:  buildReadinessProbe(metricsPort, envoy),
-							SecurityContext: common.RestrictedSecurityContext(),
-						},
-					},
-					Volumes: buildVolumes(envoy),
+					Containers:                    []corev1.Container{container},
+					Volumes:                       volumes,
 				},
 			},
 		},
-	}
-
-	return deploy
+	}, nil
 }
 
-func buildContainerPorts(proxyPort, adminPort, metricsPort int32, exposeAdmin bool) []corev1.ContainerPort {
-	ports := []corev1.ContainerPort{
-		{Name: "grpc", ContainerPort: proxyPort, Protocol: corev1.ProtocolTCP},
-		{Name: "metrics", ContainerPort: metricsPort, Protocol: corev1.ProtocolTCP},
+func restartChecksum(envoy *operatorv1alpha1.EnvoyProxy) (string, error) {
+	bootstrap, ok := envoy.Spec.Files[ConfigFileName]
+	if !ok {
+		var err error
+		if bootstrap, err = BootstrapConfig(envoy); err != nil {
+			return "", err
+		}
 	}
-	if exposeAdmin {
-		ports = append(ports, corev1.ContainerPort{Name: "admin", ContainerPort: adminPort, Protocol: corev1.ProtocolTCP})
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(bootstrap))), nil
+}
+
+func buildContainerPorts(envoy *operatorv1alpha1.EnvoyProxy, listeners []Listener) []corev1.ContainerPort {
+	ports := []corev1.ContainerPort{{Name: "metrics", ContainerPort: GetMetricsPort(envoy), Protocol: corev1.ProtocolTCP}}
+	for _, l := range listeners {
+		ports = append(ports, corev1.ContainerPort{Name: l.PortName, ContainerPort: l.Port, Protocol: corev1.ProtocolTCP})
+	}
+	if envoy.Spec.ExposeAdmin {
+		ports = append(ports, corev1.ContainerPort{Name: "admin", ContainerPort: GetAdminPort(envoy), Protocol: corev1.ProtocolTCP})
 	}
 	return ports
-}
-
-func buildVolumeMounts(envoy *operatorv1alpha1.EnvoyProxy) []corev1.VolumeMount {
-	mounts := []corev1.VolumeMount{
-		{Name: ConfigVolumeName, MountPath: ConfigMountPath, ReadOnly: true},
-	}
-	if envoy.Spec.TLSSecretName != "" {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      TLSVolumeName,
-			MountPath: TLSMountPath,
-			ReadOnly:  true,
-		})
-	}
-	return mounts
-}
-
-func buildVolumes(envoy *operatorv1alpha1.EnvoyProxy) []corev1.Volume {
-	volumes := []corev1.Volume{
-		{
-			Name: ConfigVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: ConfigMapName(envoy)},
-				},
-			},
-		},
-	}
-	if envoy.Spec.TLSSecretName != "" {
-		volumes = append(volumes, corev1.Volume{
-			Name: TLSVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: envoy.Spec.TLSSecretName,
-					Items: []corev1.KeyToPath{
-						{Key: "tls.crt", Path: "tls.crt"},
-						{Key: "tls.key", Path: "tls.key"},
-					},
-				},
-			},
-		})
-	}
-	return volumes
-}
-
-// buildStartupProbe returns a startup probe when the operator manages the config (spec.Files is empty).
-// Custom configs (spec.Files set) may not expose /healthz, so probes are omitted.
-func buildStartupProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
-	if len(envoy.Spec.Files) > 0 {
-		return nil
-	}
-	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/healthz",
-				Port: intstr.FromInt32(metricsPort),
-			},
-		},
-		InitialDelaySeconds: 5,
-		PeriodSeconds:       5,
-		FailureThreshold:    12, // 1 min window
-	}
-}
-
-func buildLivenessProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
-	if len(envoy.Spec.Files) > 0 {
-		return nil
-	}
-	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/healthz",
-				Port: intstr.FromInt32(metricsPort),
-			},
-		},
-		PeriodSeconds:    10,
-		FailureThreshold: 3,
-	}
-}
-
-func buildReadinessProbe(metricsPort int32, envoy *operatorv1alpha1.EnvoyProxy) *corev1.Probe {
-	if len(envoy.Spec.Files) > 0 {
-		return nil
-	}
-	return &corev1.Probe{
-		ProbeHandler: corev1.ProbeHandler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path: "/healthz",
-				Port: intstr.FromInt32(metricsPort),
-			},
-		},
-		InitialDelaySeconds: 5,
-		PeriodSeconds:       5,
-	}
-}
-
-func (r *DeploymentSubReconciler) needsUpdate(existing, desired *appsv1.Deployment) bool {
-	if existing.Spec.Replicas == nil || *existing.Spec.Replicas != *desired.Spec.Replicas {
-		return true
-	}
-
-	ep := existing.Spec.Template.Spec
-	dp := desired.Spec.Template.Spec
-
-	if !equality.Semantic.DeepEqual(ep.NodeSelector, dp.NodeSelector) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Affinity, dp.Affinity) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Tolerations, dp.Tolerations) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.TerminationGracePeriodSeconds, dp.TerminationGracePeriodSeconds) {
-		return true
-	}
-	if !equality.Semantic.DeepEqual(ep.Volumes, dp.Volumes) {
-		return true
-	}
-
-	if len(ep.Containers) != len(dp.Containers) {
-		return true
-	}
-	for i := range dp.Containers {
-		ec := ep.Containers[i]
-		dc := dp.Containers[i]
-		if ec.Name != dc.Name || ec.Image != dc.Image {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.Ports, dc.Ports) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.Env, dc.Env) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.VolumeMounts, dc.VolumeMounts) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.StartupProbe, dc.StartupProbe) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.LivenessProbe, dc.LivenessProbe) {
-			return true
-		}
-		if !equality.Semantic.DeepEqual(ec.ReadinessProbe, dc.ReadinessProbe) {
-			return true
-		}
-	}
-
-	// Check pod template labels bidirectionally (captures AdditionalLabels additions and removals)
-	if len(existing.Spec.Template.Labels) != len(desired.Spec.Template.Labels) {
-		return true
-	}
-	for k, v := range desired.Spec.Template.Labels {
-		if existing.Spec.Template.Labels[k] != v {
-			return true
-		}
-	}
-
-	return false
 }

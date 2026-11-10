@@ -32,7 +32,7 @@ func NewConfigMapSubReconciler(c client.Client, scheme *runtime.Scheme) *ConfigM
 
 // Reconcile ensures the config map exists and is up to date
 func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (ctrl.Result, error) {
-	desired, err := r.buildConfigMap(envoy)
+	desired, err := r.buildConfigMap(ctx, envoy)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -68,14 +68,14 @@ func (r *ConfigMapSubReconciler) Reconcile(ctx context.Context, envoy *operatorv
 }
 
 // buildConfigMap builds the desired config map
-func (r *ConfigMapSubReconciler) buildConfigMap(envoy *operatorv1alpha1.EnvoyProxy) (*corev1.ConfigMap, error) {
-	files := envoy.Spec.Files
-	if len(files) == 0 {
-		var err error
-		files, err = DefaultEnvoyConfig(envoy)
-		if err != nil {
-			return nil, err
-		}
+func (r *ConfigMapSubReconciler) buildConfigMap(ctx context.Context, envoy *operatorv1alpha1.EnvoyProxy) (*corev1.ConfigMap, error) {
+	acl, err := loadACL(ctx, r.Client, envoy)
+	if err != nil {
+		return nil, err
+	}
+	files, err := RenderConfig(envoy, acl)
+	if err != nil {
+		return nil, err
 	}
 
 	return &corev1.ConfigMap{

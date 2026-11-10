@@ -12,9 +12,15 @@ var (
 
 	errConfigInvalid = errNS.NewType("config_invalid")
 	errTemplate      = errNS.NewType("template_failed")
+	errACLSource     = errNS.NewType("acl_source_unavailable", errorx.Temporary())
+	errACLInvalid    = errNS.NewType("acl_invalid")
 )
 
 const (
 	ReasonCORSValueInvalid errx.Reason = "CORSValueInvalid"
 	ReasonTemplateFailed   errx.Reason = "TemplateExecutionFailed"
+	ReasonConfigTooLarge   errx.Reason = "ConfigTooLarge"
+	ReasonACLSourceMissing errx.Reason = "ACLSourceMissing"
+	ReasonACLGetFailed     errx.Reason = "ACLGetFailed"
+	ReasonACLEntryInvalid  errx.Reason = "ACLEntryInvalid"
 )

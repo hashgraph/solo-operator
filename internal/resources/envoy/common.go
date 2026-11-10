@@ -3,14 +3,9 @@
 package envoy
 
 import (
-	"bytes"
-	_ "embed"
 	"fmt"
-	"strings"
-	"text/template"
+	"time"
 
-	"github.com/automa-saga/errx"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -18,44 +13,6 @@ import (
 	"github.com/hashgraph/solo-operator/internal/common"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
 )
-
-//go:embed tmpl/envoy.yaml.tmpl
-var envoyYamlTmpl string
-
-// yamlEscapeString escapes a string for safe embedding as a YAML scalar (single-quoted style).
-// Single quotes in the value are doubled; newlines are rejected to prevent YAML injection.
-func yamlEscapeString(s string) (string, error) {
-	if strings.ContainsAny(s, "\n\r") {
-		return "", errx.WithHints(
-			errx.WithReason(errConfigInvalid.New("CORS value contains newline, which is not allowed: %q", s), ReasonCORSValueInvalid),
-			"Remove newline characters from the CORS value in spec.corsConfig",
-		)
-	}
-	return strings.ReplaceAll(s, "'", "''"), nil
-}
-
-var envoyTemplate = template.Must(
-	template.New("envoy.yaml").
-		Funcs(template.FuncMap{"yamlEscape": yamlEscapeString}).
-		Parse(envoyYamlTmpl),
-)
-
-type envoyConfigData struct {
-	AdminAddress    string
-	AdminPort       int32
-	ProxyPort       int32
-	MetricsPort     int32
-	AllowOrigins    []string // each entry is a raw origin string; template wraps with yaml escape
-	AllowMethods    string
-	AllowHeaders    string
-	MaxAge          string
-	ExposeHeaders   string
-	TLSBlock        bool
-	TLSCertPath     string
-	TLSKeyPath      string
-	UpstreamService string
-	UpstreamPort    int32
-}
 
 const (
 	LabelManagedBy   = common.LabelManagedBy
@@ -67,22 +24,32 @@ const (
 )
 
 const (
-	DefaultImage       = "envoyproxy/envoy-distroless:v1.21.6"
-	DefaultReplicas    = int32(2)
-	DefaultProxyPort   = int32(8081)
-	DefaultAdminPort   = int32(9901)
-	DefaultMetricsPort = int32(9090)
+	DefaultImage          = "envoyproxy/envoy:distroless-v1.40.2"
+	DefaultReplicas       = int32(2)
+	DefaultGRPCWebPort    = int32(8081)
+	DefaultAdminPort      = int32(9901)
+	DefaultMetricsPort    = int32(9090)
+	DefaultMaxConnections = int32(10000)
 )
 
 const (
-	ConfigVolumeName = "config"
-	ConfigMountPath  = "/etc/envoy"
-	TLSVolumeName    = "tls"
-	TLSMountPath     = "/etc/envoy/certs"
-	TLSCertPath      = "/etc/envoy/certs/tls.crt"
-	TLSKeyPath       = "/etc/envoy/certs/tls.key"
-	ContainerName    = "envoy"
-	ConfigFileName   = "envoy.yaml"
+	defaultConnectTimeout = 10 * time.Second
+	defaultClientTimeout  = 120 * time.Second
+	defaultServerTimeout  = 120 * time.Second
+	defaultStreamTimeout  = 3600 * time.Second
+	defaultDrainTimeout   = 30 * time.Minute
+)
+
+const (
+	ConfigVolumeName         = "config"
+	ConfigMountPath          = "/etc/envoy"
+	TLSMountRoot             = "/etc/envoy-tls"
+	ContainerName            = "envoy"
+	ConfigFileName           = "envoy.yaml"
+	LDSFileName              = "lds.yaml"
+	CDSFileName              = "cds.yaml"
+	ConfigChecksumAnnotation = "operator.solo.hiero.org/config-checksum"
+	maxRenderedSize          = 900 * 1024
 )
 
 // CommonLabels returns the pod selector labels. These must remain stable — never include AdditionalLabels here.
@@ -121,13 +88,6 @@ func GetReplicas(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	return DefaultReplicas
 }
 
-func GetProxyPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
-	if envoy.Spec.ProxyPort != 0 {
-		return envoy.Spec.ProxyPort
-	}
-	return DefaultProxyPort
-}
-
 func GetAdminPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	if envoy.Spec.AdminPort != 0 {
 		return envoy.Spec.AdminPort
@@ -142,87 +102,18 @@ func GetMetricsPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
 	return DefaultMetricsPort
 }
 
-func BuildEnv(envoy *operatorv1alpha1.EnvoyProxy) []corev1.EnvVar {
-	if len(envoy.Spec.Env) > 0 {
-		return envoy.Spec.Env
+func GetDrainSeconds(envoy *operatorv1alpha1.EnvoyProxy) int64 {
+	if t := envoy.Spec.Timeouts; t != nil && t.Drain != nil && t.Drain.Duration > 0 {
+		return int64(t.Drain.Seconds())
 	}
-	return []corev1.EnvVar{
-		{
-			Name: "SERVICE_CLUSTER",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.namespace",
-				},
-			},
-		},
-		{
-			Name: "SERVICE_NODE",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-	}
+	return int64(defaultDrainTimeout.Seconds())
 }
 
-// DefaultEnvoyConfig generates the operator-managed envoy.yaml: a gRPC-Web proxy listener and a Prometheus metrics listener.
-func DefaultEnvoyConfig(envoy *operatorv1alpha1.EnvoyProxy) (map[string]string, error) {
-	adminAddress := "127.0.0.1"
-	if envoy.Spec.ExposeAdmin {
-		adminAddress = "0.0.0.0"
+func GetMaxConnections(envoy *operatorv1alpha1.EnvoyProxy) int32 {
+	if envoy.Spec.MaxConnections > 0 {
+		return envoy.Spec.MaxConnections
 	}
-
-	// Build CORS values — use spec overrides or fall back to defaults
-	allowOrigins := []string{"*"}
-	allowMethods := "GET, PUT, DELETE, POST, OPTIONS"
-	allowHeaders := "keep-alive,user-agent,cache-control,content-type,content-transfer-encoding,custom-header-1,x-accept-content-transfer-encoding,x-accept-response-streaming,x-user-agent,x-grpc-web,grpc-timeout"
-	exposeHeaders := "custom-header-1,grpc-status,grpc-message"
-	maxAge := "1728000"
-
-	if c := envoy.Spec.CORSConfig; c != nil {
-		if len(c.AllowOrigins) > 0 {
-			allowOrigins = c.AllowOrigins
-		}
-		if c.AllowMethods != "" {
-			allowMethods = c.AllowMethods
-		}
-		if len(c.AllowHeaders) > 0 {
-			allowHeaders = strings.Join(c.AllowHeaders, ",")
-		}
-		if len(c.ExposeHeaders) > 0 {
-			exposeHeaders = strings.Join(c.ExposeHeaders, ",")
-		}
-		if c.MaxAge != "" {
-			maxAge = c.MaxAge
-		}
-	}
-
-	data := envoyConfigData{
-		AdminAddress:    adminAddress,
-		AdminPort:       GetAdminPort(envoy),
-		ProxyPort:       GetProxyPort(envoy),
-		MetricsPort:     GetMetricsPort(envoy),
-		AllowOrigins:    allowOrigins,
-		AllowMethods:    allowMethods,
-		AllowHeaders:    allowHeaders,
-		MaxAge:          maxAge,
-		ExposeHeaders:   exposeHeaders,
-		TLSBlock:        envoy.Spec.TLSSecretName != "",
-		TLSCertPath:     TLSCertPath,
-		TLSKeyPath:      TLSKeyPath,
-		UpstreamService: GetUpstreamService(envoy),
-		UpstreamPort:    GetUpstreamPort(envoy),
-	}
-
-	var buf bytes.Buffer
-	if err := envoyTemplate.Execute(&buf, data); err != nil {
-		return nil, errx.WithReason(errTemplate.Wrap(err, "envoy config template execution failed"), ReasonTemplateFailed)
-	}
-
-	return map[string]string{
-		ConfigFileName: buf.String(),
-	}, nil
+	return DefaultMaxConnections
 }
 
 // GetUpstreamService strips the "envoy-" prefix from the CR name when UpstreamService is not set.
@@ -237,18 +128,11 @@ func GetUpstreamService(envoy *operatorv1alpha1.EnvoyProxy) string {
 	return name
 }
 
-func GetUpstreamPort(envoy *operatorv1alpha1.EnvoyProxy) int32 {
-	if envoy.Spec.UpstreamPort != 0 {
-		return envoy.Spec.UpstreamPort
-	}
-	return int32(50211)
-}
-
-func GetServiceType(envoy *operatorv1alpha1.EnvoyProxy) operatorv1alpha1.ProxyServiceType {
+func GetServiceType(envoy *operatorv1alpha1.EnvoyProxy) operatorv1alpha1.EnvoyServiceType {
 	if envoy.Spec.ServiceType != "" {
 		return envoy.Spec.ServiceType
 	}
-	return operatorv1alpha1.ProxyServiceTypeLoadBalancer
+	return operatorv1alpha1.EnvoyServiceTypeLoadBalancer
 }
 
 func NewSubReconcilers(c client.Client, scheme *runtime.Scheme) *subreconciler.Chain[*operatorv1alpha1.EnvoyProxy] {

@@ -167,7 +167,7 @@ func New(network map[string]hiero.AccountID, payer hiero.AccountID, payerKey hie
 //  1. a raw TCP dial to endpoint — cheap, and fails immediately when the port is
 //     not being forwarded/served at all (the common local-dev case); then
 //  2. a HAPI NetworkVersionQuery — confirms the consensus node itself answers,
-//     not merely that something (e.g. HAProxy) bound the port.
+//     not merely that something (e.g. Envoy) bound the port.
 //
 // Every unsuccessful attempt logs at WARN (with the endpoint, attempt count, and
 // next retry delay) so a stalled preflight is visible rather than silent; the
