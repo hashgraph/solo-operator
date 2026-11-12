@@ -27,6 +27,7 @@ const (
 	ReasonAccountIDInvalid    errx.Reason = "AccountIDInvalid"
 	ReasonGenesisJSONInvalid  errx.Reason = "GenesisJSONInvalid"
 	ReasonCertHexInvalid      errx.Reason = "CertHexInvalid"
+	ReasonAdminKeyInvalid     errx.Reason = "AdminKeyInvalid"
 	ReasonGenesisJSONMarshal  errx.Reason = "GenesisJSONMarshalFailed"
 	ReasonAddressBookMarshal  errx.Reason = "AddressBookMarshalFailed"
 )

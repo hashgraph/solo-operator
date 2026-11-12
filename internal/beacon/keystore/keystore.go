@@ -24,6 +24,8 @@ import (
 	"github.com/automa-saga/errx"
 	"github.com/automa-saga/logx"
 	hiero "github.com/hiero-ledger/hiero-sdk-go/v2/sdk"
+
+	"github.com/hashgraph/solo-operator/internal/keys"
 )
 
 // PassphraseFunc returns the passphrase for a key that has no sibling .pass
@@ -120,7 +122,7 @@ func (k *Keystore) passphrase(account uint64) (string, error) {
 // public-key length (Ed25519 raw = 32 bytes, ECDSA secp256k1 compressed = 33).
 // It reads only public material.
 func Algorithm(key hiero.PrivateKey) string {
-	if len(key.PublicKey().BytesRaw()) == 33 {
+	if keys.IsValidECDSASecp256k1PublicKey(key.PublicKey().BytesRaw()) {
 		return "ECDSA_secp256k1"
 	}
 	return "Ed25519"
