@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/automa-saga/errx"
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
+	"github.com/hashgraph/solo-operator/internal/keys"
 	"github.com/hashgraph/solo-operator/internal/resources/consensus"
 )
 
@@ -255,13 +257,34 @@ func readSecretKey(ctx context.Context, c client.Client, namespace string, ref o
 	return data, nil
 }
 
+// readAdminKey reads the admin public key secret, which holds the key as hex
+// text (the one form). It trims surrounding whitespace and validates that the
+// value is hex for a 32-byte Ed25519 or 33-byte compressed secp256k1 public
+// key, then returns that trimmed hex so the genesis renderer can label it by
+// type. It does not re-encode the value.
 func readAdminKey(ctx context.Context, c client.Client, namespace string, ref *operatorv1alpha1.KeyReference) (string, error) {
 	if ref == nil {
 		return "", nil
 	}
-	keyBytes, err := readSecretKey(ctx, c, namespace, *ref)
+	value, err := readSecretKey(ctx, c, namespace, *ref)
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(keyBytes), nil
+	adminHex := strings.TrimSpace(string(value))
+	raw, err := hex.DecodeString(adminHex)
+	if err != nil {
+		return "", errx.WithHints(
+			errx.WithReason(errMaterial.Wrap(err, "admin public key secret is not valid hex text"), ReasonAdminKeyInvalid),
+			"Store the admin public key as hex text: 64 characters for Ed25519 or 66 for compressed secp256k1",
+		)
+	}
+	if !keys.IsValidEd25519PublicKey(raw) && !keys.IsValidECDSASecp256k1PublicKey(raw) {
+		return "", errx.WithHints(
+			errx.WithReason(
+				errMaterial.New("admin public key is %d bytes; want 32 (Ed25519) or 33 (compressed secp256k1)", len(raw)),
+				ReasonAdminKeyInvalid),
+			"Store the admin public key as hex text: 64 characters for Ed25519 or 66 for compressed secp256k1",
+		)
+	}
+	return adminHex, nil
 }
