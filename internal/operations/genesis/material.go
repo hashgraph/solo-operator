@@ -258,9 +258,10 @@ func readSecretKey(ctx context.Context, c client.Client, namespace string, ref o
 }
 
 // readAdminKey reads the admin public key secret, which holds the key as hex
-// text (the one form). It validates that the value is hex for a 32-byte Ed25519
-// or 33-byte compressed secp256k1 public key and returns it unchanged, so the
-// genesis renderer can label it by type. It does not re-encode the value.
+// text (the one form). It trims surrounding whitespace and validates that the
+// value is hex for a 32-byte Ed25519 or 33-byte compressed secp256k1 public
+// key, then returns that trimmed hex so the genesis renderer can label it by
+// type. It does not re-encode the value.
 func readAdminKey(ctx context.Context, c client.Client, namespace string, ref *operatorv1alpha1.KeyReference) (string, error) {
 	if ref == nil {
 		return "", nil

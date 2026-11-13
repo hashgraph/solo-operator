@@ -92,7 +92,10 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 func adminKeyFromHex(adminHex string) (*genesisKey, error) {
 	raw, err := hex.DecodeString(adminHex)
 	if err != nil {
-		return nil, errx.WithReason(errMaterial.Wrap(err, "decode adminKey hex"), ReasonCertHexInvalid)
+		return nil, errx.WithHints(
+			errx.WithReason(errMaterial.Wrap(err, "admin key is not valid hex text"), ReasonAdminKeyInvalid),
+			"Store the admin public key as hex text: 64 characters for Ed25519 or 66 for compressed secp256k1",
+		)
 	}
 	b64 := base64.StdEncoding.EncodeToString(raw)
 	switch {
