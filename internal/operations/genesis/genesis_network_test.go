@@ -3,6 +3,7 @@
 package genesis
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -38,7 +39,7 @@ func testSelfSignedCert(t *testing.T) (pemBytes, derBytes []byte) {
 
 func TestBuildGenesisNetworkJSON_ProtoShape(t *testing.T) {
 	_, sigDER := testSelfSignedCert(t)
-	adminKeyBytes := []byte{0x01, 0x02, 0x03, 0xab, 0xcd}
+	adminKeyBytes := bytes.Repeat([]byte{0xab}, 32) // 32-byte Ed25519 public key
 	grpcHashBytes := []byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
 
 	m := []RosterMaterial{{
@@ -131,8 +132,80 @@ func TestBuildGenesisNetworkJSON_ProtoShape(t *testing.T) {
 	}
 
 	// Catch regression to hex-string adminKey shape.
-	if strings.Contains(string(out), `"adminKey": "010203abcd"`) {
+	if strings.Contains(string(out), `"adminKey": "`+hex.EncodeToString(adminKeyBytes)+`"`) {
 		t.Error("adminKey emitted as hex string instead of proto Key message")
+	}
+}
+
+func TestBuildGenesisNetworkJSON_AdminKeyECDSA(t *testing.T) {
+	_, sigDER := testSelfSignedCert(t)
+	// 33-byte compressed secp256k1 public key (0x02 prefix).
+	adminKeyBytes := append([]byte{0x02}, bytes.Repeat([]byte{0xcd}, 32)...)
+
+	out, err := BuildGenesisNetworkJSON([]RosterMaterial{{
+		NodeID:         1,
+		AccountID:      "0.0.4",
+		GossipHost:     "h",
+		ServiceHost:    "h",
+		Weight:         1,
+		AdminKeyHex:    hex.EncodeToString(adminKeyBytes),
+		SigningCertDER: sigDER,
+	}})
+	if err != nil {
+		t.Fatalf("BuildGenesisNetworkJSON: %v", err)
+	}
+
+	var got struct {
+		NodeMetadata []struct {
+			Node struct {
+				AdminKey *genesisKey `json:"adminKey"`
+			} `json:"node"`
+		} `json:"nodeMetadata"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("re-parse: %v\n%s", err, out)
+	}
+	ak := got.NodeMetadata[0].Node.AdminKey
+	if ak == nil {
+		t.Fatal("expected adminKey to be set")
+	}
+	want := base64.StdEncoding.EncodeToString(adminKeyBytes)
+	if ak.ECDSASecp256k1 != want {
+		t.Errorf("adminKey.ECDSASecp256k1: got %q, want %q", ak.ECDSASecp256k1, want)
+	}
+	if ak.Ed25519 != "" {
+		t.Errorf("adminKey.ed25519 should be empty for an ECDSA key, got %q", ak.Ed25519)
+	}
+	// The ECDSA key must serialize under the proto3-JSON field "ECDSASecp256k1".
+	if !strings.Contains(string(out), `"ECDSASecp256k1"`) {
+		t.Errorf("expected ECDSASecp256k1 field in output:\n%s", out)
+	}
+}
+
+func TestBuildGenesisNetworkJSON_AdminKeyBadLength(t *testing.T) {
+	_, sigDER := testSelfSignedCert(t)
+	for _, tc := range []struct {
+		name string
+		key  []byte
+	}{
+		{"too short", []byte{0x01, 0x02, 0x03}},
+		{"31 bytes", bytes.Repeat([]byte{0x01}, 31)},
+		{"33 bytes wrong prefix", append([]byte{0x04}, bytes.Repeat([]byte{0x01}, 32)...)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := BuildGenesisNetworkJSON([]RosterMaterial{{
+				NodeID:         0,
+				AccountID:      "0.0.3",
+				GossipHost:     "h",
+				ServiceHost:    "h",
+				Weight:         1,
+				AdminKeyHex:    hex.EncodeToString(tc.key),
+				SigningCertDER: sigDER,
+			}})
+			if err == nil {
+				t.Fatal("expected an error for an invalid admin key length")
+			}
+		})
 	}
 }
 
