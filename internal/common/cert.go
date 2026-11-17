@@ -49,7 +49,8 @@ func ExtractPubKeyHex(pemBytes []byte) (string, error) {
 	return hex.EncodeToString(cert.RawSubjectPublicKeyInfo), nil
 }
 
-// CertHashHex returns the hex-encoded SHA-384 hash of the DER bytes of a PEM certificate.
+// CertHashHex returns the hex-encoded SHA-384 hash of the canonical PEM form of a certificate,
+// the form that HAPI grpc_certificate_hash and the SDKs use.
 func CertHashHex(pemBytes []byte) (string, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
@@ -58,6 +59,6 @@ func CertHashHex(pemBytes []byte) (string, error) {
 			"Confirm the secret holds a PEM-encoded certificate (-----BEGIN CERTIFICATE-----)",
 		)
 	}
-	sum := sha512.Sum384(block.Bytes)
+	sum := sha512.Sum384(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: block.Bytes}))
 	return hex.EncodeToString(sum[:]), nil
 }

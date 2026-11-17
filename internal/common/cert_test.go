@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 )
@@ -85,10 +86,37 @@ func TestCertHashHex_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	sum := sha512.Sum384(derBytes)
+	sum := sha512.Sum384(pemBytes)
 	want := hex.EncodeToString(sum[:])
 	if got != want {
 		t.Errorf("CertHashHex mismatch: got %s, want %s", got, want)
+	}
+	derSum := sha512.Sum384(derBytes)
+	if got == hex.EncodeToString(derSum[:]) {
+		t.Error("CertHashHex must hash the PEM form, not the DER bytes")
+	}
+}
+
+// The hash must not depend on how the input PEM is formatted.
+func TestCertHashHex_CanonicalPEM(t *testing.T) {
+	pemBytes, _ := selfSignedCert(t)
+	want, err := CertHashHex(pemBytes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	variants := map[string][]byte{
+		"CRLF":           []byte(strings.ReplaceAll(string(pemBytes), "\n", "\r\n")),
+		"leading text":   append([]byte("subject=CN=test\n"), pemBytes...),
+		"trailing space": append(append([]byte{}, pemBytes...), []byte("\n\n")...),
+	}
+	for name, in := range variants {
+		got, err := CertHashHex(in)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", name, err)
+		}
+		if got != want {
+			t.Errorf("%s: got %s, want %s", name, got, want)
+		}
 	}
 }
 
