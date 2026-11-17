@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/automa-saga/errx"
+
+	"github.com/hashgraph/solo-operator/internal/keys"
 )
 
 // BuildGenesisNetworkJSON renders the proto3-JSON projection of
@@ -56,11 +58,10 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 
 	var adminKey *genesisKey
 	if m.AdminKeyHex != "" {
-		raw, err := hex.DecodeString(m.AdminKeyHex)
+		adminKey, err = adminKeyFromHex(m.AdminKeyHex)
 		if err != nil {
-			return genesisNodeMetadata{}, errx.WithReason(errMaterial.Wrap(err, "decode adminKey hex"), ReasonCertHexInvalid)
+			return genesisNodeMetadata{}, err
 		}
-		adminKey = &genesisKey{Ed25519: base64.StdEncoding.EncodeToString(raw)}
 	}
 
 	return genesisNodeMetadata{
@@ -82,6 +83,34 @@ func nodeMetadataFromMaterial(m RosterMaterial) (genesisNodeMetadata, error) {
 			AdminKey:            adminKey,
 		},
 	}, nil
+}
+
+// adminKeyFromHex builds the genesis admin Key message from a hex-encoded public
+// key, choosing the proto Key field by signature scheme (Ed25519 or compressed
+// ECDSA secp256k1). The scheme is detected with the shared keys predicates, which
+// mirror the consensus node's own key checks. Any other key is rejected.
+func adminKeyFromHex(adminHex string) (*genesisKey, error) {
+	raw, err := hex.DecodeString(adminHex)
+	if err != nil {
+		return nil, errx.WithHints(
+			errx.WithReason(errMaterial.Wrap(err, "admin key is not valid hex text"), ReasonAdminKeyInvalid),
+			"Store the admin public key as hex text: 64 characters for Ed25519 or 66 for compressed secp256k1",
+		)
+	}
+	b64 := base64.StdEncoding.EncodeToString(raw)
+	switch {
+	case keys.IsValidEd25519PublicKey(raw):
+		return &genesisKey{Ed25519: b64}, nil
+	case keys.IsValidECDSASecp256k1PublicKey(raw):
+		return &genesisKey{ECDSASecp256k1: b64}, nil
+	default:
+		return nil, errx.WithHints(
+			errx.WithReason(
+				errMaterial.New("admin key is %d bytes; want 32 (Ed25519) or 33 (compressed ECDSA secp256k1)", len(raw)),
+				ReasonAdminKeyInvalid),
+			"Provide a 32-byte Ed25519 or 33-byte compressed secp256k1 admin public key",
+		)
+	}
 }
 
 func strconvUint64(v int64) string { return fmt.Sprintf("%d", v) }
@@ -106,7 +135,8 @@ type genesisAccountID struct {
 }
 
 type genesisKey struct {
-	Ed25519 string `json:"ed25519,omitempty"`
+	Ed25519        string `json:"ed25519,omitempty"`
+	ECDSASecp256k1 string `json:"ECDSASecp256k1,omitempty"`
 }
 
 type genesisRosterEntry struct {

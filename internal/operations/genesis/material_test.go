@@ -4,6 +4,7 @@ package genesis
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -207,7 +208,7 @@ func TestMaterialsFromCluster_CapsuleWithAdminKey(t *testing.T) {
 	scheme := testScheme(t)
 	sigPEM, _ := testSelfSignedCert(t)
 	grpcPEM, _ := testSelfSignedCert(t)
-	adminBytes := []byte{0xde, 0xad, 0xbe, 0xef}
+	adminHex := strings.Repeat("ab", 32) // 64 hex chars = 32-byte Ed25519 public key
 
 	orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
 	capsule := &operatorv1alpha1.ConsensusCapsule{
@@ -232,15 +233,62 @@ func TestMaterialsFromCluster_CapsuleWithAdminKey(t *testing.T) {
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "test"},
 			Data: map[string][]byte{"hedera.crt": grpcPEM, "hedera.key": []byte("x")}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "admin", Namespace: "test"},
-			Data: map[string][]byte{"value": adminBytes}},
+			Data: map[string][]byte{"value": []byte(adminHex)}},
 	).Build()
 
 	mats, err := MaterialsFromCluster(context.Background(), c, "test", orbit)
 	if err != nil {
 		t.Fatalf("MaterialsFromCluster: %v", err)
 	}
-	if mats[0].AdminKeyHex != "deadbeef" {
-		t.Errorf("admin key hex: got %q, want %q", mats[0].AdminKeyHex, "deadbeef")
+	// The admin secret holds hex text; it is passed through unchanged.
+	if mats[0].AdminKeyHex != adminHex {
+		t.Errorf("admin key hex: got %q, want %q", mats[0].AdminKeyHex, adminHex)
+	}
+}
+
+func TestMaterialsFromCluster_AdminKeyMustBeHexText(t *testing.T) {
+	scheme := testScheme(t)
+	sigPEM, _ := testSelfSignedCert(t)
+	grpcPEM, _ := testSelfSignedCert(t)
+
+	for _, tc := range []struct {
+		name  string
+		value []byte
+	}{
+		{"raw bytes, not hex", []byte{0xde, 0xad, 0xbe, 0xef}},
+		{"valid hex but wrong length", []byte("deadbeef")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orbit := &operatorv1alpha1.Orbit{ObjectMeta: metav1.ObjectMeta{Name: "test-orbit"}}
+			capsule := &operatorv1alpha1.ConsensusCapsule{
+				ObjectMeta: metav1.ObjectMeta{Name: "node0", Namespace: "test"},
+				Spec: operatorv1alpha1.ConsensusCapsuleSpec{
+					Orbit: "test-orbit", NodeId: 0, AccountId: "0.0.3", Weight: 1,
+					Secrets: &operatorv1alpha1.ConsensusSecrets{
+						SecretResources: &operatorv1alpha1.ConsensusSecretResources{
+							SigningPublicCertificate: operatorv1alpha1.KeyReference{SecretName: "k", KeyName: "s-public.pem"},
+							SigningPrivateKey:        operatorv1alpha1.KeyReference{SecretName: "k", KeyName: "s-private.pem"},
+							GrpcTlsPublicCertificate: operatorv1alpha1.KeyReference{SecretName: "t", KeyName: "hedera.crt"},
+							GrpcTlsPrivateKey:        operatorv1alpha1.KeyReference{SecretName: "t", KeyName: "hedera.key"},
+							AdminPublicKey:           &operatorv1alpha1.KeyReference{SecretName: "admin", KeyName: "value"},
+						},
+					},
+				},
+			}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+				orbit, capsule,
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "k", Namespace: "test"},
+					Data: map[string][]byte{"s-public.pem": sigPEM, "s-private.pem": []byte("x")}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "test"},
+					Data: map[string][]byte{"hedera.crt": grpcPEM, "hedera.key": []byte("x")}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "admin", Namespace: "test"},
+					Data: map[string][]byte{"value": tc.value}},
+			).Build()
+
+			if _, err := MaterialsFromCluster(context.Background(), c, "test", orbit); err == nil {
+				t.Fatal("expected an error for an admin key that is not valid hex text")
+			}
+		})
 	}
 }
 
