@@ -23,6 +23,7 @@ const (
 	ReasonNotKeyValue  errx.Reason = "NotKeyValueFormat"
 	ReasonInvalidJSON  errx.Reason = "InvalidJSON"
 	ReasonNoPEMBlock   errx.Reason = "NoPEMBlock"
+	ReasonNotCertPEM   errx.Reason = "NotCertificatePEM"
 	ReasonInvalidCert  errx.Reason = "InvalidCertificate"
 )
 

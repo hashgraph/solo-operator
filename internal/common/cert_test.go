@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/automa-saga/errx"
 )
 
 func selfSignedCert(t *testing.T) (pemBytes, derBytes []byte) {
@@ -124,5 +126,41 @@ func TestCertHashHex_NoPEMBlock(t *testing.T) {
 	_, err := CertHashHex([]byte("not a pem"))
 	if err == nil {
 		t.Error("expected error for non-PEM input")
+	}
+}
+
+// A PEM block that is not labelled CERTIFICATE (e.g. a private key) must be
+// rejected rather than relabelled and hashed.
+func TestCertHashHex_WrongPEMType(t *testing.T) {
+	_, derBytes := selfSignedCert(t)
+	for _, typ := range []string{"PRIVATE KEY", "PUBLIC KEY", "RSA PRIVATE KEY"} {
+		in := pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: derBytes})
+		_, err := CertHashHex(in)
+		if err == nil {
+			t.Fatalf("%s: expected error for non-CERTIFICATE PEM block", typ)
+		}
+		if r, ok := errx.ReasonOf(err); !ok || r != ReasonNotCertPEM {
+			t.Errorf("%s: reason = %q, want %q", typ, r, ReasonNotCertPEM)
+		}
+	}
+}
+
+// A CERTIFICATE-labelled block whose bytes are not a valid X.509 certificate must be rejected.
+func TestCertHashHex_InvalidCert(t *testing.T) {
+	garbage := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage")})
+	_, err := CertHashHex(garbage)
+	if err == nil {
+		t.Fatal("expected error for invalid X.509 bytes")
+	}
+	if r, ok := errx.ReasonOf(err); !ok || r != ReasonInvalidCert {
+		t.Errorf("reason = %q, want %q", r, ReasonInvalidCert)
+	}
+}
+
+func TestPemToDER_WrongPEMType(t *testing.T) {
+	_, derBytes := selfSignedCert(t)
+	in := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derBytes})
+	if _, err := PemToDER(in); err == nil {
+		t.Error("expected error for non-CERTIFICATE PEM block")
 	}
 }
