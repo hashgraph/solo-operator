@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/subreconciler"
@@ -747,15 +748,14 @@ func TestReleaseSubReconciler_retriesAfterHelmError(t *testing.T) {
 	}
 
 	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.MaxAttempts = 3
 	r := newTestReleaseSubReconciler(scheme, mock, hc)
 
 	// First reconcile fails.
-	if _, err := r.Reconcile(context.Background(), hc); err == nil {
-		t.Fatal("expected error on first reconcile")
-	}
+	assertRetryable(t, reconcileErr(r, hc))
 
 	// Second reconcile: hash still empty → must retry.
-	if _, err := r.Reconcile(context.Background(), hc); err != nil {
+	if err := reconcileErr(r, hc); err != nil {
 		t.Fatalf("second reconcile (retry) error: %v", err)
 	}
 	if callCount != 2 {
@@ -763,6 +763,101 @@ func TestReleaseSubReconciler_retriesAfterHelmError(t *testing.T) {
 	}
 	if hc.Status.ValuesHash == "" {
 		t.Error("expected ValuesHash to be saved after successful retry")
+	}
+	if hc.Status.FailedAttempts != 0 || hc.Status.FailedHash != "" || hc.Status.LastFailure != "" {
+		t.Errorf("failure tracking not cleared: %+v", hc.Status)
+	}
+}
+
+// ─── MaxAttempts ──────────────────────────────────────────────────────────────
+
+func failingMock(calls *int) *MockClient {
+	mock := NewMockClient()
+	mock.InstallOrUpgradeFunc = func(_ context.Context, _, _ string, _ operatorv1alpha1.HelmChartSpec, _ map[string]interface{}, _ ReleaseOptions) (*ReleaseInfo, error) {
+		*calls++
+		return nil, errors.New("timed out waiting for the condition")
+	}
+	return mock
+}
+
+func reconcileErr(r *ReleaseSubReconciler, hc *operatorv1alpha1.HelmCapsule) error {
+	_, err := r.Reconcile(context.Background(), hc)
+	return err
+}
+
+func assertRetryable(t *testing.T, err error) {
+	t.Helper()
+	if err == nil || errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Fatalf("expected retryable error, got %v", err)
+	}
+}
+
+func assertTerminalExhausted(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, reconcile.TerminalError(nil)) {
+		t.Fatalf("expected terminal error, got %v", err)
+	}
+	if r, _ := errx.ReasonOf(err); r != ReasonRetriesExhausted {
+		t.Errorf("reason = %q, want %q", r, ReasonRetriesExhausted)
+	}
+}
+
+func TestReleaseSubReconciler_maxAttemptsStopsRetrying(t *testing.T) {
+	calls := 0
+	hc := newHelmCapsule("mirror", "test-ns")
+	hc.Spec.MaxAttempts = 2
+	r := newTestReleaseSubReconciler(newTestScheme(), failingMock(&calls), hc)
+
+	assertRetryable(t, reconcileErr(r, hc))
+	if hc.Status.FailedAttempts != 1 {
+		t.Errorf("FailedAttempts = %d, want 1", hc.Status.FailedAttempts)
+	}
+	assertTerminalExhausted(t, reconcileErr(r, hc))
+	assertTerminalExhausted(t, reconcileErr(r, hc))
+	if calls != 2 {
+		t.Errorf("InstallOrUpgrade calls = %d, want 2", calls)
+	}
+	if !strings.Contains(hc.Status.LastFailure, "timed out waiting for the condition") {
+		t.Errorf("LastFailure should carry the Helm error, got %q", hc.Status.LastFailure)
+	}
+}
+
+func TestReleaseSubReconciler_maxAttemptsResets(t *testing.T) {
+	for name, mutate := range map[string]func(*operatorv1alpha1.HelmCapsule){
+		"spec change": func(hc *operatorv1alpha1.HelmCapsule) { hc.Spec.Chart.Version = "0.130.0" },
+		"retry annotation": func(hc *operatorv1alpha1.HelmCapsule) {
+			hc.Annotations = map[string]string{operatorv1alpha1.HelmCapsuleRetryAnnotation: "1"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			hc := newHelmCapsule("mirror", "test-ns")
+			hc.Spec.MaxAttempts = 1
+			r := newTestReleaseSubReconciler(newTestScheme(), failingMock(&calls), hc)
+
+			assertTerminalExhausted(t, reconcileErr(r, hc))
+			mutate(hc)
+			if err := r.Client.Update(context.Background(), hc); err != nil {
+				t.Fatal(err)
+			}
+			assertTerminalExhausted(t, reconcileErr(r, hc))
+			if calls != 2 {
+				t.Errorf("InstallOrUpgrade calls = %d, want 2", calls)
+			}
+		})
+	}
+}
+
+func TestReleaseSubReconciler_maxAttemptsZeroRetriesIndefinitely(t *testing.T) {
+	calls := 0
+	hc := newHelmCapsule("mirror", "test-ns")
+	r := newTestReleaseSubReconciler(newTestScheme(), failingMock(&calls), hc)
+
+	for range 5 {
+		assertRetryable(t, reconcileErr(r, hc))
+	}
+	if calls != 5 {
+		t.Errorf("InstallOrUpgrade calls = %d, want 5", calls)
 	}
 }
 

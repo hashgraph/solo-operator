@@ -153,6 +153,12 @@ spec:
                   Equivalent to helm uninstall --keep-history.
                   Helm default: false.
                 type: boolean
+              maxAttempts:
+                description: |-
+                  MaxAttempts caps failed install/upgrade attempts per desired state; 0 (default) retries indefinitely.
+                  Reset by changing the chart/values or the operator.solo.hiero.org/retry annotation.
+                minimum: 0
+                type: integer
               maxHistory:
                 description: |-
                   MaxHistory limits the number of revisions Helm keeps for this release.
@@ -262,7 +268,7 @@ spec:
                 description: |-
                   Conditions holds the latest observations of the HelmCapsule state.
                   Ready=True means the release is deployed and up-to-date.
-                  Ready=False carries a Reason: ChartFetchFailed, HelmFailed, or ValuesBuildFailed.
+                  Ready=False carries a Reason: ChartFetchFailed, HelmFailed, ValuesBuildFailed, or RetriesExhausted.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -318,10 +324,20 @@ spec:
                   - type
                   type: object
                 type: array
+              failedAttempts:
+                description: FailedAttempts counts consecutive failures for FailedHash.
+                type: integer
+              failedHash:
+                description: FailedHash is the desired state FailedAttempts counts
+                  against.
+                type: string
               installedChart:
                 description: |-
                   InstalledChart is the chart name + version string of the currently deployed release,
                   e.g. "hedera-mirror-0.129.1".
+                type: string
+              lastFailure:
+                description: LastFailure is the most recent install/upgrade error.
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the .metadata.generation last processed

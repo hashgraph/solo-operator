@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1alpha1 "github.com/hashgraph/solo-operator/api/v1alpha1"
 	"github.com/hashgraph/solo-operator/internal/common"
@@ -64,6 +65,10 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 	hash, err := ComputeHash(hc.Spec.Chart, values)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+	key := failureKey(hash, hc)
+	if retriesExhausted(hc, key) {
+		return ctrl.Result{}, retriesExhaustedError(hc)
 	}
 	existing, err := r.helmClient.GetRelease(releaseName, hc.Namespace)
 	if err != nil {
@@ -138,7 +143,13 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 
 	info, err := r.helmClient.InstallOrUpgrade(ctx, releaseName, hc.Namespace, hc.Spec.Chart, values, opts)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("helm install/upgrade %s: %w", releaseName, err)
+		helmErr := fmt.Errorf("helm install/upgrade %s: %w", releaseName, err)
+		if recErr := r.recordFailedAttempt(ctx, hc, key, helmErr); recErr != nil {
+			common.WarnL(&rl, ReasonAttemptNotRecorded).Err(recErr).Msg("Failed to record failed Helm attempt")
+		} else if retriesExhausted(hc, key) {
+			return ctrl.Result{}, retriesExhaustedError(hc)
+		}
+		return ctrl.Result{}, helmErr
 	}
 
 	common.InfoL(&rl, ReasonReleaseReconciled).Int("revision", info.Version).Str("status", info.Status).Msg("Helm release reconciled")
@@ -157,6 +168,9 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		if info.Status == "deployed" {
 			hc.Status.ValuesHash = hash // only save hash once deployed so failures are retried
 			hc.Status.Outputs = componentOutputs(hc, releaseName, values)
+			hc.Status.FailedHash = ""
+			hc.Status.FailedAttempts = 0
+			hc.Status.LastFailure = ""
 		}
 		return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
 	}); err != nil {
@@ -167,6 +181,43 @@ func (r *ReleaseSubReconciler) Reconcile(ctx context.Context, hc *operatorv1alph
 		common.InfoL(&rl, ReasonReleasePending).Str("helmStatus", info.Status).Msg("Helm release not yet deployed, requeueing")
 	}
 	return ctrl.Result{RequeueAfter: releaseCheckInterval}, nil
+}
+
+func failureKey(hash string, hc *operatorv1alpha1.HelmCapsule) string {
+	if token := hc.Annotations[operatorv1alpha1.HelmCapsuleRetryAnnotation]; token != "" {
+		return hash + "/" + token
+	}
+	return hash
+}
+
+func retriesExhausted(hc *operatorv1alpha1.HelmCapsule, key string) bool {
+	return hc.Spec.MaxAttempts > 0 && hc.Status.FailedHash == key && hc.Status.FailedAttempts >= hc.Spec.MaxAttempts
+}
+
+// Message must stay stable across reconciles to avoid status-update churn.
+func retriesExhaustedError(hc *operatorv1alpha1.HelmCapsule) error {
+	return reconcile.TerminalError(errx.WithHints(
+		errx.WithReason(
+			errRetriesExhausted.New("giving up after %d failed attempt(s); see status.lastFailure", hc.Status.FailedAttempts),
+			ReasonRetriesExhausted,
+		),
+		"Fix the cause and change spec.chart or the values, or set the "+operatorv1alpha1.HelmCapsuleRetryAnnotation+" annotation to a new value to retry",
+	))
+}
+
+func (r *ReleaseSubReconciler) recordFailedAttempt(ctx context.Context, hc *operatorv1alpha1.HelmCapsule, key string, cause error) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: hc.Name, Namespace: hc.Namespace}, hc); err != nil {
+			return err
+		}
+		if hc.Status.FailedHash != key {
+			hc.Status.FailedHash = key
+			hc.Status.FailedAttempts = 0
+		}
+		hc.Status.FailedAttempts++
+		hc.Status.LastFailure = cause.Error()
+		return common.WarnOnConflict(ctx, r.Client.Status().Update(ctx, hc))
+	})
 }
 
 // syncOutputs backfills releases deployed before outputs existed.
