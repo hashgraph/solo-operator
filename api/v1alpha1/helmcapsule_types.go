@@ -156,6 +156,12 @@ type HelmCapsuleSpec struct {
 	// Helm default: false.
 	// +optional
 	KeepHistory bool `json:"keepHistory,omitempty"`
+
+	// MaxAttempts caps failed install/upgrade attempts per desired state; 0 (default) retries indefinitely.
+	// Reset by changing the chart/values or the operator.solo.hiero.org/retry annotation.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxAttempts int `json:"maxAttempts,omitempty"`
 }
 
 // HelmChartSpec identifies the Helm chart to install.
@@ -245,13 +251,25 @@ type HelmCapsuleStatus struct {
 	// +optional
 	ValuesHash string `json:"valuesHash,omitempty"`
 
+	// FailedHash is the desired state FailedAttempts counts against.
+	// +optional
+	FailedHash string `json:"failedHash,omitempty"`
+
+	// FailedAttempts counts consecutive failures for FailedHash.
+	// +optional
+	FailedAttempts int `json:"failedAttempts,omitempty"`
+
+	// LastFailure is the most recent install/upgrade error.
+	// +optional
+	LastFailure string `json:"lastFailure,omitempty"`
+
 	// Outputs are component-specific key-values for consumers (see HelmComponent).
 	// +optional
 	Outputs map[string]string `json:"outputs,omitempty"`
 
 	// Conditions holds the latest observations of the HelmCapsule state.
 	// Ready=True means the release is deployed and up-to-date.
-	// Ready=False carries a Reason: ChartFetchFailed, HelmFailed, or ValuesBuildFailed.
+	// Ready=False carries a Reason: ChartFetchFailed, HelmFailed, ValuesBuildFailed, or RetriesExhausted.
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 }
@@ -265,7 +283,11 @@ const (
 	HelmCapsuleReasonProgressing          errx.Reason = "Progressing"
 	HelmCapsuleReasonReleaseNotReady      errx.Reason = "ReleaseNotReady"
 	HelmCapsuleReasonUnknownReleaseStatus errx.Reason = "UnknownReleaseStatus"
+	HelmCapsuleReasonRetriesExhausted     errx.Reason = "RetriesExhausted"
 )
+
+// HelmCapsuleRetryAnnotation resets the failed-attempt count when set to a new value.
+const HelmCapsuleRetryAnnotation = "operator.solo.hiero.org/retry"
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

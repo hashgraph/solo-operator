@@ -7,7 +7,7 @@ import (
 	"github.com/joomcode/errorx"
 )
 
-// The first four reason codes reuse the vocabulary the HelmCapsule controller
+// The first five reason codes reuse the vocabulary the HelmCapsule controller
 // surfaces on /status, so recordFailure can classify via errx.ReasonOf.
 var (
 	errNS = errorx.NewNamespace("helm")
@@ -16,6 +16,7 @@ var (
 	errValuesBuild         = errNS.NewType("values_build_failed")
 	errReleaseNameConflict = errNS.NewType("release_name_conflict")
 	errHelm                = errNS.NewType("helm_failed")
+	errRetriesExhausted    = errNS.NewType("retries_exhausted")
 	// Transient: worth a retry.
 	errK8sAPI = errNS.NewType("k8s_api_failed", errorx.Temporary())
 )
@@ -25,6 +26,7 @@ const (
 	ReasonValuesBuild         errx.Reason = "ValuesBuildFailed"
 	ReasonReleaseNameConflict errx.Reason = "ReleaseNameConflict"
 	ReasonHelm                errx.Reason = "HelmFailed"
+	ReasonRetriesExhausted    errx.Reason = "RetriesExhausted"
 
 	ReasonUnsupportedKind errx.Reason = "UnsupportedValuesKind"
 	ReasonKeyNotFound     errx.Reason = "ValuesKeyNotFound"
